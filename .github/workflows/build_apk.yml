@@ -1,0 +1,368 @@
+name: Build MiBox IPTV APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+          cache-disabled: true
+
+      - name: Create Project and Build APK
+        run: |
+          python3 -c '
+          import os
+
+          os.makedirs("app/src/main/java/com/example/miboxiptv", exist_ok=True)
+
+          with open("settings.gradle", "w") as f:
+              f.write("""pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "MiBoxIPTV"
+          include ":app"
+          """)
+
+          with open("build.gradle", "w") as f:
+              f.write("""plugins {
+              id "com.android.application" version "8.2.2" apply false
+              id "org.jetbrains.kotlin.android" version "1.9.22" apply false
+          }
+          """)
+
+          with open("gradle.properties", "w") as f:
+              f.write("android.useAndroidX=true\n")
+
+          with open("app/build.gradle", "w") as f:
+              f.write("""plugins {
+              id "com.android.application"
+              id "org.jetbrains.kotlin.android"
+          }
+          android {
+              namespace "com.example.miboxiptv"
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.example.miboxiptv"
+                  minSdk 23
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          dependencies {
+              implementation "androidx.core:core-ktx:1.12.0"
+              implementation "androidx.appcompat:appcompat:1.6.1"
+              implementation "androidx.media3:media3-exoplayer:1.2.1"
+              implementation "androidx.media3:media3-exoplayer-hls:1.2.1"
+              implementation "androidx.media3:media3-ui:1.2.1"
+          }
+          """)
+
+          with open("app/src/main/AndroidManifest.xml", "w") as f:
+              f.write("""<?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-feature android:name="android.software.leanback" android:required="false" />
+              <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+              <application
+                  android:allowBackup="true"
+                  android:banner="@android:drawable/sym_def_app_icon"
+                  android:icon="@android:drawable/sym_def_app_icon"
+                  android:label="MiBox IPTV"
+                  android:theme="@style/Theme.AppCompat.NoActionBar"
+                  android:usesCleartextTraffic="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+                      android:exported="true"
+                      android:screenOrientation="landscape">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                          <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          """)
+
+          with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
+              f.write("""package com.example.miboxiptv
+
+          import android.app.AlertDialog
+          import android.content.Context
+          import android.graphics.Color
+          import android.os.Bundle
+          import android.view.Gravity
+          import android.view.KeyEvent
+          import android.view.View
+          import android.view.WindowManager
+          import android.widget.*
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.media3.common.MediaItem
+          import androidx.media3.exoplayer.ExoPlayer
+          import androidx.media3.ui.PlayerView
+          import java.net.HttpURLConnection
+          import java.net.URL
+          import kotlin.concurrent.thread
+
+          data class Channel(val name: String, val url: String)
+
+          class MainActivity : AppCompatActivity() {
+              private lateinit var player: ExoPlayer
+              private lateinit var playerView: PlayerView
+              private lateinit var channelListView: ListView
+              private lateinit var sidePanel: LinearLayout
+              private lateinit var currentChannelBanner: TextView
+
+              private val channels = mutableListOf<Channel>()
+              private lateinit var adapter: ArrayAdapter<String>
+              private var currentIndex = 0
+              private val defaultPlaylistUrl = "https://iptv-org.github.io/iptv/index.m3u"
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+                  val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+
+                  playerView = PlayerView(this).apply {
+                      useController = false
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.MATCH_PARENT
+                      )
+                  }
+                  root.addView(playerView)
+
+                  sidePanel = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setBackgroundColor(Color.parseColor("#CC121212"))
+                      layoutParams = FrameLayout.LayoutParams(
+                          750,
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          Gravity.START
+                      )
+                      setPadding(24, 24, 24, 24)
+                  }
+
+                  val btnSettings = Button(this).apply {
+                      text = "Изменить URL плейлиста (.m3u)"
+                      setOnClickListener { showUrlDialog() }
+                  }
+                  sidePanel.addView(btnSettings)
+
+                  channelListView = ListView(this).apply {
+                      choiceMode = ListView.CHOICE_MODE_SINGLE
+                      layoutParams = LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          LinearLayout.LayoutParams.MATCH_PARENT
+                      )
+                  }
+                  sidePanel.addView(channelListView)
+                  root.addView(sidePanel)
+
+                  currentChannelBanner = TextView(this).apply {
+                      setTextColor(Color.WHITE)
+                      textSize = 22f
+                      setBackgroundColor(Color.parseColor("#99000000"))
+                      setPadding(32, 16, 32, 16)
+                      visibility = View.GONE
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.TOP or Gravity.END
+                      ).apply { setMargins(0, 40, 40, 0) }
+                  }
+                  root.addView(currentChannelBanner)
+
+                  setContentView(root)
+
+                  player = ExoPlayer.Builder(this).build()
+                  playerView.player = player
+
+                  adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
+                  channelListView.adapter = adapter
+
+                  channelListView.setOnItemClickListener { _, _, position, _ ->
+                      playChannel(position)
+                      hideSidePanel()
+                  }
+
+                  val prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
+                  val savedUrl = prefs.getString("playlist_url", defaultPlaylistUrl) ?: defaultPlaylistUrl
+                  loadPlaylist(savedUrl)
+              }
+
+              private fun loadPlaylist(urlStr: String) {
+                  Toast.makeText(this, "Загрузка плейлиста...", Toast.LENGTH_SHORT).show()
+                  thread {
+                      try {
+                          val url = URL(urlStr)
+                          val conn = url.openConnection() as HttpURLConnection
+                          conn.connectTimeout = 10000
+                          conn.readTimeout = 10000
+                          val lines = conn.inputStream.bufferedReader().readLines()
+                          val parsed = mutableListOf<Channel>()
+                          var currentName = "Канал"
+                          for (line in lines) {
+                              val trimmed = line.trim()
+                              if (trimmed.startsWith("#EXTINF:")) {
+                                  currentName = trimmed.substringAfterLast(",").trim()
+                              } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                                  parsed.add(Channel(currentName, trimmed))
+                              }
+                          }
+                          runOnUiThread {
+                              if (parsed.isNotEmpty()) {
+                                  channels.clear()
+                                  channels.addAll(parsed)
+                                  adapter.clear()
+                                  adapter.addAll(channels.mapIndexed { i, ch -> (i + 1).toString() + ". " + ch.name })
+                                  adapter.notifyDataSetChanged()
+                                  playChannel(0)
+                                  channelListView.requestFocus()
+                              } else {
+                                  Toast.makeText(this, "Каналы не найдены", Toast.LENGTH_LONG).show()
+                              }
+                          }
+                      } catch (e: Exception) {
+                          runOnUiThread {
+                              Toast.makeText(this, "Ошибка: " + e.message, Toast.LENGTH_LONG).show()
+                          }
+                      }
+                  }
+              }
+
+              private fun playChannel(index: Int) {
+                  if (channels.isEmpty() || index !in channels.indices) return
+                  currentIndex = index
+                  val channel = channels[index]
+                  player.setMediaItem(MediaItem.fromUri(channel.url))
+                  player.prepare()
+                  player.play()
+                  showBanner((index + 1).toString() + ". " + channel.name)
+              }
+
+              private fun showBanner(text: String) {
+                  currentChannelBanner.text = text
+                  currentChannelBanner.visibility = View.VISIBLE
+                  currentChannelBanner.removeCallbacks(hideBannerRunnable)
+                  currentChannelBanner.postDelayed(hideBannerRunnable, 3500)
+              }
+
+              private val hideBannerRunnable = Runnable {
+                  currentChannelBanner.visibility = View.GONE
+              }
+
+              private fun showSidePanel() {
+                  sidePanel.visibility = View.VISIBLE
+                  channelListView.setSelection(currentIndex)
+                  channelListView.requestFocus()
+              }
+
+              private fun hideSidePanel() {
+                  sidePanel.visibility = View.GONE
+              }
+
+              private fun showUrlDialog() {
+                  val prefs = getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
+                  val input = EditText(this).apply {
+                      setText(prefs.getString("playlist_url", defaultPlaylistUrl))
+                      setSingleLine()
+                  }
+                  AlertDialog.Builder(this)
+                      .setTitle("Ссылка на плейлист M3U")
+                      .setView(input)
+                      .setPositiveButton("Сохранить") { _, _ ->
+                          val newUrl = input.text.toString().trim()
+                          if (newUrl.isNotEmpty()) {
+                              prefs.edit().putString("playlist_url", newUrl).apply()
+                              loadPlaylist(newUrl)
+                          }
+                      }
+                      .setNegativeButton("Отмена", null)
+                      .show()
+              }
+
+              override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+                  if (sidePanel.visibility == View.GONE) {
+                      when (keyCode) {
+                          KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_DPAD_LEFT -> {
+                              showSidePanel()
+                              return true
+                          }
+                          KeyEvent.KEYCODE_DPAD_UP -> {
+                              if (channels.isNotEmpty()) {
+                                  val next = if (currentIndex - 1 < 0) channels.size - 1 else currentIndex - 1
+                                  playChannel(next)
+                              }
+                              return true
+                          }
+                          KeyEvent.KEYCODE_DPAD_DOWN -> {
+                              if (channels.isNotEmpty()) {
+                                  val next = (currentIndex + 1) % channels.size
+                                  playChannel(next)
+                              }
+                              return true
+                          }
+                      }
+                  } else {
+                      if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                          hideSidePanel()
+                          return true
+                      }
+                  }
+                  return super.onKeyDown(keyCode, event)
+              }
+
+              override fun onStop() {
+                  super.onStop()
+                  player.pause()
+              }
+
+              override fun onDestroy() {
+                  super.onDestroy()
+                  player.release()
+              }
+          }
+          """)
+          '
+          gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiBox-IPTV-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
