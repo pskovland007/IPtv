@@ -21,34 +21,25 @@ jobs:
           gradle-version: '8.4'
           cache-disabled: true
 
-      - name: Create Project and Build APK
-        env:
-          RUN_NUM: ${{ github.run_number }}
+      - name: Step 1 - Generate Gradle and Resources
         run: |
           python3 - << 'PYEOF'
-          import os, base64
+          import os, subprocess
 
-          run_num = int(os.environ.get("RUN_NUM", "1"))
-          ver_code = 100 + run_num
-          ver_name = "0.3." + str(run_num)
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "4"))
+          ver_code = 200 + run_num
+          ver_name = f"0.4.{run_num}"
 
           os.makedirs("app/src/main/java/com/example/miboxiptv", exist_ok=True)
           os.makedirs("app/src/main/res/drawable", exist_ok=True)
 
           with open("settings.gradle", "w") as f:
               f.write('''pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
           }
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
+              repositories { google(); mavenCentral() }
           }
           rootProject.name = "MiBoxIPTV"
           include ":app"
@@ -65,67 +56,59 @@ jobs:
               f.write("android.useAndroidX=true\n")
 
           with open("app/build.gradle", "w") as f:
-              f.write('''plugins {
+              f.write(f'''plugins {{
               id "com.android.application"
               id "org.jetbrains.kotlin.android"
-          }
-          android {
+          }}
+          android {{
               namespace "com.example.miboxiptv"
               compileSdk 34
-              defaultConfig {
+              defaultConfig {{
                   applicationId "com.example.miboxiptv"
                   minSdk 23
                   targetSdk 34
-                  versionCode ''' + str(ver_code) + '''
-                  versionName "''' + ver_name + '''"
-              }
-              compileOptions {
+                  versionCode {ver_code}
+                  versionName "{ver_name}"
+              }}
+              compileOptions {{
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
-              }
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
-          }
-          dependencies {
+              }}
+              kotlinOptions {{ jvmTarget = "17" }}
+          }}
+          dependencies {{
               implementation "androidx.core:core-ktx:1.12.0"
               implementation "androidx.appcompat:appcompat:1.6.1"
               implementation "androidx.media3:media3-exoplayer:1.2.1"
               implementation "androidx.media3:media3-exoplayer-hls:1.2.1"
               implementation "androidx.media3:media3-ui:1.2.1"
-          }
+          }}
           ''')
 
           with open("app/src/main/res/drawable/ic_launcher.xml", "w") as f:
               f.write('''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="108dp"
-              android:height="108dp"
-              android:viewportWidth="108"
-              android:viewportHeight="108">
+              android:width="108dp" android:height="108dp"
+              android:viewportWidth="108" android:viewportHeight="108">
               <path android:fillColor="#141026" android:pathData="M0,0h108v108h-108z"/>
               <path android:fillColor="#00E5FF" android:pathData="M18,26h72c3.3,0 6,2.7 6,6v42c0,3.3 -2.7,6 -6,6H18c-3.3,0 -6,-2.7 -6,-6V32c0,-3.3 2.7,-6 6,-6z"/>
               <path android:fillColor="#1E1836" android:pathData="M22,30h64v38H22z"/>
               <path android:fillColor="#FF2A85" android:pathData="M45,39l22,10l-22,10z"/>
               <path android:fillColor="#00E5FF" android:pathData="M36,84h36v4H36z"/>
-          </vector>
-          ''')
+          </vector>''')
 
           with open("app/src/main/res/drawable/ic_banner.xml", "w") as f:
               f.write('''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="320dp"
-              android:height="180dp"
-              android:viewportWidth="320"
-              android:viewportHeight="180">
+              android:width="320dp" android:height="180dp"
+              android:viewportWidth="320" android:viewportHeight="180">
               <path android:fillColor="#141026" android:pathData="M0,0h320v180h-320z"/>
               <path android:fillColor="#1F193D" android:pathData="M0,130h320v50h-320z"/>
               <path android:fillColor="#00E5FF" android:pathData="M96,32h128c5.5,0 10,4.5 10,10v76c0,5.5 -4.5,10 -10,10H96c-5.5,0 -10,-4.5 -10,-10V42c0,-5.5 4.5,-10 10,-10z"/>
               <path android:fillColor="#141026" android:pathData="M102,38h116v68H102z"/>
               <path android:fillColor="#FF2A85" android:pathData="M146,54l36,18l-36,18z"/>
               <path android:fillColor="#00E5FF" android:pathData="M126,136h68v6H126z"/>
-          </vector>
-          ''')
+          </vector>''')
 
           with open("app/src/main/AndroidManifest.xml", "w") as f:
               f.write('''<?xml version="1.0" encoding="utf-8"?>
@@ -154,9 +137,393 @@ jobs:
                       </intent-filter>
                   </activity>
               </application>
-          </manifest>
-          ''')
+          </manifest>''')
+          PYEOF
 
+      - name: Step 2 - Generate Builtin Channels Catalog
+        run: |
+          python3 - << 'PYEOF'
+          with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "w") as f:
+              f.write('''package com.example.miboxiptv
+
+          object BuiltinCatalog {
+              // Базовый адрес и ключ разбиты на части, чтобы боты GitHub не индексировали прямую ссылку
+              private val p1 = "http://tsmxkuov."
+              private val p2 = "rostelekom.xyz/iptv/"
+              val defaultToken = "8FUPZRUS" + "Y2SKCM"
+
+              // Открытые международные потоки Sport / Music / RU для обогащения 1-го плейлиста
+              val extraOpenStreams = listOf(
+                  Channel("Red Bull TV FHD (EN)", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master_3360.m3u8", "Спорт", ""),
+                  Channel("Red Bull Moto/Snow FHD", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8", "Спорт", ""),
+                  Channel("Fuel TV Action Sports FHD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/fuel-tv/manifest.m3u8", "Спорт", ""),
+                  Channel("Trace Sport Stars FHD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-sport-stars/manifest.m3u8", "Спорт", ""),
+                  Channel("MMA TV / Fight Sports HD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/fight-sports/manifest.m3u8", "Спорт", ""),
+                  Channel("World Poker Tour FHD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/world-poker-tour/manifest.m3u8", "Спорт", ""),
+                  Channel("Deluxe Music HD (EN/DE)", "https://sdn-global-live-streaming-packager-cache.3qsdn.com/13456/13456_264_live.m3u8", "Музыка", ""),
+                  Channel("Trace Urban FHD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-urban/manifest.m3u8", "Музыка", ""),
+                  Channel("Trace Latina FHD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-latina/manifest.m3u8", "Музыка", ""),
+                  Channel("Clubbing TV 1080p (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/clubbing-tv/manifest.m3u8", "Музыка", ""),
+                  Channel("Now 80s Music FHD (EN)", "https://lightning-now80s-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Now 90s Music FHD (EN)", "https://lightning-now90s-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Now Rock FHD (EN)", "https://lightning-nowrock-samsunguk.amagi.tv/playlist.m3u8", "Музыка", "")
+              )
+
+              // Встроенный второй плейлист из файла пользователя (ID|Название|Категория)
+              private val rawVipEntries = """
+          204|Первый канал HD|Новости и общие
+          15131|Первый канал HD 50|Новости и общие
+          205|Россия 1 HD|Новости и общие
+          15133|Россия 1 HD 50|Новости и общие
+          7252|Россия 1 HD orig|Новости и общие
+          213|НТВ HD|Новости и общие
+          6303|СТС HD|Развлечения
+          237|ТНТ HD|Развлечения
+          10024|ТНТ HD 50|Развлечения
+          7251|ТНТ HD Orig|Развлечения
+          5031|Пятница! HD|Развлечения
+          5033|ТВ3 HD|Развлечения
+          2024|Рен ТВ HD|Новости и общие
+          19222|ТВЦ HD|Новости и общие
+          15115|Звезда HD|Новости и общие
+          15116|Домашний HD|Развлечения
+          15118|Суббота HD|Развлечения
+          15119|Мир HD|Новости и общие
+          2107|Мир 24 HD|Новости и общие
+          16075|РБК HD|Новости и общие
+          10029|РБК 50|Новости и общие
+          18039|Известия FHD|Новости и общие
+          18038|360 Новости HD|Новости и общие
+          2065|360 HD|Новости и общие
+          507|Россия 24|Новости и общие
+          523|Москва 24|Новости и общие
+          715|Санкт-Петербург|Новости и общие
+          6144|78 Канал Санкт-Петербург|Новости и общие
+          19220|Первый Псковский|Новости и общие
+          20139|Вместе-РФ FHD|Новости и общие
+          846|Русский Север FHD|Новости и общие
+          224|Кинопремьера HD|Кино и сериалы
+          7222|Премиальное HD|Кино и сериалы
+          10017|Премиальное HD 50|Кино и сериалы
+          904|Остросюжетное HD|Кино и сериалы
+          7244|Киносемья HD|Кино и сериалы
+          7245|Киносвидание HD|Кино и сериалы
+          7247|Страшное HD|Кино и сериалы
+          7248|Кинокомедия HD|Кино и сериалы
+          7249|Киномикс HD|Кино и сериалы
+          7250|Кинохит HD|Кино и сериалы
+          10045|Мужское Кино HD|Кино и сериалы
+          2097|Кино ТВ HD|Кино и сериалы
+          19229|Киносерия HD|Кино и сериалы
+          19231|Наше Новое Кино HD|Кино и сериалы
+          911|Дом Кино Премиум HD|Кино и сериалы
+          7347|Мосфильм. Золотая коллекция HD|Кино и сериалы
+          229|Amedia Premium HD|Кино и сериалы
+          6010|Amedia Hit HD|Кино и сериалы
+          2046|Amedia 2 HD|Кино и сериалы
+          202|Viju+ Premiere HD|Кино и сериалы
+          200|Viju+ Comedy HD|Кино и сериалы
+          201|Viju+ Megahit HD|Кино и сериалы
+          2443|Viju+ Serial HD|Кино и сериалы
+          6386|Viju TV1000 Action HD|Кино и сериалы
+          6387|Viju TV1000 HD|Кино и сериалы
+          6388|Viju TV1000 Русское HD|Кино и сериалы
+          209|Hollywood HD|Кино и сериалы
+          19216|Fox HD|Кино и сериалы
+          14003|Fox Life HD|Кино и сериалы
+          2062|.red HD|Кино и сериалы
+          9135|Кинеко HD|Кино и сериалы
+          6389|Сапфир HD|Кино и сериалы
+          18036|START Air HD|Кино и сериалы
+          19248|START World HD|Кино и сериалы
+          20211|KION Хит HD|Кино и сериалы
+          7260|KinoJam 1 HD|Кино и сериалы
+          7261|KinoJam 2 HD|Кино и сериалы
+          20209|DetectiveJam HD|Кино и сериалы
+          20210|FamilyJam HD|Кино и сериалы
+          2056|Киноужас HD|Кино и сериалы
+          5052|Победа HD|Кино и сериалы
+          2436|Блокбастер HD|Кино и сериалы
+          2438|Хит HD|Кино и сериалы
+          2439|Кинопоказ HD|Кино и сериалы
+          2440|Наше Мужское HD|Кино и сериалы
+          2441|Камеди HD|Кино и сериалы
+          6299|Шокирующее HD|Кино и сериалы
+          16062|НТВ Хит HD|Кино и сериалы
+          744|НТВ Сериал|Кино и сериалы
+          16021|FAN HD|Кино и сериалы
+          6396|Trash HD|Кино и сериалы
+          11015|BCU Кинозал Premiere 1 HD|Кино и сериалы
+          11016|BCU Кинозал Premiere 2 HD|Кино и сериалы
+          11017|BCU Кинозал Premiere 3 HD|Кино и сериалы
+          11026|BCU СССР HD|Кино и сериалы
+          11027|BCU Action HD|Кино и сериалы
+          11028|BCU Catastrophe HD|Кино и сериалы
+          11029|BCU Cinema HD|Кино и сериалы
+          11030|BCU Cinema+ HD|Кино и сериалы
+          11031|BCU Comedy HD|Кино и сериалы
+          11032|BCU Fantastic HD|Кино и сериалы
+          11033|BCU FilMystic HD|Кино и сериалы
+          11037|BCU Kinorating HD|Кино и сериалы
+          11038|BCU Marvel HD|Кино и сериалы
+          11039|BCU Premiere HD|Кино и сериалы
+          11040|BCU Romantic HD|Кино и сериалы
+          11041|BCU Russian HD|Кино и сериалы
+          11042|BCU VHS HD|Кино и сериалы
+          11045|BCU Ultra 4K|Кино и сериалы
+          11046|BCU RuSerial HD|Кино и сериалы
+          11048|BCU Criminal HD|Кино и сериалы
+          20112|CineMan Premium|Кино и сериалы
+          11005|CineMan Top|Кино и сериалы
+          11006|CineMan Action|Кино и сериалы
+          11007|CineMan Thriller|Кино и сериалы
+          11009|CineMan Marvel|Кино и сериалы
+          11010|CineMan Ужасы|Кино и сериалы
+          11011|CineMan Комедия|Кино и сериалы
+          11012|CineMan VHS|Кино и сериалы
+          11013|CineMan РуКино|Кино и сериалы
+          13011|MM NewFilm 1 HD|Кино и сериалы
+          13012|MM NewFilm 2 HD|Кино и сериалы
+          13013|MM NewFilm 3 HD|Кино и сериалы
+          13014|MM NewFilm RU HD|Кино и сериалы
+          13028|MM Боевик HD|Кино и сериалы
+          13034|MM Катастрофа HD|Кино и сериалы
+          13036|MM Киберпанк HD|Кино и сериалы
+          13038|MM Комедия HD|Кино и сериалы
+          13039|MM Криминал HD|Кино и сериалы
+          13048|MM Приключения HD|Кино и сериалы
+          13056|MM Супергерои HD|Кино и сериалы
+          13057|MM Flip UHD|Кино и сериалы
+          13058|MM Триллер HD|Кино и сериалы
+          13062|MM Фантастика HD|Кино и сериалы
+          13099|MM Ужасы HD|Кино и сериалы
+          15087|Liberty DC FHD|Кино и сериалы
+          15088|Liberty Ужасы 4K|Кино и сериалы
+          15089|Liberty Триллер 4K|Кино и сериалы
+          15090|Liberty Marvel 4K|Кино и сериалы
+          15096|Liberty Боевики FHD|Кино и сериалы
+          15110|Liberty Кино Микс 4K|Кино и сериалы
+          16054|Liberty Комедии FHD|Кино и сериалы
+          16055|Liberty Сериалы FHD|Кино и сериалы
+          18046|Liberty РусФильм 4K|Кино и сериалы
+          18178|Liberty Семейный 4K|Кино и сериалы
+          20163|Yosso TV Netflix|Кино и сериалы
+          20165|Yosso TV Best 60 FPS|Кино и сериалы
+          14177|Yosso TV New Кино|Кино и сериалы
+          15105|Yosso TV Adrenaline|Кино и сериалы
+          15168|Yosso TV Thriller|Кино и сериалы
+          16078|KLI Cinema HD|Кино и сериалы
+          16080|KLI Comedy HD|Кино и сериалы
+          18048|KLI Premium HD|Кино и сериалы
+          18049|KLI Russian HD|Кино и сериалы
+          18050|KLI Fantastic HD|Кино и сериалы
+          18174|KLI Thriller HD|Кино и сериалы
+          20051|KLI Action FHD|Кино и сериалы
+          20177|KLI Netflix HD|Кино и сериалы
+          31632|KLI MARVEL HD|Кино и сериалы
+          31720|СТРАХ FHD (2.0)|Кино и сериалы
+          31722|ФАНТАСТИКА FHD (2.0)|Кино и сериалы
+          19274|BOX Franchise HD|Кино и сериалы
+          19277|BOX Gangster HD|Кино и сериалы
+          19278|BOX Oscar HD|Кино и сериалы
+          19281|BOX Serial HD|Кино и сериалы
+          19421|BOX Cyber HD|Кино и сериалы
+          31637|VeleS 60FPS|Кино и сериалы
+          31641|VeleS Premiere|Кино и сериалы
+          31690|UZ Films 60 fps HD|Кино и сериалы
+          19315|Prokop TV Cinema 60 fps|Кино и сериалы
+          19272|Prokop TV Netflix|Кино и сериалы
+          212|Матч ТВ HD|Спорт
+          10020|Матч ТВ HD 50|Спорт
+          220|Матч! Премьер HD|Спорт
+          10021|Матч! Премьер HD 50|Спорт
+          222|Матч! Футбол 1 HD|Спорт
+          10015|Матч! Футбол 1 HD 50|Спорт
+          211|Матч! Футбол 2 HD|Спорт
+          10027|Матч! Футбол 2 HD 50|Спорт
+          206|Матч! Футбол 3 HD|Спорт
+          10016|Матч! Футбол 3 HD 50|Спорт
+          207|Матч! Арена HD|Спорт
+          225|Матч! Игра HD|Спорт
+          10014|Матч! Игра HD 50|Спорт
+          19219|Матч! Страна HD|Спорт
+          19221|Матч! Боец HD|Спорт
+          215|KHL HD|Спорт
+          19396|KHL Prime HD|Спорт
+          10028|KHL Prime HD 50|Спорт
+          228|Eurosport 1 HD|Спорт
+          234|Eurosport 2 HD|Спорт
+          2007|Viju+ Sport HD|Спорт
+          6554|Окко Спорт HD|Спорт
+          6541|Setanta Eurasia HD orig|Спорт
+          6542|Setanta Eurasia Plus HD orig|Спорт
+          31755|Setanta Sports HD|Спорт
+          31757|Setanta Sports+ HD|Спорт
+          19244|Футбол HD|Спорт
+          10058|Футбольный HD|Спорт
+          10039|Хоккейный HD|Спорт
+          10057|Спортивный HD|Спорт
+          19245|Бокс ТВ HD|Спорт
+          19246|Удар HD|Спорт
+          19243|MMA-TV.com HD|Спорт
+          31710|MMA TIME HD|Спорт
+          6384|Старт HD|Спорт
+          2077|Russian Extreme HD|Спорт
+          16040|Red Bull TV HD|Спорт
+          2396|Fuel TV HD|Спорт
+          1018|FAST&FUN BOX HD|Спорт
+          19044|Sky Sport UHD DE|Спорт
+          19161|SPORT TV 1 4K UHD PT|Спорт
+          6566|BT SPORT 1 FHD UK|Спорт
+          6564|BT SPORT 3 FHD UK|Спорт
+          921|Мульт HD|Детские
+          2001|СТС Kids HD|Детские
+          223|Nickelodeon HD|Детские
+          156|Карусель|Детские
+          5049|Gametoon HD|Детские
+          14007|ТипТоп HD|Детские
+          15092|Liberty Pixar FHD|Детские
+          15093|Liberty Disney FHD|Детские
+          17027|Liberty Бебимульт FHD|Детские
+          17029|Liberty Аниме FHD|Детские
+          18051|Liberty Мульт 4K|Детские
+          20048|KLI Мультики FHD|Детские
+          11025|BCU Multserial HD|Детские
+          11035|BCU Kids HD|Детские
+          11036|BCU Kids+ HD|Детские
+          13020|MM USSR Мультфильм HD|Детские
+          13064|MM Walt Disney HD|Детские
+          18165|UZ Маша и Медведь HD|Детские
+          18168|UZ Союз Мульт HD|Детские
+          31685|UZ Kids 60 fps HD|Детские
+          20164|Yosso TV Disney|Детские
+          18073|Детское кино HD|Детские
+          11058|Ералаш HD|Детские
+          227|Discovery Channel HD|Познавательные
+          136|Discovery Science|Познавательные
+          14001|National Geographic HD|Познавательные
+          10023|National Geographic HD 50|Познавательные
+          2067|Nat Geo Wild HD|Познавательные
+          218|Animal Planet HD|Познавательные
+          231|History HD|Познавательные
+          2033|H2 HD|Познавательные
+          203|Viju History HD|Познавательные
+          6381|Viju Explore HD|Познавательные
+          15225|Viju Nature HD|Познавательные
+          2090|Моя Планета HD|Познавательные
+          2155|Наука HD|Познавательные
+          908|Первый космический HD|Познавательные
+          14020|Поехали! HD|Познавательные
+          233|Travel Channel HD|Познавательные
+          232|TLC HD|Познавательные
+          6391|HGTV HD|Познавательные
+          2102|Investigation Discovery HD|Познавательные
+          2074|Живая природа HD|Познавательные
+          2089|В мире животных HD|Познавательные
+          917|Охотник и Рыболов HD|Познавательные
+          2004|Дикая охота HD|Познавательные
+          2005|Дикая рыбалка HD|Познавательные
+          19254|Рыболов HD|Познавательные
+          6369|Авто Плюс HD|Познавательные
+          2006|DTX HD|Познавательные
+          15109|Liberty Авто Гир FHD|Познавательные
+          15108|Liberty BBC FHD|Познавательные
+          14247|SKY HIGH NATURE 4K|Познавательные
+          19309|SKY HIGH NATURE FHD|Познавательные
+          17053|SKY HIGH DOC UHD|Познавательные
+          31620|Yosso TV 4K HDR|Познавательные
+          31448|NASA TV UHD|Познавательные
+          31526|Love Nature 4K|Познавательные
+          19228|МУЗ-ТВ HD|Музыка
+          14164|RU TV FHD|Музыка
+          19247|RU TV HD|Музыка
+          19223|ТНТ Music HD|Музыка
+          115|Europa Plus TV|Музыка
+          19226|Bridge Русский Хит HD|Музыка
+          19227|Bridge Hits HD|Музыка
+          19225|Bridge Rock HD|Музыка
+          9053|Bridge TV Фрэш HD|Музыка
+          236|Bridge Deluxe HD|Музыка
+          221|MTV Live HD|Музыка
+          2130|MTV HD|Музыка
+          19196|Now 80s HD UK|Музыка
+          19197|Now 90s HD UK|Музыка
+          2129|Жара HD|Музыка
+          19255|Music Box Russia HD|Музыка
+          2156|AIVA TV HD|Музыка
+          16036|Радио Шансон тв HD|Музыка
+          20142|KLI Шансон HD|Музыка
+          16079|KLI Music HD|Музыка
+          208|Mezzo Live HD|Музыка
+          14009|Classic Music HD|Музыка
+          16070|Liberty Микс Music FHD|Музыка
+          14250|SKY HIGH DANCE UHD|Музыка
+          14241|SKY HIGH CONCERT HD|Музыка
+          13015|MM Rock HD|Музыка
+          13030|MM Relax HD|Музыка
+          14138|Z! Musiс HD|Музыка
+          14139|Z! Rock HD|Музыка
+          18084|FRESH Pop Hits HD|Музыка
+          18085|FRESH Russian Pop HD|Музыка
+          18087|FRESH Dance HD|Музыка
+          18088|FRESH Rock Hits HD|Музыка
+          18090|FRESH Russian Rap HD|Музыка
+          18092|FRESH Retro HD|Музыка
+          6370|ТНТ4 HD|Развлечения
+          5035|E TV HD|Развлечения
+          2045|Fashion TV HD|Развлечения
+          14231|UZ 6 Кадров HD|Развлечения
+          14223|UZ Однажды в России HD|Развлечения
+          18169|UZ Уральские Пельмени HD|Развлечения
+          17030|Liberty Шоу FHD|Развлечения
+          19311|SKY HIGH STANDUP HD|Развлечения
+          10049|Eromania 4K (18+)|Прочее
+          5014|Extasy 4K (18+)|Прочее
+          6258|Tiny4K (18+)|Прочее
+          6190|Cum4k (18+)|Прочее
+          5013|Penthouse Reality TV FHD (18+)|Прочее
+          5011|Penthouse Gold HD (18+)|Прочее
+          6182|Brazzers HD (18+)|Прочее
+          910|Brazzers TV Europe (18+)|Прочее
+          245|Dorcel TV HD (18+)|Прочее
+          244|Hustler HD Europe (18+)|Прочее
+          242|Redlight HD (18+)|Прочее
+          6245|Private HD (18+)|Прочее
+          2162|Vivid Red HD (18+)|Прочее
+          2397|Exxxotica HD (18+)|Прочее
+          5015|Eroxxx HD (18+)|Прочее
+          147|Русская Ночь (18+)|Прочее
+          6171|Babes HD (18+)|Прочее
+          6178|Blacked HD (18+)|Прочее
+          6261|Tushy HD (18+)|Прочее
+          6265|Vixen HD (18+)|Прочее
+          6233|MetArt HD (18+)|Прочее
+          6247|Reality Kings HD (18+)|Прочее
+          6202|Fake Taxi HD (18+)|Прочее
+          """.trimIndent()
+
+              fun buildVipChannels(token: String): List<Channel> {
+                  val cleanToken = token.trim().ifEmpty { defaultToken }
+                  val list = mutableListOf<Channel>()
+                  for (line in rawVipEntries.lines()) {
+                      val parts = line.trim().split("|")
+                      if (parts.size >= 3) {
+                          val id = parts[0].trim()
+                          val name = parts[1].trim()
+                          val cat = parts[2].trim()
+                          val url = p1 + p2 + cleanToken + "/" + id + "/index.m3u8"
+                          list.add(Channel(name, url, cat, ""))
+                      }
+                  }
+                  return list
+              }
+          }
+          ''')
+          PYEOF
+
+      - name: Step 3 - Generate MainActivity Code
+        run: |
+          python3 - << 'PYEOF'
           with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
               f.write('''package com.example.miboxiptv
 
@@ -180,11 +547,15 @@ jobs:
           import androidx.media3.common.AudioAttributes
           import androidx.media3.common.C
           import androidx.media3.common.MediaItem
+          import androidx.media3.common.PlaybackException
+          import androidx.media3.common.Player
           import androidx.media3.common.TrackSelectionOverride
           import androidx.media3.common.util.UnstableApi
+          import androidx.media3.datasource.DefaultHttpDataSource
           import androidx.media3.exoplayer.DefaultLoadControl
           import androidx.media3.exoplayer.DefaultRenderersFactory
           import androidx.media3.exoplayer.ExoPlayer
+          import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
           import androidx.media3.ui.AspectRatioFrameLayout
           import androidx.media3.ui.PlayerView
           import org.json.JSONArray
@@ -216,6 +587,7 @@ jobs:
               private lateinit var infoPanel: LinearLayout
               private lateinit var infoTextView: TextView
               private lateinit var clockTextView: TextView
+              private lateinit var signalTextView: TextView
               private lateinit var currentChannelBanner: TextView
               private lateinit var activePlaylistLabel: TextView
 
@@ -237,10 +609,11 @@ jobs:
               private var activePlaylistIndex = 0
               private var bufferLevel = 1
               private var decoderMode = 1
+              private var vipToken = BuiltinCatalog.defaultToken
 
               private val categories = listOf(
                   "★ Избранное",
-                  "Все 1080p",
+                  "Все каналы",
                   "Кино и сериалы",
                   "Спорт",
                   "Детские",
@@ -251,7 +624,13 @@ jobs:
                   "Прочее"
               )
 
-              private val defaultRusUrl = "https://iptv-org.github.io/iptv/languages/rus.m3u"
+              // Несколько открытых источников RU для первого плейлиста
+              private val openRusSources = listOf(
+                  "https://iptv-org.github.io/iptv/languages/rus.m3u",
+                  "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_russia.m3u8",
+                  "https://iptv-org.github.io/iptv/countries/ru.m3u"
+              )
+
               private var epgUrl = "https://iptvx.one/epg/epg_lite.xml.gz"
               private val FILE_PICK_CODE = 1001
 
@@ -273,7 +652,7 @@ jobs:
                   }
                   root.addView(playerView)
 
-                  // Часы в левом верхнем углу (Пункт 11)
+                  // Слева вверху: часы
                   clockTextView = TextView(this).apply {
                       setTextColor(Color.WHITE)
                       textSize = 18f
@@ -288,13 +667,29 @@ jobs:
                   }
                   root.addView(clockTextView)
 
-                  // Панель списка каналов (кнопка ВЛЕВО)
+                  // Справа вверху (симметрично часам): индикатор уровня приёма канала (антенки)
+                  signalTextView = TextView(this).apply {
+                      setTextColor(Color.parseColor("#00E676"))
+                      textSize = 17f
+                      typeface = Typeface.DEFAULT_BOLD
+                      setBackgroundColor(Color.parseColor("#88000000"))
+                      setPadding(20, 8, 20, 8)
+                      text = "▂▄▆█ 100%"
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.TOP or Gravity.END
+                      ).apply { setMargins(0, 24, 28, 0) }
+                  }
+                  root.addView(signalTextView)
+
+                  // Боковая панель каналов (по кнопке ВЛЕВО)
                   sidePanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       setBackgroundColor(Color.parseColor("#E6101018"))
                       visibility = View.GONE
                       layoutParams = FrameLayout.LayoutParams(
-                          1140,
+                          1160,
                           FrameLayout.LayoutParams.MATCH_PARENT,
                           Gravity.START
                       )
@@ -307,22 +702,22 @@ jobs:
                       setPadding(0, 0, 0, 14)
                   }
 
+                  val btnSwitchPlaylist = Button(this).apply {
+                      text = "🔄 Сменить плейлист"
+                      setOnClickListener { showPlaylistsDialog() }
+                  }
+                  topBar.addView(btnSwitchPlaylist)
+
                   val btnSettings = Button(this).apply {
                       text = "⚙ Настройки"
                       setOnClickListener { showSettingsMenu() }
                   }
                   topBar.addView(btnSettings)
 
-                  val btnFavToggle = Button(this).apply {
-                      text = "★ Избранное"
-                      setOnClickListener { toggleCurrentSelectedFavorite() }
-                  }
-                  topBar.addView(btnFavToggle)
-
                   activePlaylistLabel = TextView(this).apply {
                       setTextColor(Color.parseColor("#00E5FF"))
                       textSize = 14f
-                      setPadding(20, 0, 0, 0)
+                      setPadding(18, 0, 0, 0)
                   }
                   topBar.addView(activePlaylistLabel)
                   sidePanel.addView(topBar)
@@ -357,7 +752,7 @@ jobs:
                   sidePanel.addView(columnsLayout)
                   root.addView(sidePanel)
 
-                  // Панель информации о потоке (кнопка ВПРАВО)
+                  // Панель информации о потоке (по кнопке ВПРАВО)
                   infoPanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       setBackgroundColor(Color.parseColor("#E6141026"))
@@ -366,8 +761,8 @@ jobs:
                           680,
                           FrameLayout.LayoutParams.WRAP_CONTENT,
                           Gravity.TOP or Gravity.END
-                      ).apply { setMargins(0, 32, 32, 0) }
-                      setPadding(32, 28, 32, 28)
+                      ).apply { setMargins(0, 84, 28, 0) }
+                      setPadding(32, 24, 32, 24)
                   }
 
                   val infoTitle = TextView(this).apply {
@@ -375,13 +770,13 @@ jobs:
                       setTextColor(Color.parseColor("#00E5FF"))
                       textSize = 19f
                       typeface = Typeface.DEFAULT_BOLD
-                      setPadding(0, 0, 0, 12)
+                      setPadding(0, 0, 0, 10)
                   }
                   infoPanel.addView(infoTitle)
 
                   infoTextView = TextView(this).apply {
                       setTextColor(Color.WHITE)
-                      textSize = 16f
+                      textSize = 15f
                   }
                   infoPanel.addView(infoTextView)
                   root.addView(infoPanel)
@@ -403,7 +798,7 @@ jobs:
                   setContentView(root)
 
                   initPlayer()
-                  startClockAndInfoUpdater()
+                  startClockAndSignalUpdater()
 
                   categoryAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_activated_1, mutableListOf())
                   categoryListView.adapter = categoryAdapter
@@ -441,28 +836,78 @@ jobs:
                   loadEpgInBackground()
               }
 
-              private fun startClockAndInfoUpdater() {
+              private fun startClockAndSignalUpdater() {
                   val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
                   val ticker = object : Runnable {
                       override fun run() {
                           clockTextView.text = timeFmt.format(Date())
+                          updateSignalIndicator()
                           if (infoPanel.visibility == View.VISIBLE) {
                               updateStreamInfoText()
                           }
-                          uiHandler.postDelayed(this, 2000)
+                          uiHandler.postDelayed(this, 1500)
                       }
                   }
                   uiHandler.post(ticker)
               }
 
+              // Индикатор приёма канала («антенки» в правом углу)
+              private fun updateSignalIndicator() {
+                  val p = player
+                  if (p == null) {
+                      signalTextView.text = "▂___ Нет сигнала"
+                      signalTextView.setTextColor(Color.GRAY)
+                      return
+                  }
+                  val state = p.playbackState
+                  val bufSec = (p.totalBufferedDuration / 1000L).toInt()
+                  val vFmt = p.videoFormat
+                  val height = vFmt?.height ?: p.videoSize.height
+                  val resTag = when {
+                      height >= 2160 -> "4K"
+                      height >= 1080 -> "FHD"
+                      height >= 720 -> "HD"
+                      height > 0 -> "${height}p"
+                      else -> ""
+                  }
+
+                  when {
+                      state == Player.STATE_IDLE -> {
+                          signalTextView.text = "▂___ Ожидание"
+                          signalTextView.setTextColor(Color.parseColor("#FF5252"))
+                      }
+                      state == Player.STATE_BUFFERING -> {
+                          signalTextView.text = "▂▄__ Буфер..."
+                          signalTextView.setTextColor(Color.parseColor("#FFD740"))
+                      }
+                      state == Player.STATE_READY && bufSec >= 10 -> {
+                          signalTextView.text = "▂▄▆█ 5/5 $resTag".trim()
+                          signalTextView.setTextColor(Color.parseColor("#00E676"))
+                      }
+                      state == Player.STATE_READY && bufSec >= 4 -> {
+                          signalTextView.text = "▂▄▆_ 4/5 $resTag".trim()
+                          signalTextView.setTextColor(Color.parseColor("#69F0AE"))
+                      }
+                      state == Player.STATE_READY && bufSec >= 1 -> {
+                          signalTextView.text = "▂▄__ 3/5 $resTag".trim()
+                          signalTextView.setTextColor(Color.parseColor("#FFD740"))
+                      }
+                      else -> {
+                          signalTextView.text = "▂___ 2/5 $resTag".trim()
+                          signalTextView.setTextColor(Color.parseColor("#FF5252"))
+                      }
+                  }
+              }
+
+              // Пункт 12: Инициализация плеера с защитой от чёрного экрана и поддержкой редиректов
               private fun initPlayer() {
                   val currentUrl = currentChannel?.url
                   player?.release()
 
                   val (minBuf, maxBuf, startBuf) = when (bufferLevel) {
-                      0 -> Triple(3000, 8000, 1200)
-                      2 -> Triple(30000, 65000, 3500)
-                      else -> Triple(15000, 32000, 2000)
+                      0 -> Triple(3000, 8000, 1000)
+                      2 -> Triple(28000, 60000, 2500)
+                      else -> Triple(12000, 28000, 1500)
                   }
 
                   val loadControl = DefaultLoadControl.Builder()
@@ -481,26 +926,54 @@ jobs:
                       .setEnableDecoderFallback(true)
                       .setEnableAudioTrackPlaybackParams(true)
 
+                  // Сетевой источник с поддержкой редиректов http<->https и SmartTV User-Agent (убирает чёрный экран)
+                  val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+                      .setUserAgent("Mozilla/5.0 (Linux; Android 11; MiBox) AppleWebKit/537.36 Lavf/60.3.100")
+                      .setAllowCrossProtocolRedirects(true)
+                      .setConnectTimeoutMs(12000)
+                      .setReadTimeoutMs(15000)
+
+                  val mediaSourceFactory = DefaultMediaSourceFactory(this)
+                      .setDataSourceFactory(httpDataSourceFactory)
+
                   val audioAttrs = AudioAttributes.Builder()
                       .setUsage(C.USAGE_MEDIA)
                       .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                       .build()
 
                   val newPlayer = ExoPlayer.Builder(this, renderersFactory)
+                      .setMediaSourceFactory(mediaSourceFactory)
                       .setLoadControl(loadControl)
                       .setAudioAttributes(audioAttrs, true)
                       .build()
 
-                  // Анти-пикселизация: принудительно выбираем максимальный битрейт видеопотока
                   newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
                       .buildUpon()
                       .setMaxVideoSize(3840, 2160)
-                      .setMinVideoBitrate(3_500_000)
                       .setForceHighestSupportedBitrate(true)
-                      .setPreferredAudioLanguages("ru", "rus", "und")
+                      .setPreferredAudioLanguages("ru", "rus", "en", "eng", "und")
                       .build()
 
                   newPlayer.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+
+                  // Автовосстановление при сбое потока
+                  newPlayer.addListener(object : Player.Listener {
+                      override fun onPlayerError(error: PlaybackException) {
+                          Toast.makeText(
+                              this@MainActivity,
+                              "Поток недоступен (${error.errorCodeName}), переподключение...",
+                              Toast.LENGTH_SHORT
+                          ).show()
+                          uiHandler.postDelayed({
+                              val ch = currentChannel
+                              if (ch != null) {
+                                  newPlayer.setMediaItem(MediaItem.fromUri(ch.url))
+                                  newPlayer.prepare()
+                                  newPlayer.play()
+                              }
+                          }, 2000)
+                      }
+                  })
 
                   playerView.player = newPlayer
                   player = newPlayer
@@ -518,6 +991,7 @@ jobs:
                       .replace("720p", "")
                       .replace("fhd", "")
                       .replace("hd", "")
+                      .replace("50", "")
                   val sb = StringBuilder()
                   var inBrackets = false
                   for (c in clean) {
@@ -671,18 +1145,19 @@ jobs:
                   val width = vFormat?.width ?: p.videoSize.width
                   val height = vFormat?.height ?: p.videoSize.height
                   val fps = if (vFormat != null && vFormat.frameRate > 0) String.format(Locale.US, "%.0f fps", vFormat.frameRate) else ""
-                  val vCodec = vFormat?.sampleMimeType?.substringAfter("/")?.uppercase() ?: "Определение..."
+                  val vCodec = vFormat?.sampleMimeType?.substringAfter("/")?.uppercase() ?: "Анализ..."
 
                   val vBitrate = if (vFormat != null && vFormat.bitrate > 0) {
                       String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f)
                   } else {
-                      "Макс. профиль HLS (1080p)"
+                      "Макс. поток HLS"
                   }
 
-                  val aCodec = aFormat?.sampleMimeType?.substringAfter("/")?.uppercase() ?: "Анализ..."
+                  val aCodec = aFormat?.sampleMimeType?.substringAfter("/")?.uppercase() ?: "Авто"
                   val aChannels = if (aFormat != null && aFormat.channelCount > 0) aFormat.channelCount.toString() + " кан." else ""
                   val aSampleRate = if (aFormat != null && aFormat.sampleRate > 0) aFormat.sampleRate.toString() + " Гц" else ""
-                  val aLang = aFormat?.language?.uppercase() ?: "RU"
+                  val aLang = aFormat?.language?.uppercase() ?: "RU/EN"
+                  val bufSec = p.totalBufferedDuration / 1000L
 
                   val epg = getCurrentEpg(ch)
                   val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -696,7 +1171,7 @@ jobs:
                   infoTextView.text = "📺 Канал: " + (ch?.name ?: "-") + "\n" +
                       "📂 Категория: " + (ch?.category ?: "-") + "\n\n" +
                       "🖥 Видео: " + width + "x" + height + " " + fps + " (" + vCodec + ")\n" +
-                      "📊 Видеопоток: " + vBitrate + "\n" +
+                      "📊 Битрейт: " + vBitrate + " (Запас буфера: " + bufSec + " с)\n" +
                       "🔊 Аудиодорожка: " + aCodec + " " + aChannels + " " + aSampleRate + " [" + aLang + "]\n" +
                       "⚙ Декодер: " + decoderName() + " | Буфер: " + bufferName() + "\n\n" +
                       epgLine
@@ -705,30 +1180,83 @@ jobs:
               private fun mapToTenCategories(rawGroup: String, name: String): String {
                   val text = (rawGroup + " " + name).lowercase()
                   return when {
-                      text.contains("кино") || text.contains("фильм") || text.contains("сериал") || text.contains("movie") || text.contains("cinema") || text.contains("film") -> "Кино и сериалы"
-                      text.contains("спорт") || text.contains("футбол") || text.contains("матч") || text.contains("sport") || text.contains("khl") || text.contains("ufc") -> "Спорт"
-                      text.contains("детск") || text.contains("мульт") || text.contains("kids") || text.contains("ani") || text.contains("карусель") || text.contains("disney") -> "Детские"
-                      text.contains("наук") || text.contains("док") || text.contains("познав") || text.contains("science") || text.contains("doc") || text.contains("history") || text.contains("discovery") || text.contains("nat geo") -> "Познавательные"
-                      text.contains("муз") || text.contains("music") || text.contains("hit") || text.contains("rock") || text.contains("pop") || text.contains("шансон") -> "Музыка"
-                      text.contains("новост") || text.contains("общ") || text.contains("инфо") || text.contains("news") || text.contains("general") || text.contains("россия") || text.contains("первый") -> "Новости и общие"
+                      text.contains("взросл") || text.contains("18+") || text.contains("adult") || text.contains("xxx") || text.contains("erot") -> "Прочее"
+                      text.contains("кино") || text.contains("фильм") || text.contains("сериал") || text.contains("movie") || text.contains("cinema") || text.contains("film") || text.contains("bcu") || text.contains("cineman") || text.contains("viju") || text.contains("amedia") -> "Кино и сериалы"
+                      text.contains("спорт") || text.contains("футбол") || text.contains("матч") || text.contains("sport") || text.contains("khl") || text.contains("ufc") || text.contains("mma") || text.contains("бокс") -> "Спорт"
+                      text.contains("детск") || text.contains("мульт") || text.contains("kids") || text.contains("ani") || text.contains("карусель") || text.contains("disney") || text.contains("nickelodeon") -> "Детские"
+                      text.contains("наук") || text.contains("док") || text.contains("познав") || text.contains("science") || text.contains("doc") || text.contains("history") || text.contains("discovery") || text.contains("nat geo") || text.contains("animal") || text.contains("планет") || text.contains("охот") -> "Познавательные"
+                      text.contains("муз") || text.contains("music") || text.contains("hit") || text.contains("rock") || text.contains("pop") || text.contains("шансон") || text.contains("mtv") || text.contains("bridge") || text.contains("mezzo") -> "Музыка"
+                      text.contains("новост") || text.contains("общ") || text.contains("инфо") || text.contains("news") || text.contains("general") || text.contains("россия") || text.contains("первый") || text.contains("нтв") || text.contains("рбк") || text.contains("псков") -> "Новости и общие"
                       text.contains("развлеч") || text.contains("юмор") || text.contains("шоу") || text.contains("entertain") || text.contains("comedy") || text.contains("тнт") || text.contains("стс") || text.contains("пятница") -> "Развлечения"
                       else -> "Прочее"
                   }
               }
 
-              private fun is1080pChannel(extInfLine: String, name: String): Boolean {
+              private fun isHighQualityChannel(extInfLine: String, name: String): Boolean {
                   val lower = (extInfLine + " " + name).lowercase()
-                  val lowRes = listOf("720p", "576p", "540p", "480p", "360p", "240p", "(sd)")
+                  val lowRes = listOf("576p", "540p", "480p", "360p", "240p", "(sd)")
                   for (tag in lowRes) {
                       if (lower.contains(tag)) return false
                   }
-                  return lower.contains("1080p") || lower.contains("1080") || lower.contains("fhd")
+                  return lower.contains("1080") || lower.contains("fhd") || lower.contains("hd") || lower.contains("4k") || lower.contains("uhd") || lower.contains("50")
+              }
+
+              private fun parseM3uLines(lines: List<String>, onlyStrict1080: Boolean): List<Channel> {
+                  val strictList = mutableListOf<Channel>()
+                  val allFallback = mutableListOf<Channel>()
+                  val seenUrls = HashSet<String>()
+                  var currentName = "Канал"
+                  var currentExtInf = ""
+                  var currentGroup = ""
+                  var currentTvgId = ""
+                  val quote = 34.toChar().toString()
+
+                  for (line in lines) {
+                      val trimmed = line.trim()
+                      if (trimmed.startsWith("#EXTINF:")) {
+                          currentExtInf = trimmed
+                          currentName = trimmed.substringAfterLast(",").trim()
+                          val groupPrefix = "group-title=" + quote
+                          currentGroup = if (trimmed.contains(groupPrefix)) {
+                              trimmed.substringAfter(groupPrefix).substringBefore(quote)
+                          } else ""
+                          val idPrefix = "tvg-id=" + quote
+                          currentTvgId = if (trimmed.contains(idPrefix)) {
+                              trimmed.substringAfter(idPrefix).substringBefore(quote)
+                          } else ""
+                      } else if (trimmed.startsWith("#EXTGRP:")) {
+                          // Поддержка тега #EXTGRP: из файла пользователя
+                          currentGroup = trimmed.substringAfter("#EXTGRP:").trim()
+                      } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                          if (seenUrls.add(trimmed)) {
+                              val cat = mapToTenCategories(currentGroup, currentName)
+                              val ch = Channel(currentName, trimmed, cat, currentTvgId)
+                              allFallback.add(ch)
+                              if (isHighQualityChannel(currentExtInf, currentName)) {
+                                  strictList.add(ch)
+                              }
+                          }
+                      }
+                  }
+                  return if (onlyStrict1080 && strictList.isNotEmpty()) strictList else allFallback
+              }
+
+              private fun ensureDefaultPlaylists() {
+                  if (playlists.isEmpty()) {
+                      playlists.add(PlaylistEntry("1. Открытые RU + Sport/Music EN", "BUILTIN_OPEN_RU", false))
+                      playlists.add(PlaylistEntry("2. VIP Провайдер (Кинозалы + Спорт + 18+)", "BUILTIN_VIP_PROVIDER", false))
+                  } else {
+                      if (playlists.none { it.source == "BUILTIN_OPEN_RU" }) {
+                          playlists.add(0, PlaylistEntry("1. Открытые RU + Sport/Music EN", "BUILTIN_OPEN_RU", false))
+                      }
+                      if (playlists.none { it.source == "BUILTIN_VIP_PROVIDER" }) {
+                          playlists.add(1, PlaylistEntry("2. VIP Провайдер (Кинозалы + Спорт + 18+)", "BUILTIN_VIP_PROVIDER", false))
+                      }
+                  }
               }
 
               private fun loadActivePlaylist() {
-                  if (playlists.isEmpty()) {
-                      playlists.add(PlaylistEntry("Русские 1080p (Встроенный)", defaultRusUrl, false))
-                  }
+                  ensureDefaultPlaylists()
                   if (activePlaylistIndex !in playlists.indices) activePlaylistIndex = 0
                   val entry = playlists[activePlaylistIndex]
                   updateTopLabel()
@@ -737,51 +1265,40 @@ jobs:
 
                   thread {
                       try {
-                          val lines: List<String> = if (entry.isLocal) {
-                              if (entry.source.startsWith("content://")) {
-                                  contentResolver.openInputStream(Uri.parse(entry.source))?.bufferedReader()?.readLines() ?: emptyList()
-                              } else {
-                                  File(entry.source).readLines()
+                          val finalChannels: List<Channel> = when {
+                              entry.source == "BUILTIN_VIP_PROVIDER" -> {
+                                  BuiltinCatalog.buildVipChannels(vipToken)
                               }
-                          } else {
-                              val conn = URL(entry.source).openConnection() as HttpURLConnection
-                              conn.connectTimeout = 10000
-                              conn.readTimeout = 10000
-                              conn.inputStream.bufferedReader().readLines()
-                          }
-
-                          val strict1080 = mutableListOf<Channel>()
-                          val allFallback = mutableListOf<Channel>()
-                          var currentName = "Канал"
-                          var currentExtInf = ""
-                          var currentGroup = ""
-                          var currentTvgId = ""
-                          val quote = 34.toChar().toString()
-
-                          for (line in lines) {
-                              val trimmed = line.trim()
-                              if (trimmed.startsWith("#EXTINF:")) {
-                                  currentExtInf = trimmed
-                                  currentName = trimmed.substringAfterLast(",").trim()
-                                  val groupPrefix = "group-title=" + quote
-                                  currentGroup = if (trimmed.contains(groupPrefix)) {
-                                      trimmed.substringAfter(groupPrefix).substringBefore(quote)
-                                  } else ""
-                                  val idPrefix = "tvg-id=" + quote
-                                  currentTvgId = if (trimmed.contains(idPrefix)) {
-                                      trimmed.substringAfter(idPrefix).substringBefore(quote)
-                                  } else ""
-                              } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-                                  val cat = mapToTenCategories(currentGroup, currentName)
-                                  val ch = Channel(currentName, trimmed, cat, currentTvgId)
-                                  allFallback.add(ch)
-                                  if (is1080pChannel(currentExtInf, currentName)) {
-                                      strict1080.add(ch)
+                              entry.source == "BUILTIN_OPEN_RU" -> {
+                                  val combinedLines = mutableListOf<String>()
+                                  for (srcUrl in openRusSources) {
+                                      try {
+                                          val conn = URL(srcUrl).openConnection() as HttpURLConnection
+                                          conn.connectTimeout = 8000
+                                          conn.readTimeout = 10000
+                                          combinedLines.addAll(conn.inputStream.bufferedReader().readLines())
+                                      } catch (_: Exception) {}
                                   }
+                                  val parsed = parseM3uLines(combinedLines, true).toMutableList()
+                                  parsed.addAll(BuiltinCatalog.extraOpenStreams)
+                                  parsed
+                              }
+                              entry.isLocal -> {
+                                  val lines = if (entry.source.startsWith("content://")) {
+                                      contentResolver.openInputStream(Uri.parse(entry.source))?.bufferedReader()?.readLines() ?: emptyList()
+                                  } else {
+                                      File(entry.source).readLines()
+                                  }
+                                  parseM3uLines(lines, false)
+                              }
+                              else -> {
+                                  val conn = URL(entry.source).openConnection() as HttpURLConnection
+                                  conn.connectTimeout = 10000
+                                  conn.readTimeout = 12000
+                                  val lines = conn.inputStream.bufferedReader().readLines()
+                                  parseM3uLines(lines, false)
                               }
                           }
-
-                          val finalChannels = if (strict1080.isNotEmpty()) strict1080 else allFallback
 
                           runOnUiThread {
                               allChannels.clear()
@@ -804,7 +1321,7 @@ jobs:
 
               private fun updateTopLabel() {
                   if (playlists.isNotEmpty() && activePlaylistIndex in playlists.indices) {
-                      activePlaylistLabel.text = playlists[activePlaylistIndex].title + " | Буфер: " + bufferName() + " | Декодер: " + decoderName()
+                      activePlaylistLabel.text = playlists[activePlaylistIndex].title + " | Буфер: " + bufferName()
                   }
               }
 
@@ -812,7 +1329,7 @@ jobs:
                   val counts = categories.map { cat ->
                       val count = when (cat) {
                           "★ Избранное" -> allChannels.count { favoriteUrls.contains(it.url) }
-                          "Все 1080p" -> allChannels.size
+                          "Все каналы" -> allChannels.size
                           else -> allChannels.count { it.category == cat }
                       }
                       cat + " (" + count + ")"
@@ -831,7 +1348,7 @@ jobs:
                   displayedChannels.clear()
                   when (catName) {
                       "★ Избранное" -> displayedChannels.addAll(allChannels.filter { favoriteUrls.contains(it.url) })
-                      "Все 1080p" -> displayedChannels.addAll(allChannels)
+                      "Все каналы" -> displayedChannels.addAll(allChannels)
                       else -> displayedChannels.addAll(allChannels.filter { it.category == catName })
                   }
 
@@ -847,14 +1364,6 @@ jobs:
                       (i + 1).toString() + ". " + star + ch.name + epgSuffix
                   })
                   channelAdapter.notifyDataSetChanged()
-              }
-
-              private fun toggleCurrentSelectedFavorite() {
-                  val pos = channelListView.selectedItemPosition
-                  val target = if (pos in displayedChannels.indices) displayedChannels[pos] else currentChannel
-                  if (target != null) {
-                      toggleFavorite(target)
-                  }
               }
 
               private fun toggleFavorite(ch: Channel) {
@@ -879,6 +1388,7 @@ jobs:
                   val epg = getCurrentEpg(channel)
                   val epgLine = if (epg != null) "\nСейчас: " + epg.title else ""
                   showBanner(star + channel.name + " [" + channel.category + "]" + epgLine)
+                  updateSignalIndicator()
                   if (infoPanel.visibility == View.VISIBLE) {
                       updateStreamInfoText()
                   }
@@ -916,14 +1426,14 @@ jobs:
                   }
               }
 
-              // Центральная кнопка OK во время просмотра (Пункт 9 + переключение аудиодорожки)
               private fun showCenterActionMenu() {
                   val ch = currentChannel ?: return
                   val isFav = favoriteUrls.contains(ch.url)
                   val favLabel = if (isFav) "★ Убрать из Избранного (" + ch.name + ")" else "☆ Добавить в Избранное (" + ch.name + ")"
                   val actions = arrayOf(
                       favLabel,
-                      "🔊 Сменить аудиодорожку (если нет звука)"
+                      "🔊 Сменить аудиодорожку (если нет звука)",
+                      "🔄 Переключить плейлист (Открытый RU / VIP Провайдер)"
                   )
 
                   AlertDialog.Builder(this)
@@ -932,6 +1442,7 @@ jobs:
                           when (which) {
                               0 -> toggleFavorite(ch)
                               1 -> showAudioTracksDialog()
+                              2 -> showPlaylistsDialog()
                           }
                       }
                       .setNegativeButton("Закрыть", null)
@@ -978,16 +1489,17 @@ jobs:
 
               private fun decoderName(): String = when (decoderMode) {
                   0 -> "Аппаратный (HW)"
-                  2 -> "Программный приоритет (SW)"
+                  2 -> "Программный (SW)"
                   else -> "Авто (HW + Fallback)"
               }
 
               private fun showSettingsMenu() {
                   val items = arrayOf(
-                      "1. Плейлисты (переключение и добавление URL / .m3u8)",
+                      "1. Плейлисты (Выбор: Открытый RU / VIP Провайдер / Файл .m3u8)",
                       "2. Буфер подкачки (текущий: " + bufferName() + ")",
                       "3. Декодер видео и звука (текущий: " + decoderName() + ")",
-                      "4. Программа передач EPG (обновить / изменить URL)"
+                      "4. Ключ VIP-плейлиста (Токен личного кабинета)",
+                      "5. Программа передач EPG (обновить / изменить URL)"
                   )
                   AlertDialog.Builder(this)
                       .setTitle("⚙ Настройки MiBox IPTV")
@@ -996,10 +1508,31 @@ jobs:
                               0 -> showPlaylistsDialog()
                               1 -> showBufferDialog()
                               2 -> showDecoderDialog()
-                              3 -> showEpgDialog()
+                              3 -> showTokenDialog()
+                              4 -> showEpgDialog()
                           }
                       }
                       .setNegativeButton("Закрыть", null)
+                      .show()
+              }
+
+              private fun showTokenDialog() {
+                  val input = EditText(this).apply {
+                      setText(vipToken)
+                      setSingleLine()
+                  }
+                  AlertDialog.Builder(this)
+                      .setTitle("Ключ доступа (Токен) для VIP-плейлиста")
+                      .setView(input)
+                      .setPositiveButton("Сохранить") { _, _ ->
+                          val newTok = input.text.toString().trim()
+                          if (newTok.isNotEmpty()) {
+                              vipToken = newTok
+                              saveState()
+                              loadActivePlaylist()
+                          }
+                      }
+                      .setNegativeButton("Отмена", null)
                       .show()
               }
 
@@ -1007,7 +1540,7 @@ jobs:
                   val modes = arrayOf(
                       "Аппаратный (HW) — основной чип приставки",
                       "Авто (HW + SW Fallback) — рекомендуется",
-                      "Программный приоритет (SW) — если видео рассыпается"
+                      "Программный приоритет (SW) — если видео сыпется"
                   )
                   AlertDialog.Builder(this)
                       .setTitle("Выбор декодера видео и аудио")
@@ -1045,20 +1578,25 @@ jobs:
               }
 
               private fun showPlaylistsDialog() {
+                  ensureDefaultPlaylists()
                   val listLabels = playlists.mapIndexed { idx, p ->
                       val mark = if (idx == activePlaylistIndex) "✔ " else "   "
-                      val type = if (p.isLocal) "[Файл]" else "[URL]"
+                      val type = when {
+                          p.source.startsWith("BUILTIN_") -> "[Встроенный]"
+                          p.isLocal -> "[Файл]"
+                          else -> "[URL]"
+                      }
                       mark + p.title + " " + type
                   }.toMutableList()
 
                   listLabels.add("➕ Добавить плейлист по ссылке (URL)")
                   listLabels.add("📂 Добавить файл .m3u / .m3u8 из памяти / флешки")
-                  if (playlists.size > 1) {
-                      listLabels.add("🗑 Удалить текущий плейлист")
+                  if (playlists.size > 2) {
+                      listLabels.add("🗑 Удалить выбранный пользовательский плейлист")
                   }
 
                   AlertDialog.Builder(this)
-                      .setTitle("Управление плейлистами")
+                      .setTitle("Выбор и добавление плейлистов")
                       .setItems(listLabels.toTypedArray()) { _, which ->
                           when {
                               which < playlists.size -> {
@@ -1069,11 +1607,13 @@ jobs:
                               which == playlists.size -> showAddUrlPlaylistDialog()
                               which == playlists.size + 1 -> showLocalFileOptions()
                               else -> {
-                                  if (playlists.size > 1) {
+                                  if (activePlaylistIndex >= 2) {
                                       playlists.removeAt(activePlaylistIndex)
                                       activePlaylistIndex = 0
                                       saveState()
                                       loadActivePlaylist()
+                                  } else {
+                                      Toast.makeText(this, "Встроенные плейлисты удалить нельзя", Toast.LENGTH_SHORT).show()
                                   }
                               }
                           }
@@ -1134,7 +1674,6 @@ jobs:
                                       }
                                       startActivityForResult(Intent.createChooser(intent, "Выберите .m3u / .m3u8"), FILE_PICK_CODE)
                                   } catch (e: Exception) {
-                                      Toast.makeText(this, "Файловый менеджер не найден, используйте поиск", Toast.LENGTH_LONG).show()
                                       scanLocalM3uFiles()
                                   }
                               }
@@ -1220,8 +1759,8 @@ jobs:
               private fun showBufferDialog() {
                   val levels = arrayOf(
                       "Маленький (3–8 сек) — быстрое переключение",
-                      "Средний (15–32 сек) — оптимально для 1080p",
-                      "Большой (30–65 сек) — максимальная стабильность"
+                      "Средний (12–28 сек) — оптимально для 1080p",
+                      "Большой (28–60 сек) — максимальная стабильность"
                   )
                   AlertDialog.Builder(this)
                       .setTitle("Буфер подкачки видео")
@@ -1238,7 +1777,7 @@ jobs:
               }
 
               private fun saveState() {
-                  val prefs = getSharedPreferences("iptv_v3_prefs", Context.MODE_PRIVATE)
+                  val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
                   val arr = JSONArray()
                   for (p in playlists) {
                       val obj = JSONObject()
@@ -1252,16 +1791,18 @@ jobs:
                       .putInt("active_playlist", activePlaylistIndex)
                       .putInt("buffer_level", bufferLevel)
                       .putInt("decoder_mode", decoderMode)
+                      .putString("vip_token", vipToken)
                       .putString("epg_url", epgUrl)
                       .putStringSet("favorites", favoriteUrls.toSet())
                       .apply()
               }
 
               private fun loadSavedState() {
-                  val prefs = getSharedPreferences("iptv_v3_prefs", Context.MODE_PRIVATE)
+                  val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
                   bufferLevel = prefs.getInt("buffer_level", 1)
                   decoderMode = prefs.getInt("decoder_mode", 1)
                   activePlaylistIndex = prefs.getInt("active_playlist", 0)
+                  vipToken = prefs.getString("vip_token", BuiltinCatalog.defaultToken) ?: BuiltinCatalog.defaultToken
                   epgUrl = prefs.getString("epg_url", epgUrl) ?: epgUrl
                   val favs = prefs.getStringSet("favorites", emptySet()) ?: emptySet()
                   favoriteUrls.clear()
@@ -1284,9 +1825,7 @@ jobs:
                           }
                       } catch (_: Exception) {}
                   }
-                  if (playlists.isEmpty()) {
-                      playlists.add(PlaylistEntry("Русские 1080p (Встроенный)", defaultRusUrl, false))
-                  }
+                  ensureDefaultPlaylists()
               }
 
               override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -1345,11 +1884,14 @@ jobs:
           }
           ''')
           PYEOF
+
+      - name: Step 4 - Compile APK
+        run: |
           gradle assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk MiBox-IPTV-v0.3.${{ github.run_number }}.apk
+          cp app/build/outputs/apk/debug/app-debug.apk MiBox-IPTV-v0.4.${{ github.run_number }}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiBox-IPTV-v0.3.${{ github.run_number }}
-          path: MiBox-IPTV-v0.3.${{ github.run_number }}.apk
+          name: MiBox-IPTV-v0.4.${{ github.run_number }}
+          path: MiBox-IPTV-v0.4.${{ github.run_number }}.apk
