@@ -3502,13 +3502,15 @@ jobs:
           }
           ''')
           PYEOF
+
       - name: Step 4 - Compile APK
         run: |
           gradle assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk MiBox-IPTV-v0.4.${{ github.run_number }}.apk
+          cp app/build/outputs/apk/debug/app-debug.apk MiBox-IPTV-v0.5.${GITHUB_RUN_NUMBER}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiBox-IPTV-v0.4.${{ github.run_number }}
-          path: MiBox-IPTV-v0.4.${{ github.run_number }}.apk
+          name: MiBox-IPTV-v0.5.${{ github.run_number }}
+          path: MiBox-IPTV-v0.5.${{ github.run_number }}.apk
+          
