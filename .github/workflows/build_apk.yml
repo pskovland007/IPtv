@@ -1887,7 +1887,7 @@ jobs:
           ''')
           PYEOF
 
-- name: Step 3.5 - Apply Patches v0.5
+      - name: Step 3.5 - Apply Patches v0.5
         run: |
           python3 - << 'PYEOF'
           with open("app/build.gradle", "r") as f:
