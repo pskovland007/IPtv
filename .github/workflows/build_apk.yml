@@ -1887,6 +1887,576 @@ jobs:
           ''')
           PYEOF
 
+      - name: Step 3.5 - Apply Patches v0.5
+        run: |
+          python3 - << 'PYEOF'
+          with open("app/build.gradle", "r") as f:
+              g = f.read()
+          if "media3-datasource" not in g:
+              g = g.replace(
+                  'implementation "androidx.media3:media3-exoplayer:1.2.1"',
+                  'implementation "androidx.media3:media3-common:1.2.1"\n    implementation "androidx.media3:media3-datasource:1.2.1"\n    implementation "androidx.media3:media3-exoplayer:1.2.1"'
+              )
+          with open("app/build.gradle", "w") as f:
+              f.write(g)
+
+          with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "r") as f:
+              cat = f.read()
+
+          more_en = '''Channel("Red Bull TV FHD (EN)", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master_3360.m3u8", "Спорт", ""),
+                  Channel("Red Bull Motorsports HD (EN)", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8", "Спорт", ""),
+                  Channel("Fuel TV Action Sports (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/fuel-tv/manifest.m3u8", "Спорт", ""),
+                  Channel("Trace Sport Stars (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-sport-stars/manifest.m3u8", "Спорт", ""),
+                  Channel("Fight Sports / MMA TV (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/fight-sports/manifest.m3u8", "Спорт", ""),
+                  Channel("World Poker Tour (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/world-poker-tour/manifest.m3u8", "Спорт", ""),
+                  Channel("FIFA+ Football HD (EN)", "https://aaf58958573c48f3a617d27f5c69062d.mediatailor.us-east-1.amazonaws.com/v1/master/04fd913bb278d8775298c26fdca9d9841f37601f/FIFA_Plus/playlist.m3u8", "Спорт", ""),
+                  Channel("Tennis Channel Plus (EN)", "https://tennischannel-intl-samsunguk.amagi.tv/playlist.m3u8", "Спорт", ""),
+                  Channel("MotorVision TV HD (EN)", "https://motorvision-samsunguk.amagi.tv/playlist.m3u8", "Спорт", ""),
+                  Channel("beIN Sports Xtra HD (EN)", "https://bein-xtra-samsunguk.amagi.tv/playlist.m3u8", "Спорт", ""),
+                  Channel("Edge Sport HD (EN)", "https://edgesport-samsunguk.amagi.tv/playlist.m3u8", "Спорт", ""),
+                  Channel("Hard Knocks Fighting (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/hard-knocks/manifest.m3u8", "Спорт", ""),
+                  Channel("GLORY Kickboxing (EN)", "https://glory-samsunguk.amagi.tv/playlist.m3u8", "Спорт", ""),
+                  Channel("Impact Wrestling HD (EN)", "https://impact-wrestling-samsunguk.amagi.tv/playlist.m3u8", "Спорт", ""),
+                  Channel("CampusLore Sports (EN)", "https://campuslore-samsunguk.amagi.tv/playlist.m3u8", "Спорт", ""),
+                  Channel("Deluxe Music HD (EN)", "https://sdn-global-live-streaming-packager-cache.3qsdn.com/13456/13456_264_live.m3u8", "Музыка", ""),
+                  Channel("Trace Urban HD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-urban/manifest.m3u8", "Музыка", ""),
+                  Channel("Trace Latina HD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-latina/manifest.m3u8", "Музыка", ""),
+                  Channel("Trace UK Hits (EN)", "https://trace-uk-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Clubbing TV Dance (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/clubbing-tv/manifest.m3u8", "Музыка", ""),
+                  Channel("Now 70s Music (EN)", "https://lightning-now70s-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Now 80s Music (EN)", "https://lightning-now80s-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Now 90s Music (EN)", "https://lightning-now90s-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Now Rock Music (EN)", "https://lightning-nowrock-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Vevo Pop Hits (EN)", "https://vevo-pop-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Vevo Retro Rock (EN)", "https://vevo-retorock-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Qello Concerts by Stingray (EN)", "https://stingray-qello-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Stingray Classic Rock (EN)", "https://stingray-classicrock-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
+                  Channel("Stingray Hit List (EN)", "https://stingray-hitlist-samsunguk.amagi.tv/playlist.m3u8", "Музыка", "")'''
+
+          cat = cat.replace('Channel("Red Bull TV FHD (EN)", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master_3360.m3u8", "Спорт", ""),', more_en + ",")
+          with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "w") as f:
+              f.write(cat)
+
+          with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
+              f.write(r'''package com.example.miboxiptv
+
+          import android.app.AlertDialog
+          import android.content.Context
+          import android.content.Intent
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.GradientDrawable
+          import android.net.Uri
+          import android.os.Bundle
+          import android.os.Environment
+          import android.os.Handler
+          import android.os.Looper
+          import android.view.Gravity
+          import android.view.KeyEvent
+          import android.view.View
+          import android.view.WindowManager
+          import android.widget.*
+          import androidx.annotation.OptIn
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.media3.common.AudioAttributes
+          import androidx.media3.common.C
+          import androidx.media3.common.MediaItem
+          import androidx.media3.common.PlaybackException
+          import androidx.media3.common.Player
+          import androidx.media3.common.TrackSelectionOverride
+          import androidx.media3.common.util.UnstableApi
+          import androidx.media3.datasource.DefaultHttpDataSource
+          import androidx.media3.exoplayer.DefaultLoadControl
+          import androidx.media3.exoplayer.DefaultRenderersFactory
+          import androidx.media3.exoplayer.ExoPlayer
+          import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+          import androidx.media3.ui.AspectRatioFrameLayout
+          import androidx.media3.ui.PlayerView
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import org.xmlpull.v1.XmlPullParser
+          import org.xmlpull.v1.XmlPullParserFactory
+          import java.io.File
+          import java.io.InputStream
+          import java.net.HttpURLConnection
+          import java.net.URL
+          import java.text.SimpleDateFormat
+          import java.util.Date
+          import java.util.Locale
+          import java.util.TimeZone
+          import java.util.zip.GZIPInputStream
+          import kotlin.concurrent.thread
+
+          data class Channel(val name: String, val url: String, val category: String, val tvgId: String)
+          data class PlaylistEntry(val title: String, val source: String, val isLocal: Boolean)
+          data class EpgProgram(val title: String, val desc: String, val startMs: Long, val stopMs: Long)
+
+          @OptIn(UnstableApi::class)
+          class MainActivity : AppCompatActivity() {
+              private var player: ExoPlayer? = null
+              private lateinit var playerView: PlayerView
+              private lateinit var categoryListView: ListView
+              private lateinit var channelListView: ListView
+              private lateinit var sidePanel: LinearLayout
+              private lateinit var infoPanel: LinearLayout
+              private lateinit var infoTextView: TextView
+              private lateinit var clockTextView: TextView
+
+              // Эстетичный визуальный индикатор сигнала (4 столбика без текста)
+              private lateinit var signalContainer: LinearLayout
+              private val signalBars = mutableListOf<View>()
+
+              // Нижнее центральное меню с таймлайном и программой передач (по кнопке OK)
+              private lateinit var centerOsdPanel: LinearLayout
+              private lateinit var osdChannelTitle: TextView
+              private lateinit var osdEpgCurrentTitle: TextView
+              private lateinit var osdEpgTimeLabel: TextView
+              private lateinit var osdEpgProgress: ProgressBar
+              private lateinit var osdEpgNextAndDesc: TextView
+              private lateinit var btnOsdFav: Button
+
+              private lateinit var currentChannelBanner: TextView
+              private lateinit var activePlaylistLabel: TextView
+
+              private val uiHandler = Handler(Looper.getMainLooper())
+              private val allChannels = mutableListOf<Channel>()
+              private val displayedChannels = mutableListOf<Channel>()
+              private val favoriteUrls = mutableSetOf<String>()
+              private val playlists = mutableListOf<PlaylistEntry>()
+
+              private val epgById = HashMap<String, MutableList<EpgProgram>>()
+              private val epgByName = HashMap<String, MutableList<EpgProgram>>()
+              private var epgLoadedCount = 0
+
+              private lateinit var categoryAdapter: ArrayAdapter<String>
+              private lateinit var channelAdapter: ArrayAdapter<String>
+
+              private var currentCategoryIndex = 1
+              private var currentChannel: Channel? = null
+              private var activePlaylistIndex = 0
+              private var bufferLevel = 1
+              private var decoderMode = 1
+              private var vipToken = BuiltinCatalog.defaultToken
+              private var lastBackPressTime = 0L
+
+              private val categories = listOf(
+                  "★ Избранное",
+                  "Все каналы",
+                  "Кино и сериалы",
+                  "Спорт",
+                  "Детские",
+                  "Познавательные",
+                  "Музыка",
+                  "Новости и общие",
+                  "Развлечения",
+                  "Прочее"
+              )
+
+              // Расширенный список открытых RU и международных источников (1080p + 720p)
+              private val openRusSources = listOf(
+                  "https://iptv-org.github.io/iptv/languages/rus.m3u",
+                  "https://iptv-org.github.io/iptv/countries/ru.m3u",
+                  "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_russia.m3u8",
+                  "https://iptv-org.github.io/iptv/categories/sports.m3u",
+                  "https://iptv-org.github.io/iptv/categories/music.m3u"
+              )
+
+              private val epgUrls = listOf(
+                  "https://iptvx.one/epg/epg_lite.xml.gz",
+                  "http://www.teleguide.info/download/new3/xmltv.xml.gz"
+              )
+              private var epgUrl = epgUrls[0]
+              private val FILE_PICK_CODE = 1001
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+                  loadSavedState()
+
+                  val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+
+                  // RESIZE_MODE_FILL растягивает 720p и любые нестандартные каналы строго на весь экран
+                  playerView = PlayerView(this).apply {
+                      useController = false
+                      resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.MATCH_PARENT
+                      )
+                  }
+                  root.addView(playerView)
+
+                  // Часы слева вверху
+                  val pillBgLeft = GradientDrawable().apply {
+                      setColor(Color.parseColor("#800D0B18"))
+                      cornerRadius = 20f
+                  }
+                  clockTextView = TextView(this).apply {
+                      setTextColor(Color.WHITE)
+                      textSize = 17f
+                      typeface = Typeface.DEFAULT_BOLD
+                      background = pillBgLeft
+                      setPadding(22, 10, 22, 10)
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.TOP or Gravity.START
+                      ).apply { setMargins(28, 24, 0, 0) }
+                  }
+                  root.addView(clockTextView)
+
+                  // Эстетичный графический индикатор приёма справа вверху (только 4 столбика без текста)
+                  val pillBgRight = GradientDrawable().apply {
+                      setColor(Color.parseColor("#800D0B18"))
+                      cornerRadius = 20f
+                  }
+                  signalContainer = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.BOTTOM
+                      background = pillBgRight
+                      setPadding(20, 14, 20, 14)
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.TOP or Gravity.END
+                      ).apply { setMargins(0, 24, 28, 0) }
+                  }
+                  val barHeights = listOf(12, 19, 26, 34)
+                  for (h in barHeights) {
+                      val bar = View(this).apply {
+                          layoutParams = LinearLayout.LayoutParams(8, h).apply {
+                              setMargins(4, 0, 4, 0)
+                          }
+                          background = GradientDrawable().apply {
+                              setColor(Color.parseColor("#00E676"))
+                              cornerRadius = 4f
+                          }
+                      }
+                      signalBars.add(bar)
+                      signalContainer.addView(bar)
+                  }
+                  root.addView(signalContainer)
+
+                  // Боковая панель категорий и каналов (кнопка ВЛЕВО)
+                  sidePanel = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setBackgroundColor(Color.parseColor("#EB101018"))
+                      visibility = View.GONE
+                      layoutParams = FrameLayout.LayoutParams(
+                          1160,
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          Gravity.START
+                      )
+                      setPadding(24, 24, 24, 24)
+                  }
+
+                  val topBar = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      setPadding(0, 0, 0, 14)
+                  }
+
+                  val btnSwitchPlaylist = Button(this).apply {
+                      text = "🔄 Плейлисты"
+                      setOnClickListener { showPlaylistsDialog() }
+                  }
+                  topBar.addView(btnSwitchPlaylist)
+
+                  val btnSettings = Button(this).apply {
+                      text = "⚙ Настройки"
+                      setOnClickListener { showSettingsMenu() }
+                  }
+                  topBar.addView(btnSettings)
+
+                  activePlaylistLabel = TextView(this).apply {
+                      setTextColor(Color.parseColor("#00E5FF"))
+                      textSize = 14f
+                      setPadding(18, 0, 0, 0)
+                  }
+                  topBar.addView(activePlaylistLabel)
+                  sidePanel.addView(topBar)
+
+                  val columnsLayout = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      layoutParams = LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          LinearLayout.LayoutParams.MATCH_PARENT
+                      )
+                  }
+
+                  categoryListView = ListView(this).apply {
+                      choiceMode = ListView.CHOICE_MODE_SINGLE
+                      setBackgroundColor(Color.parseColor("#22FFFFFF"))
+                      layoutParams = LinearLayout.LayoutParams(
+                          350,
+                          LinearLayout.LayoutParams.MATCH_PARENT
+                      ).apply { setMargins(0, 0, 16, 0) }
+                  }
+
+                  channelListView = ListView(this).apply {
+                      choiceMode = ListView.CHOICE_MODE_SINGLE
+                      layoutParams = LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          LinearLayout.LayoutParams.MATCH_PARENT
+                      )
+                  }
+
+                  columnsLayout.addView(categoryListView)
+                  columnsLayout.addView(channelListView)
+                  sidePanel.addView(columnsLayout)
+                  root.addView(sidePanel)
+
+                  // Панель технической информации (кнопка ВПРАВО)
+                  infoPanel = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setBackgroundColor(Color.parseColor("#EB141026"))
+                      visibility = View.GONE
+                      layoutParams = FrameLayout.LayoutParams(
+                          680,
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.TOP or Gravity.END
+                      ).apply { setMargins(0, 84, 28, 0) }
+                      setPadding(32, 24, 32, 24)
+                  }
+
+                  val infoTitle = TextView(this).apply {
+                      text = "ℹ Параметры видеопотока"
+                      setTextColor(Color.parseColor("#00E5FF"))
+                      textSize = 19f
+                      typeface = Typeface.DEFAULT_BOLD
+                      setPadding(0, 0, 0, 10)
+                  }
+                  infoPanel.addView(infoTitle)
+
+                  infoTextView = TextView(this).apply {
+                      setTextColor(Color.WHITE)
+                      textSize = 15f
+                  }
+                  infoPanel.addView(infoTextView)
+                  root.addView(infoPanel)
+
+                  // ЦЕНТРАЛЬНОЕ МЕНЮ (по кнопке OK): Программа передач + Таймлайн + Действия
+                  val osdBg = GradientDrawable().apply {
+                      setColor(Color.parseColor("#F0120E24"))
+                      cornerRadius = 24f
+                      setStroke(2, Color.parseColor("#00E5FF"))
+                  }
+                  centerOsdPanel = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      background = osdBg
+                      visibility = View.GONE
+                      setPadding(36, 28, 36, 28)
+                      layoutParams = FrameLayout.LayoutParams(
+                          1300,
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                      ).apply { setMargins(40, 0, 40, 36) }
+                  }
+
+                  osdChannelTitle = TextView(this).apply {
+                      setTextColor(Color.parseColor("#00E5FF"))
+                      textSize = 22f
+                      typeface = Typeface.DEFAULT_BOLD
+                  }
+                  centerOsdPanel.addView(osdChannelTitle)
+
+                  osdEpgCurrentTitle = TextView(this).apply {
+                      setTextColor(Color.WHITE)
+                      textSize = 19f
+                      typeface = Typeface.DEFAULT_BOLD
+                      setPadding(0, 8, 0, 4)
+                  }
+                  centerOsdPanel.addView(osdEpgCurrentTitle)
+
+                  osdEpgTimeLabel = TextView(this).apply {
+                      setTextColor(Color.parseColor("#B0BEC5"))
+                      textSize = 15f
+                  }
+                  centerOsdPanel.addView(osdEpgTimeLabel)
+
+                  osdEpgProgress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                      max = 100
+                      progress = 0
+                      layoutParams = LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          18
+                      ).apply { setMargins(0, 10, 0, 10) }
+                  }
+                  centerOsdPanel.addView(osdEpgProgress)
+
+                  osdEpgNextAndDesc = TextView(this).apply {
+                      setTextColor(Color.parseColor("#E0E0E0"))
+                      textSize = 15f
+                      setPadding(0, 0, 0, 16)
+                  }
+                  centerOsdPanel.addView(osdEpgNextAndDesc)
+
+                  val osdButtonsRow = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.START
+                  }
+
+                  btnOsdFav = Button(this).apply {
+                      text = "★ В Избранное"
+                      setOnClickListener {
+                          currentChannel?.let { toggleFavorite(it) }
+                          updateCenterOsdContent()
+                      }
+                  }
+                  osdButtonsRow.addView(btnOsdFav)
+
+                  val btnOsdSettings = Button(this).apply {
+                      text = "⚙ Настройки"
+                      setOnClickListener {
+                          centerOsdPanel.visibility = View.GONE
+                          showSettingsMenu()
+                      }
+                  }
+                  osdButtonsRow.addView(btnOsdSettings)
+
+                  val btnOsdAudio = Button(this).apply {
+                      text = "🔊 Аудиодорожка"
+                      setOnClickListener { showAudioTracksDialog() }
+                  }
+                  osdButtonsRow.addView(btnOsdAudio)
+
+                  val btnOsdPlaylist = Button(this).apply {
+                      text = "🔄 Сменить плейлист"
+                      setOnClickListener {
+                          centerOsdPanel.visibility = View.GONE
+                          showPlaylistsDialog()
+                      }
+                  }
+                  osdButtonsRow.addView(btnOsdPlaylist)
+
+                  centerOsdPanel.addView(osdButtonsRow)
+                  root.addView(centerOsdPanel)
+
+                  // Короткий баннер при переключении канала Вверх/Вниз
+                  currentChannelBanner = TextView(this).apply {
+                      setTextColor(Color.WHITE)
+                      textSize = 18f
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#D9141026"))
+                          cornerRadius = 18f
+                      }
+                      setPadding(32, 18, 32, 18)
+                      visibility = View.GONE
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.BOTTOM or Gravity.START
+                      ).apply { setMargins(36, 0, 36, 36) }
+                  }
+                  root.addView(currentChannelBanner)
+
+                  setContentView(root)
+
+                  initPlayer()
+                  startClockAndSignalUpdater()
+
+                  categoryAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_activated_1, mutableListOf())
+                  categoryListView.adapter = categoryAdapter
+
+                  channelAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
+                  channelListView.adapter = channelAdapter
+
+                  categoryListView.setOnItemClickListener { _, _, position, _ ->
+                      selectCategory(position)
+                      channelListView.requestFocus()
+                  }
+
+                  categoryListView.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                      override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                          selectCategory(position)
+                      }
+                      override fun onNothingSelected(parent: AdapterView<*>?) {}
+                  }
+
+                  channelListView.setOnItemClickListener { _, _, position, _ ->
+                      if (position in displayedChannels.indices) {
+                          playChannelObj(displayedChannels[position])
+                          hideSidePanel()
+                      }
+                  }
+
+                  channelListView.setOnItemLongClickListener { _, _, position, _ ->
+                      if (position in displayedChannels.indices) {
+                          toggleFavorite(displayedChannels[position])
+                      }
+                      true
+                  }
+
+                  loadActivePlaylist()
+                  loadEpgInBackground()
+              }
+
+              private fun startClockAndSignalUpdater() {
+                  val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+                  val ticker = object : Runnable {
+                      override fun run() {
+                          clockTextView.text = timeFmt.format(Date())
+                          updateSignalIndicator()
+                          if (infoPanel.visibility == View.VISIBLE) {
+                              updateStreamInfoText()
+                          }
+                          if (centerOsdPanel.visibility == View.VISIBLE) {
+                              updateCenterOsdContent()
+                          }
+                          uiHandler.postDelayed(this, 1500)
+                      }
+                  }
+                  uiHandler.post(ticker)
+              }
+
+              // Визуальное отображение уровня приёма (4 деления без текста)
+              private fun updateSignalIndicator() {
+                  val p = player
+                  val state = p?.playbackState ?: Player.STATE_IDLE
+                  val bufSec = ((p?.totalBufferedDuration ?: 0L) / 1000L).toInt()
+
+                  val (activeBars, activeColor) = when {
+                      state == Player.STATE_IDLE -> Pair(1, Color.parseColor("#FF5252"))
+                      state == Player.STATE_BUFFERING -> Pair(2, Color.parseColor("#FFD740"))
+                      state == Player.STATE_READY && bufSec >= 8 -> Pair(4, Color.parseColor("#00E676"))
+                      state == Player.STATE_READY && bufSec >= 3 -> Pair(3, Color.parseColor("#69F0AE"))
+                      state == Player.STATE_READY -> Pair(2, Color.parseColor("#FFD740"))
+                      else -> Pair(1, Color.parseColor("#FF5252"))
+                  }
+
+                  val inactiveColor = Color.parseColor("#38FFFFFF")
+                  for (i in signalBars.indices) {
+                      val bg = signalBars[i].background as? GradientDrawable ?: GradientDrawable()
+                      bg.cornerRadius = 4f
+                      bg.setColor(if (i < activeBars) activeColor else inactiveColor)
+                      signalBars[i].background = bg
+                  }
+              }
+
+              // Устранение дёргания картинки: увеличенный стартовый буфер + плавный рендеринг + полный экран
+              private fun initPlayer() {
+                  val currentUrl = currentChannel?.url
+                  player?.release()
+
+                  val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
+                      0 -> listOf(4000, 12000, 1500, 2500)
+                      2 -> listOf(30000, 65000, 3500, 5000)
+                      else -> listOf(15000, 35000, 2500, 4000)
+                  }
+
+                  val loadControl = DefaultLoadControl.Builder()
+                      .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
+                      .setPrioritizeTimeOverSizeThresholds(true)
+                      .build()
+
+                  val extensionMode = when (decoderMode) {
+                      0 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+                      2 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                      else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                  }
+
+                  // Отключаем жёсткую синхронизацию аудиочасов, которая вызывает микро
       - name: Step 4 - Compile APK
         run: |
           gradle assembleDebug
