@@ -146,7 +146,7 @@ jobs:
         run: |
           python3 - << 'PYEOF'
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "w") as f:
-              f.write('''package com.example.miboxiptv
+              f.write(r'''package com.example.miboxiptv
 
           object BuiltinCatalog {
               // Базовый адрес и ключ разбиты на части, чтобы боты GitHub не индексировали прямую ссылку
@@ -527,7 +527,7 @@ jobs:
         run: |
           python3 - << 'PYEOF'
           with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
-              f.write('''package com.example.miboxiptv
+              f.write(r'''package com.example.miboxiptv
 
           import android.app.AlertDialog
           import android.content.Context
