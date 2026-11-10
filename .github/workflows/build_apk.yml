@@ -1890,22 +1890,7 @@ jobs:
       - name: Step 3.5 - Apply Patches v0.7
         run: |
           python3 - << 'PYEOF'
-          import subprocess
-
-          # 1. Генерируем детерминированный keystore, чтобы APK всегда подписывался одним и тем же ключом
-          # Для полной идентичности байтов используем фиксированный seed через keytool (если ещё не создан)
-           keystore_b64 = (
-              "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a"
-          )
-          # Создаём валидный JKS с фиксированными параметрами и прописываем в build.gradle
-          subprocess.run([
-              "keytool", "-genkeypair", "-v",
-              "-keystore", "app/fixed_release.jks",
-              "-alias", "miboxkey",
-              "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000",
-              "-storepass", "mibox123", "-keypass", "mibox123",
-              "-dname", "CN=MiBoxIPTV, OU=TV, O=MiBox, L=Pskov, S=Pskov, C=RU"
-          ], check=False)
+          with open("app/build.gradle", "r") as f:
 
           with open("app/build.gradle", "r") as f:
               g = f.read()
