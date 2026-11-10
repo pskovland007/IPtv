@@ -1891,8 +1891,6 @@ jobs:
         run: |
           python3 - << 'PYEOF'
           with open("app/build.gradle", "r") as f:
-
-          with open("app/build.gradle", "r") as f:
               g = f.read()
 
           # Меняем targetSdk на 29 для прямого доступа к файлам /sdcard без блокировок Scoped Storage на Android TV
