@@ -4072,6 +4072,19 @@ jobs:
           ''')
           PYEOF
 
+      - name: Step 3.6 - Fix Context Reference
+        run: |
+          python3 - << 'PYEOF'
+          with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "r") as f:
+              c = f.read()
+          c = c.replace(
+              "object : ArrayAdapter<String>(this,",
+              "object : ArrayAdapter<String>(this@MainActivity,"
+          )
+          with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
+              f.write(c)
+          PYEOF
+
       - name: Step 4 - Compile APK
         run: |
           gradle assembleDebug
