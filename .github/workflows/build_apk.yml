@@ -6096,6 +6096,19 @@ jobs:
           ''')
           PYEOF
 
+      PYEOF
+
+      - name: Step 3.6 - Fix TrackSelection Builder Reference
+        run: |
+          python3 - << 'PYEOF'
+          with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "r") as f:
+              c = f.read()
+          c = c.replace(".setExceedAudioConstraintsIfNecessary(true)", "")
+          c = c.replace(".setExceedRendererCapabilitiesIfNecessary(true)", "")
+          with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
+              f.write(c)
+          PYEOF
+
       - name: Lock Permanent Signing Keystore in Cache
         uses: actions/cache@v4
         with:
@@ -6104,6 +6117,7 @@ jobs:
 
       - name: Step 4 - Ensure Keystore Exists and Compile APK
         run: |
+          mkdir -p ~/.android
           if [ ! -f app/permanent_key.jks ]; then
             keytool -genkeypair -v \
               -keystore app/permanent_key.jks \
