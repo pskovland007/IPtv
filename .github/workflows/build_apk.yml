@@ -1887,26 +1887,20 @@ jobs:
           ''')
           PYEOF
 
-      - name: Step 3.5 - Restore Full v0.9.21 + 2K + Fixed Binary Keystore
+      - name: Step 3.5 - Apply Patches v1.2 (Tigad 3D Icons + 4x3 Grid + Themes + Realistic Pupil)
         run: |
           python3 - << 'PYEOF'
-          import os, re, base64, zlib
-
-          # 1. РАСПАКОВКА НАСТОЯЩЕГО БИНАРНОГО PKCS12 KEYSTORE (100% неизменный байт-в-байт сертификат без генерации на лету!)
-          # Ключ создан заранее, сжат zlib и закодирован в base64. Пароль: android, alias: androiddebugkey
-          # Чтобы гарантировать 100% валидную структуру PKCS12 без усечения, создаём ключ с фиксированным временем (faketime / детерминированный ASN.1)
-          # И сохраняем его в постоянный кэш ДО сборки.
+          import os, re
 
           with open("app/build.gradle", "r") as f:
               g = f.read()
 
           g = g.replace("targetSdk 34", "targetSdk 29")
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "25"))
-          new_ver_code = 2000 + run_num
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "30"))
+          new_ver_code = 3000 + run_num
           g = re.sub(r"versionCode\s+\d+", f"versionCode {new_ver_code}", g)
-          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "1.1.{run_num}"', g)
+          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "1.2.{run_num}"', g)
 
-          # Явно прописываем единый signingConfigs с путём к нашему закэшированному ключу app/permanent_key.jks
           signing_block = '''
               signingConfigs {
                   debug {
@@ -1933,7 +1927,7 @@ jobs:
           with open("app/build.gradle", "w") as f:
               f.write(g)
 
-          # 2. Добавляем каналы 2K / QuadHD в BuiltinCatalog.kt
+          # Добавляем каналы 2K в BuiltinCatalog.kt
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "r") as f:
               cat = f.read()
 
@@ -1955,8 +1949,8 @@ jobs:
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "w") as f:
               f.write(cat)
 
-          # 3. Иконка APK (ic_launcher.xml) и баннер (ic_banner.xml) — стиль обложки "Советская психоделика" + Планета Земля в зрачке
-          retro_eye_earth_icon = '''<?xml version="1.0" encoding="utf-8"?>
+          # Пункт 3: Иконка APK и баннер с настоящим реалистичным глубоким зрачком и живой радужкой
+          realistic_eye_icon = '''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="108dp"
               android:height="108dp"
@@ -1969,27 +1963,35 @@ jobs:
               <path android:fillColor="#1692A8" android:pathData="M0,88 C42,72 78,56 108,42 L108,108 L0,108 Z"/>
               <path android:fillColor="#284596" android:pathData="M18,108 C54,88 84,74 108,62 L108,108 Z"/>
               <path android:fillColor="#7C1D7A" android:pathData="M48,108 C72,94 92,84 108,78 L108,108 Z"/>
+              <!-- Тёмная тень 3D-объёма под глазом -->
+              <path android:fillColor="#55000000" android:pathData="M7,64 C24,30 84,30 101,64 C84,92 24,92 7,64 Z"/>
               <path android:fillColor="#19130E" android:pathData="M7,60 C24,26 84,26 101,60 C84,88 24,88 7,60 Z"/>
               <path android:fillColor="#19130E" android:pathData="M55,33 L62,21 L67,34 L77,24 L77,39 L89,32 L85,46 L96,42 L91,54 L101,53 L95,61 Z"/>
               <path android:fillColor="#2D1E12" android:pathData="M14,48 C28,31 46,27 57,29 C44,32 28,38 14,48 Z"/>
+              <!-- Склера с естественным затенением под верхним веком -->
               <path android:fillColor="#EFE5CF" android:pathData="M13,60 C28,34 80,34 95,60 C80,82 28,82 13,60 Z"/>
-              <path android:fillColor="#0097A7" android:pathData="M54,37 A23,23 0 1,0 54,83 A23,23 0 1,0 54,37 Z"/>
-              <path android:fillColor="#689F38" android:pathData="M54,60 L34,48 A23,23 0 0,0 54,83 Z"/>
-              <path android:fillColor="#FBC02D" android:pathData="M54,60 L54,83 A23,23 0 0,0 74,71 Z"/>
-              <path android:fillColor="#D32F2F" android:pathData="M54,60 L74,71 A23,23 0 0,0 74,48 Z"/>
-              <path android:fillColor="#C2185B" android:pathData="M54,60 L74,48 A23,23 0 0,0 54,37 Z"/>
-              <path android:fillColor="#303F9F" android:pathData="M54,60 L54,37 A23,23 0 0,0 34,48 Z"/>
-              <path android:fillColor="#15100C" android:pathData="M54,44 A16,16 0 1,0 54,76 A16,16 0 1,0 54,44 Z"/>
-              <path android:fillColor="#0D5C75" android:pathData="M54,45.5 A14.5,14.5 0 1,0 54,74.5 A14.5,14.5 0 1,0 54,45.5 Z"/>
-              <path android:fillColor="#558B2F" android:pathData="M43,51 C46,48 50,49 51,53 C52,57 49,62 46,68 C42,65 41,58 43,51 Z"/>
-              <path android:fillColor="#689F38" android:pathData="M55,48 C61,49 66,53 65,60 C64,66 59,70 55,72 C54,66 56,61 54,56 C52,52 53,49 55,48 Z"/>
-              <path android:fillColor="#D4A338" android:pathData="M56,50 C59,51 62,54 61,58 C58,59 56,56 56,50 Z"/>
-              <path android:fillColor="#F5ECD7" android:pathData="M60,51 A2.4,2.4 0 1,0 60,55.8 A2.4,2.4 0 1,0 60,51 Z"/>
-              <path android:fillColor="#F5ECD7" android:pathData="M63.5,54.5 A1.3,1.3 0 1,0 63.5,57.1 A1.3,1.3 0 1,0 63.5,54.5 Z"/>
-              <path android:fillColor="#F5ECD7" android:pathData="M45.5,65 A1.9,1.9 0 1,0 45.5,68.8 A1.9,1.9 0 1,0 45.5,65 Z"/>
+              <path android:fillColor="#C9B99B" android:pathData="M13,60 C28,34 80,34 95,60 C80,41 28,41 13,60 Z"/>
+              <!-- Лимбальное тёмное кольцо радужки -->
+              <path android:fillColor="#12181B" android:pathData="M54,36 A24,24 0 1,0 54,84 A24,24 0 1,0 54,36 Z"/>
+              <!-- Живая многослойная радужка -->
+              <path android:fillColor="#00838F" android:pathData="M54,38 A22,22 0 1,0 54,82 A22,22 0 1,0 54,38 Z"/>
+              <path android:fillColor="#558B2F" android:pathData="M54,60 L35,49 A22,22 0 0,0 54,82 Z"/>
+              <path android:fillColor="#F9A825" android:pathData="M54,60 L54,82 A22,22 0 0,0 73,71 Z"/>
+              <path android:fillColor="#C62828" android:pathData="M54,60 L73,71 A22,22 0 0,0 73,49 Z"/>
+              <path android:fillColor="#AD1457" android:pathData="M54,60 L73,49 A22,22 0 0,0 54,38 Z"/>
+              <path android:fillColor="#283593" android:pathData="M54,60 L54,38 A22,22 0 0,0 35,49 Z"/>
+              <!-- Внутренний золотисто-янтарный ободок вокруг зрачка (колларета) -->
+              <path android:fillColor="#55FFB300" android:pathData="M54,44 A16,16 0 1,0 54,76 A16,16 0 1,0 54,44 Z"/>
+              <!-- Настоящий глубокий бархатно-чёрный зрачок -->
+              <path android:fillColor="#1E140F" android:pathData="M54,46.5 A13.5,13.5 0 1,0 54,73.5 A13.5,13.5 0 1,0 54,46.5 Z"/>
+              <path android:fillColor="#070505" android:pathData="M54,48 A12,12 0 1,0 54,72 A12,12 0 1,0 54,48 Z"/>
+              <!-- Живые роговичные блики -->
+              <path android:fillColor="#FFFFFF" android:pathData="M60.5,50.5 A3.2,3.2 0 1,0 60.5,56.9 A3.2,3.2 0 1,0 60.5,50.5 Z"/>
+              <path android:fillColor="#E6FFFFFF" android:pathData="M65,55.5 A1.4,1.4 0 1,0 65,58.3 A1.4,1.4 0 1,0 65,55.5 Z"/>
+              <path android:fillColor="#99FFFFFF" android:pathData="M46,64.5 A1.9,1.9 0 1,0 46,68.3 A1.9,1.9 0 1,0 46,64.5 Z"/>
           </vector>'''
 
-          retro_eye_earth_banner = '''<?xml version="1.0" encoding="utf-8"?>
+          realistic_eye_banner = '''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="320dp"
               android:height="180dp"
@@ -2002,29 +2004,28 @@ jobs:
               <path android:fillColor="#1692A8" android:pathData="M0,145 L320,88 L320,180 L0,180 Z"/>
               <path android:fillColor="#284596" android:pathData="M0,172 L320,122 L320,180 L0,180 Z"/>
               <path android:fillColor="#7C1D7A" android:pathData="M90,180 L320,148 L320,180 Z"/>
+              <path android:fillColor="#55000000" android:pathData="M46,101 C94,37 226,37 274,101 C226,159 94,159 46,101 Z"/>
               <path android:fillColor="#19130E" android:pathData="M46,96 C94,32 226,32 274,96 C226,154 94,154 46,96 Z"/>
               <path android:fillColor="#19130E" android:pathData="M162,44 L182,18 L192,46 L216,24 L216,54 L244,40 L234,68 L260,62 L246,84 L268,82 L254,98 Z"/>
               <path android:fillColor="#EFE5CF" android:pathData="M60,96 C104,46 216,46 260,96 C216,142 104,142 60,96 Z"/>
-              <path android:fillColor="#0097A7" android:pathData="M160,52 A44,44 0 1,0 160,140 A44,44 0 1,0 160,52 Z"/>
-              <path android:fillColor="#689F38" android:pathData="M160,96 L122,74 A44,44 0 0,0 160,140 Z"/>
-              <path android:fillColor="#FBC02D" android:pathData="M160,96 L160,140 A44,44 0 0,0 198,118 Z"/>
-              <path android:fillColor="#D32F2F" android:pathData="M160,96 L198,118 A44,44 0 0,0 198,74 Z"/>
-              <path android:fillColor="#303F9F" android:pathData="M160,96 L160,52 A44,44 0 0,0 122,74 Z"/>
-              <path android:fillColor="#15100C" android:pathData="M160,66 A30,30 0 1,0 160,126 A30,30 0 1,0 160,66 Z"/>
-              <path android:fillColor="#0D5C75" android:pathData="M160,69 A27,27 0 1,0 160,123 A27,27 0 1,0 160,69 Z"/>
-              <path android:fillColor="#558B2F" android:pathData="M140,79 C146,74 153,76 155,84 C157,92 151,100 146,110 C138,104 136,92 140,79 Z"/>
-              <path android:fillColor="#689F38" android:pathData="M162,74 C174,76 182,84 180,96 C178,108 168,116 162,118 C160,108 164,98 160,88 C156,80 158,76 162,74 Z"/>
-              <path android:fillColor="#F5ECD7" android:pathData="M172,80 A4.5,4.5 0 1,0 172,89 A4.5,4.5 0 1,0 172,80 Z"/>
-              <path android:fillColor="#F5ECD7" android:pathData="M179,87 A2.4,2.4 0 1,0 179,91.8 A2.4,2.4 0 1,0 179,87 Z"/>
-              <path android:fillColor="#F5ECD7" android:pathData="M144,106 A3.4,3.4 0 1,0 144,112.8 A3.4,3.4 0 1,0 144,106 Z"/>
+              <path android:fillColor="#12181B" android:pathData="M160,50 A46,46 0 1,0 160,142 A46,46 0 1,0 160,50 Z"/>
+              <path android:fillColor="#0097A7" android:pathData="M160,53 A43,43 0 1,0 160,139 A43,43 0 1,0 160,53 Z"/>
+              <path android:fillColor="#689F38" android:pathData="M160,96 L122,74 A43,43 0 0,0 160,139 Z"/>
+              <path android:fillColor="#FBC02D" android:pathData="M160,96 L160,139 A43,43 0 0,0 198,118 Z"/>
+              <path android:fillColor="#D32F2F" android:pathData="M160,96 L198,118 A43,43 0 0,0 198,74 Z"/>
+              <path android:fillColor="#303F9F" android:pathData="M160,96 L160,53 A43,43 0 0,0 122,74 Z"/>
+              <path android:fillColor="#55FFB300" android:pathData="M160,66 A30,30 0 1,0 160,126 A30,30 0 1,0 160,66 Z"/>
+              <path android:fillColor="#070505" android:pathData="M160,72 A24,24 0 1,0 160,120 A24,24 0 1,0 160,72 Z"/>
+              <path android:fillColor="#FFFFFF" android:pathData="M172,78 A6,6 0 1,0 172,90 A6,6 0 1,0 172,78 Z"/>
+              <path android:fillColor="#E6FFFFFF" android:pathData="M181,88 A2.6,2.6 0 1,0 181,93.2 A2.6,2.6 0 1,0 181,88 Z"/>
+              <path android:fillColor="#99FFFFFF" android:pathData="M145,105 A3.5,3.5 0 1,0 145,112 A3.5,3.5 0 1,0 145,105 Z"/>
           </vector>'''
 
           with open("app/src/main/res/drawable/ic_launcher.xml", "w") as f:
-              f.write(retro_eye_earth_icon)
+              f.write(realistic_eye_icon)
           with open("app/src/main/res/drawable/ic_banner.xml", "w") as f:
-              f.write(retro_eye_earth_banner)
+              f.write(realistic_eye_banner)
 
-          # 4. Обновляем AndroidManifest.xml (разрешения для проводника)
           with open("app/src/main/AndroidManifest.xml", "w") as f:
               f.write('''<?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -2057,7 +2058,7 @@ jobs:
               </application>
           </manifest>''')
 
-          # 5. ПОЛНЫЙ КОД MainActivity.kt из версии v0.9.21 + категория 2K + переключение каналов при открытых меню + навигация фокуса в списке
+          # Записываем полный код MainActivity.kt (v1.2)
           with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -2114,6 +2115,7 @@ jobs:
           import java.util.concurrent.ConcurrentHashMap
           import java.util.concurrent.CopyOnWriteArrayList
           import java.util.concurrent.Executors
+          import java.util.concurrent.TimeUnit
           import java.util.concurrent.atomic.AtomicInteger
           import java.util.zip.GZIPInputStream
           import kotlin.concurrent.thread
@@ -2122,8 +2124,19 @@ jobs:
           data class PlaylistEntry(val title: String, val source: String, val isLocal: Boolean)
           data class EpgProgram(val title: String, val desc: String, val startMs: Long, val stopMs: Long)
 
-          // Заставка в оригинальной ретро-стилистике "Советская психоделика" с планетой Земля вместо звезды
-          class EarthEyeView(context: Context) : View(context) {
+          // Пункт 4: Темы оформления (включая Material Design 3)
+          data class AppThemeStyle(
+              val name: String,
+              val panelBgColor: Int,
+              val cardBgColor: Int,
+              val accentColor: Int,
+              val strokeColor: Int,
+              val textOnAccent: Int,
+              val cornerRadiusDp: Float
+          )
+
+          // Пункт 3: Заставка "Советская психоделика" с настоящим реалистичным живым зрачком и волокнами радужки
+          class RealisticEyeSplashView(context: Context) : View(context) {
               var eyeOpenFraction: Float = 0.02f
                   set(value) {
                       field = value.coerceIn(0.02f, 1.0f)
@@ -2135,8 +2148,6 @@ jobs:
               private val outerEyePath = Path()
               private val lashPath = Path()
               private val innerEyePath = Path()
-              private val continentPath1 = Path()
-              private val continentPath2 = Path()
 
               override fun onDraw(canvas: Canvas) {
                   super.onDraw(canvas)
@@ -2220,10 +2231,22 @@ jobs:
                   canvas.save()
                   canvas.clipPath(innerEyePath)
 
-                  paint.color = Color.parseColor("#EFE5CF")
+                  // Склера с объёмным градиентом
+                  val scleraGrad = RadialGradient(
+                      cx, cy, rx,
+                      intArrayOf(Color.parseColor("#F7F0DE"), Color.parseColor("#E5D6BA"), Color.parseColor("#B8A486")),
+                      floatArrayOf(0.45f, 0.82f, 1.0f),
+                      Shader.TileMode.CLAMP
+                  )
+                  paint.shader = scleraGrad
                   canvas.drawPath(innerEyePath, paint)
+                  paint.shader = null
 
-                  val irisRadius = maxRy * 0.95f
+                  val irisRadius = maxRy * 0.96f
+                  // Тёмное лимбальное кольцо вокруг радужки (делает взгляд живым и глубоким)
+                  paint.color = Color.parseColor("#11161A")
+                  canvas.drawCircle(cx, cy, irisRadius * 1.04f, paint)
+
                   val irisColors = intArrayOf(
                       Color.parseColor("#D32F2F"),
                       Color.parseColor("#F57C00"),
@@ -2238,58 +2261,312 @@ jobs:
                   canvas.drawCircle(cx, cy, irisRadius, paint)
                   paint.shader = null
 
-                  val pupilR = irisRadius * 0.64f
-                  paint.color = Color.parseColor("#16100C")
-                  canvas.drawCircle(cx, cy, pupilR * 1.06f, paint)
+                  // Тонкие радиальные волокна настоящей радужки (Stroma fibers)
+                  paint.style = Paint.Style.STROKE
+                  paint.strokeWidth = 2.2f
+                  for (deg in 0 until 360 step 5) {
+                      val rad = Math.toRadians(deg.toDouble())
+                      val rIn = irisRadius * 0.42f
+                      val rOut = irisRadius * (if (deg % 10 == 0) 0.96f else 0.86f)
+                      paint.color = if (deg % 10 == 0) Color.parseColor("#38000000") else Color.parseColor("#30FFF8E1")
+                      canvas.drawLine(
+                          cx + (rIn * Math.cos(rad)).toFloat(),
+                          cy + (rIn * Math.sin(rad)).toFloat(),
+                          cx + (rOut * Math.cos(rad)).toFloat(),
+                          cy + (rOut * Math.sin(rad)).toFloat(),
+                          paint
+                      )
+                  }
 
-                  val oceanColors = intArrayOf(
-                      Color.parseColor("#188FA7"),
-                      Color.parseColor("#0D5C75"),
-                      Color.parseColor("#102B3F")
-                  )
-                  paint.shader = RadialGradient(
-                      cx - pupilR * 0.2f,
-                      cy - pupilR * 0.2f,
-                      pupilR * 1.25f,
-                      oceanColors,
-                      floatArrayOf(0f, 0.65f, 1f),
+                  // Внутреннее янтарное кольцо вокруг зрачка
+                  paint.style = Paint.Style.FILL
+                  val collaretteGrad = RadialGradient(
+                      cx, cy, irisRadius * 0.65f,
+                      intArrayOf(Color.parseColor("#000000"), Color.parseColor("#66FF8F00"), Color.parseColor("#00000000")),
+                      floatArrayOf(0.55f, 0.78f, 1.0f),
                       Shader.TileMode.CLAMP
                   )
+                  paint.shader = collaretteGrad
+                  canvas.drawCircle(cx, cy, irisRadius * 0.65f, paint)
+                  paint.shader = null
+
+                  // Настоящий глубокий анатомический чёрный зрачок
+                  val pupilR = irisRadius * 0.48f
+                  val pupilGrad = RadialGradient(
+                      cx - pupilR * 0.15f, cy - pupilR * 0.15f, pupilR * 1.1f,
+                      intArrayOf(Color.parseColor("#040305"), Color.parseColor("#0B080C"), Color.parseColor("#241710")),
+                      floatArrayOf(0f, 0.75f, 1f),
+                      Shader.TileMode.CLAMP
+                  )
+                  paint.shader = pupilGrad
                   canvas.drawCircle(cx, cy, pupilR, paint)
                   paint.shader = null
 
-                  paint.color = Color.parseColor("#558B2F")
-                  continentPath1.reset()
-                  continentPath1.moveTo(cx - pupilR * 0.68f, cy - pupilR * 0.50f)
-                  continentPath1.quadTo(cx - pupilR * 0.18f, cy - pupilR * 0.62f, cx - pupilR * 0.14f, cy - pupilR * 0.16f)
-                  continentPath1.quadTo(cx - pupilR * 0.08f, cy + pupilR * 0.28f, cx - pupilR * 0.42f, cy + pupilR * 0.74f)
-                  continentPath1.quadTo(cx - pupilR * 0.78f, cy + pupilR * 0.22f, cx - pupilR * 0.68f, cy - pupilR * 0.50f)
-                  continentPath1.close()
-                  canvas.drawPath(continentPath1, paint)
-
-                  paint.color = Color.parseColor("#689F38")
-                  continentPath2.reset()
-                  continentPath2.moveTo(cx + pupilR * 0.08f, cy - pupilR * 0.66f)
-                  continentPath2.quadTo(cx + pupilR * 0.76f, cy - pupilR * 0.46f, cx + pupilR * 0.70f, cy + pupilR * 0.08f)
-                  continentPath2.quadTo(cx + pupilR * 0.56f, cy + pupilR * 0.66f, cx + pupilR * 0.12f, cy + pupilR * 0.76f)
-                  continentPath2.quadTo(cx + pupilR * 0.02f, cy + pupilR * 0.18f, cx + pupilR * 0.16f, cy - pupilR * 0.12f)
-                  continentPath2.quadTo(cx - pupilR * 0.04f, cy - pupilR * 0.38f, cx + pupilR * 0.08f, cy - pupilR * 0.66f)
-                  continentPath2.close()
-                  canvas.drawPath(continentPath2, paint)
-
-                  paint.style = Paint.Style.STROKE
-                  paint.strokeWidth = 2f
-                  paint.color = Color.parseColor("#35EFE5CF")
-                  canvas.drawCircle(cx, cy, pupilR * 0.68f, paint)
-                  canvas.drawLine(cx - pupilR, cy, cx + pupilR, cy, paint)
-
-                  paint.style = Paint.Style.FILL
-                  paint.color = Color.parseColor("#F5ECD7")
-                  canvas.drawCircle(cx + pupilR * 0.40f, cy - pupilR * 0.30f, pupilR * 0.14f, paint)
-                  canvas.drawCircle(cx + pupilR * 0.62f, cy - pupilR * 0.12f, pupilR * 0.08f, paint)
-                  canvas.drawCircle(cx - pupilR * 0.46f, cy + pupilR * 0.42f, pupilR * 0.11f, paint)
+                  // Естественные живые влажные блики на роговице и зрачке
+                  paint.color = Color.parseColor("#F8FFFDF7")
+                  canvas.drawCircle(cx + pupilR * 0.56f, cy - pupilR * 0.44f, pupilR * 0.24f, paint)
+                  canvas.drawCircle(cx + pupilR * 0.90f, cy - pupilR * 0.14f, pupilR * 0.11f, paint)
+                  paint.color = Color.parseColor("#99FFFDF7")
+                  canvas.drawCircle(cx - pupilR * 0.58f, cy + pupilR * 0.54f, pupilR * 0.16f, paint)
 
                   canvas.restore()
+              }
+          }
+
+          // Пункты 5 и 6: Кастомные прямые (не наклонённые) 3D-иконки в стиле Tigad Pro Icon Pack со скриншота
+          class Tigad3DTileView(
+              context: Context,
+              private val iconType: String,
+              private val baseColorHex: String,
+              private val accentColorHex: String
+          ) : View(context) {
+              var isTileFocused: Boolean = false
+                  set(value) {
+                      field = value
+                      invalidate()
+                  }
+
+              private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+              private val rect = RectF()
+              private val path = Path()
+
+              private fun darken(color: Int, factor: Float): Int {
+                  val r = ((Color.red(color) * factor).toInt()).coerceIn(0, 255)
+                  val g = ((Color.green(color) * factor).toInt()).coerceIn(0, 255)
+                  val b = ((Color.blue(color) * factor).toInt()).coerceIn(0, 255)
+                  return Color.rgb(r, g, b)
+              }
+
+              override fun onDraw(canvas: Canvas) {
+                  super.onDraw(canvas)
+                  val w = width.toFloat()
+                  val h = height.toFloat()
+                  val pad = if (isTileFocused) 6f else 12f
+                  val depth = 11f // Толщина нижней 3D-грани как на скриншоте
+
+                  val mainColor = Color.parseColor(baseColorHex)
+                  val side3DColor = darken(mainColor, 0.58f)
+                  val badgeColor = Color.parseColor(accentColorHex)
+                  val badge3DColor = darken(badgeColor, 0.62f)
+
+                  // 1. Внешнее свечение при наведении пульта
+                  if (isTileFocused) {
+                      paint.style = Paint.Style.FILL
+                      paint.color = Color.parseColor("#55FFFFFF")
+                      rect.set(2f, 2f, w - 2f, h - 2f)
+                      canvas.drawRoundRect(rect, 28f, 28f, paint)
+                  }
+
+                  // 2. Тёмная 3D-подложка (нижняя ступенька объёма, строго прямая без наклона)
+                  paint.style = Paint.Style.FILL
+                  paint.color = Color.parseColor("#66000000")
+                  rect.set(pad + 2f, pad + depth + 4f, w - pad + 2f, h - pad + 4f)
+                  canvas.drawRoundRect(rect, 24f, 24f, paint)
+
+                  paint.color = side3DColor
+                  rect.set(pad, pad + depth, w - pad, h - pad)
+                  canvas.drawRoundRect(rect, 24f, 24f, paint)
+
+                  // 3. Передняя грань 3D-плитки
+                  paint.color = mainColor
+                  rect.set(pad, pad, w - pad, h - pad - depth)
+                  canvas.drawRoundRect(rect, 24f, 24f, paint)
+
+                  // Верхний блик фаски
+                  paint.style = Paint.Style.STROKE
+                  paint.strokeWidth = if (isTileFocused) 3.5f else 1.8f
+                  paint.color = if (isTileFocused) Color.WHITE else Color.parseColor("#55FFFFFF")
+                  canvas.drawRoundRect(rect, 24f, 24f, paint)
+
+                  val cx = w / 2f
+                  val cy = (h - depth) / 2f
+                  val r = (w - pad * 2) * 0.28f
+
+                  // 4. Отрисовка объёмного 3D-глифа внутри плитки (с собственным 3D-слоем тени)
+                  paint.style = Paint.Style.FILL
+                  when (iconType) {
+                      "PLAYLISTS" -> {
+                          // Зелёно-бирюзовый 3D блокнот/список со скриншота + круглая шестерёнка справа внизу
+                          for (i in -1..1) {
+                              val ly = cy + i * (r * 0.52f)
+                              paint.color = Color.parseColor("#44000000")
+                              rect.set(cx - r * 0.85f, ly - 5f + 4f, cx + r * 0.85f, ly + 5f + 4f)
+                              canvas.drawRoundRect(rect, 5f, 5f, paint)
+                              paint.color = Color.WHITE
+                              rect.set(cx - r * 0.85f, ly - 5f, cx + r * 0.85f, ly + 5f)
+                              canvas.drawRoundRect(rect, 5f, 5f, paint)
+                          }
+                      }
+                      "EDITOR" -> {
+                          // Объёмный щит/карточка с галочкой
+                          paint.color = badge3DColor
+                          canvas.drawCircle(cx, cy + 5f, r * 0.92f, paint)
+                          paint.color = badgeColor
+                          canvas.drawCircle(cx, cy, r * 0.92f, paint)
+                          paint.style = Paint.Style.STROKE
+                          paint.strokeWidth = 6f
+                          paint.strokeCap = Paint.Cap.ROUND
+                          paint.color = Color.WHITE
+                          canvas.drawLine(cx - r * 0.42f, cy + 2f, cx - r * 0.08f, cy + r * 0.36f, paint)
+                          canvas.drawLine(cx - r * 0.08f, cy + r * 0.36f, cx + r * 0.46f, cy - r * 0.32f, paint)
+                      }
+                      "ANALYZER" -> {
+                          // 3D-волны сигнала (как Wi-Fi/радар на правом верхнем углу скриншота)
+                          paint.style = Paint.Style.STROKE
+                          paint.strokeCap = Paint.Cap.ROUND
+                          for (ring in 1..3) {
+                              val rad = r * (0.35f * ring)
+                              paint.strokeWidth = 6f
+                              paint.color = Color.parseColor("#44000000")
+                              rect.set(cx - rad, cy - rad + 10f, cx + rad, cy + rad + 10f)
+                              canvas.drawArc(rect, 215f, 110f, false, paint)
+                              paint.color = if (ring == 3) badgeColor else Color.WHITE
+                              rect.set(cx - rad, cy - rad + 5f, cx + rad, cy + rad + 5f)
+                              canvas.drawArc(rect, 215f, 110f, false, paint)
+                          }
+                          paint.style = Paint.Style.FILL
+                          paint.color = badgeColor
+                          canvas.drawCircle(cx, cy + r * 0.35f, 7f, paint)
+                      }
+                      "THEMES" -> {
+                          // 3D-смартфон с круглой оранжевой палитрой художника (exact со скриншота!)
+                          paint.color = Color.parseColor("#102030")
+                          rect.set(cx - r * 0.75f, cy - r * 0.85f, cx + r * 0.35f, cy + r * 0.75f)
+                          canvas.drawRoundRect(rect, 10f, 10f, paint)
+                          paint.color = Color.parseColor("#29B6F6")
+                          rect.set(cx - r * 0.62f, cy - r * 0.68f, cx + r * 0.22f, cy + r * 0.58f)
+                          canvas.drawRoundRect(rect, 6f, 6f, paint)
+                          // Выступающий 3D-кружок палитры справа внизу
+                          paint.color = badge3DColor
+                          canvas.drawCircle(cx + r * 0.38f, cy + r * 0.38f + 5f, r * 0.58f, paint)
+                          paint.color = badgeColor
+                          canvas.drawCircle(cx + r * 0.38f, cy + r * 0.38f, r * 0.58f, paint)
+                          paint.color = Color.WHITE
+                          canvas.drawCircle(cx + r * 0.24f, cy + r * 0.26f, 4f, paint)
+                          canvas.drawCircle(cx + r * 0.48f, cy + r * 0.24f, 4f, paint)
+                          canvas.drawCircle(cx + r * 0.52f, cy + r * 0.46f, 4f, paint)
+                      }
+                      "BUFFER" -> {
+                          // Объёмный 3D спидометр / молния подкачки
+                          paint.color = badge3DColor
+                          canvas.drawCircle(cx, cy + 5f, r * 0.90f, paint)
+                          paint.color = badgeColor
+                          canvas.drawCircle(cx, cy, r * 0.90f, paint)
+                          path.reset()
+                          path.moveTo(cx + r * 0.12f, cy - r * 0.58f)
+                          path.lineTo(cx - r * 0.36f, cy + r * 0.06f)
+                          path.lineTo(cx + r * 0.02f, cy + r * 0.06f)
+                          path.lineTo(cx - r * 0.14f, cy + r * 0.58f)
+                          path.lineTo(cx + r * 0.38f, cy - r * 0.08f)
+                          path.lineTo(cx + r * 0.02f, cy - r * 0.08f)
+                          path.close()
+                          paint.color = Color.WHITE
+                          canvas.drawPath(path, paint)
+                      }
+                      "DECODER" -> {
+                          // 3D кинохлопушка / объектив камеры со скриншота
+                          paint.color = Color.parseColor("#263238")
+                          canvas.drawCircle(cx, cy + 4f, r * 0.92f, paint)
+                          val rainbow = intArrayOf(Color.RED, Color.YELLOW, Color.GREEN, Color.CYAN, Color.BLUE, Color.MAGENTA, Color.RED)
+                          paint.shader = SweepGradient(cx, cy, rainbow, null)
+                          canvas.drawCircle(cx, cy, r * 0.85f, paint)
+                          paint.shader = null
+                          paint.color = Color.parseColor("#212121")
+                          canvas.drawCircle(cx, cy, r * 0.52f, paint)
+                          paint.color = Color.WHITE
+                          canvas.drawCircle(cx + r * 0.16f, cy - r * 0.16f, r * 0.12f, paint)
+                      }
+                      "EPG_GRID" -> {
+                          // 3D-плитка с цветными кружками-календарём (нижний ряд скриншота)
+                          val dotR = r * 0.22f
+                          val colors = listOf("#FF5252", "#FFB300", "#00E676", "#00B0FF", "#E040FB", "#FFFFFF")
+                          var idx = 0
+                          for (row in -1..0) {
+                              for (col in -1..1) {
+                                  val dx = cx + col * (r * 0.62f)
+                                  val dy = cy + row * (r * 0.62f) + (r * 0.25f)
+                                  paint.color = Color.parseColor("#44000000")
+                                  canvas.drawCircle(dx, dy + 4f, dotR, paint)
+                                  paint.color = Color.parseColor(colors[idx % colors.size])
+                                  canvas.drawCircle(dx, dy, dotR, paint)
+                                  idx++
+                              }
+                          }
+                      }
+                      "TOP_CHANNELS" -> {
+                          // 3D-щит с золотой короной (как на правом скриншоте)
+                          paint.color = badge3DColor
+                          canvas.drawCircle(cx, cy + 5f, r * 0.9f, paint)
+                          paint.color = badgeColor
+                          canvas.drawCircle(cx, cy, r * 0.9f, paint)
+                          path.reset()
+                          path.moveTo(cx - r * 0.48f, cy + r * 0.34f)
+                          path.lineTo(cx - r * 0.54f, cy - r * 0.28f)
+                          path.lineTo(cx - r * 0.18f, cy + r * 0.02f)
+                          path.lineTo(cx, cy - r * 0.42f)
+                          path.lineTo(cx + r * 0.18f, cy + r * 0.02f)
+                          path.lineTo(cx + r * 0.54f, cy - r * 0.28f)
+                          path.lineTo(cx + r * 0.48f, cy + r * 0.34f)
+                          path.close()
+                          paint.color = Color.WHITE
+                          canvas.drawPath(path, paint)
+                      }
+                      "FAVORITES" -> {
+                          // 3D звезда
+                          paint.color = badge3DColor
+                          canvas.drawCircle(cx, cy + 5f, r * 0.9f, paint)
+                          paint.color = badgeColor
+                          canvas.drawCircle(cx, cy, r * 0.9f, paint)
+                          path.reset()
+                          for (i in 0 until 10) {
+                              val a = Math.toRadians(-90.0 + i * 36.0)
+                              val rad = if (i % 2 == 0) r * 0.56f else r * 0.24f
+                              val sx = cx + (rad * Math.cos(a)).toFloat()
+                              val sy = cy + (rad * Math.sin(a)).toFloat()
+                              if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                          }
+                          path.close()
+                          paint.color = Color.WHITE
+                          canvas.drawPath(path, paint)
+                      }
+                      "AUDIO" -> {
+                          // 3D эквалайзер / динамик
+                          val widths = listOf(-0.55f, 0f, 0.55f)
+                          val heights = listOf(0.45f, 0.78f, 0.58f)
+                          for (i in widths.indices) {
+                              val bx = cx + widths[i] * r
+                              val bh = heights[i] * r
+                              paint.color = Color.parseColor("#44000000")
+                              rect.set(bx - 7f, cy - bh + 4f, bx + 7f, cy + bh + 4f)
+                              canvas.drawRoundRect(rect, 7f, 7f, paint)
+                              paint.color = if (i == 1) badgeColor else Color.WHITE
+                              rect.set(bx - 7f, cy - bh, bx + 7f, cy + bh)
+                              canvas.drawRoundRect(rect, 7f, 7f, paint)
+                          }
+                      }
+                      "ASPECT" -> {
+                          // 3D экран 16:9
+                          paint.style = Paint.Style.STROKE
+                          paint.strokeWidth = 5f
+                          paint.color = Color.WHITE
+                          rect.set(cx - r * 0.82f, cy - r * 0.54f, cx + r * 0.82f, cy + r * 0.54f)
+                          canvas.drawRoundRect(rect, 10f, 10f, paint)
+                          paint.style = Paint.Style.FILL
+                          paint.color = badgeColor
+                          canvas.drawCircle(cx, cy, r * 0.24f, paint)
+                      }
+                      else -> {
+                          // 3D шестерёнка / Дополнительно ("Полное меню")
+                          paint.color = badge3DColor
+                          canvas.drawCircle(cx, cy + 5f, r * 0.85f, paint)
+                          paint.color = badgeColor
+                          canvas.drawCircle(cx, cy, r * 0.85f, paint)
+                          paint.color = Color.WHITE
+                          canvas.drawCircle(cx - r * 0.42f, cy, 6.5f, paint)
+                          canvas.drawCircle(cx, cy, 6.5f, paint)
+                          canvas.drawCircle(cx + r * 0.42f, cy, 6.5f, paint)
+                      }
+                  }
               }
           }
 
@@ -2301,15 +2578,21 @@ jobs:
               private lateinit var channelListView: ListView
 
               private lateinit var sidePanel: LinearLayout
+              private lateinit var sideModeTitle: TextView
               private lateinit var infoPanel: LinearLayout
               private lateinit var centerOsdPanel: LinearLayout
               private lateinit var settingsTileOverlay: LinearLayout
               private lateinit var subModalOverlay: LinearLayout
               private lateinit var fullEpgOverlay: LinearLayout
               private lateinit var splashOverlay: FrameLayout
-              private lateinit var splashEyeView: EarthEyeView
+              private lateinit var splashEyeView: RealisticEyeSplashView
 
               private val menuHistory = mutableListOf<String>()
+
+              // Пункт 2: Состояние левого меню (true = открыт только список каналов, false = открыт только список групп)
+              private var isSideShowingChannels = true
+              // Флаг первого нажатия Влево после старта приложения с сохранённым каналом
+              private var openChannelsDirectlyWithCurrentFocus = true
 
               private lateinit var infoTextView: TextView
               private lateinit var clockTextView: TextView
@@ -2323,6 +2606,7 @@ jobs:
               private lateinit var osdEpgProgress: ProgressBar
               private lateinit var osdEpgNextAndDesc: TextView
               private lateinit var btnOsdFav: TextView
+              private lateinit var btnOsdTop: TextView
 
               private lateinit var fullEpgTitle: TextView
               private lateinit var fullEpgListView: ListView
@@ -2340,6 +2624,8 @@ jobs:
               private val allChannels = CopyOnWriteArrayList<Channel>()
               private val displayedChannels = CopyOnWriteArrayList<Channel>()
               private val favoriteUrls = ConcurrentHashMap.newKeySet<String>()
+              // Пункт 1: Набор каналов, закреплённых в ТОПе своей группы (не Избранное!)
+              private val topUrls = ConcurrentHashMap.newKeySet<String>()
               private val disabledUrls = ConcurrentHashMap.newKeySet<String>()
               private val disabledCategories = ConcurrentHashMap.newKeySet<String>()
               private val playlists = CopyOnWriteArrayList<PlaylistEntry>()
@@ -2365,6 +2651,8 @@ jobs:
               private var activePlaylistIndex = 0
               private var bufferLevel = 2
               private var decoderMode = 1
+              private var themeIndex = 0 // 0 = Material Design 3 по умолчанию
+              private var isFullScreenStretch = true
               private var vipToken = BuiltinCatalog.defaultToken
               private var lastBackPressTime = 0L
               private var bufferingStuckSeconds = 0
@@ -2373,7 +2661,57 @@ jobs:
               private val condensedFont = Typeface.create("sans-serif-condensed", Typeface.NORMAL)
               private val condensedBoldFont = Typeface.create("sans-serif-condensed", Typeface.BOLD)
 
-              // Добавлена категория "2K"
+              // Пункт 4: Популярные темы оформления (включая обязательную Material Design 3)
+              private val themes = listOf(
+                  AppThemeStyle(
+                      "Material Design 3 (Google Dark)",
+                      Color.parseColor("#EE1E1F22"),
+                      Color.parseColor("#FF2B2D30"),
+                      Color.parseColor("#FFA8C7FA"),
+                      Color.parseColor("#66A8C7FA"),
+                      Color.parseColor("#FF062E6F"),
+                      28f
+                  ),
+                  AppThemeStyle(
+                      "Cyber Neon Glass",
+                      Color.parseColor("#DF0B0914"),
+                      Color.parseColor("#FF231F38"),
+                      Color.parseColor("#FF00E5FF"),
+                      Color.parseColor("#6600E5FF"),
+                      Color.parseColor("#FF0B0914"),
+                      22f
+                  ),
+                  AppThemeStyle(
+                      "AMOLED Pure Black",
+                      Color.parseColor("#F4000000"),
+                      Color.parseColor("#FF141414"),
+                      Color.parseColor("#FF00E676"),
+                      Color.parseColor("#6600E676"),
+                      Color.parseColor("#FF000000"),
+                      18f
+                  ),
+                  AppThemeStyle(
+                      "Nordic Frost Blue",
+                      Color.parseColor("#EC1B222D"),
+                      Color.parseColor("#FF2E3440"),
+                      Color.parseColor("#FF88C0D0"),
+                      Color.parseColor("#6688C0D0"),
+                      Color.parseColor("#FF1B222D"),
+                      24f
+                  ),
+                  AppThemeStyle(
+                      "Sunset Warm Retro",
+                      Color.parseColor("#EE1F130E"),
+                      Color.parseColor("#FF36221A"),
+                      Color.parseColor("#FFFFB300"),
+                      Color.parseColor("#66FFB300"),
+                      Color.parseColor("#FF1F130E"),
+                      24f
+                  )
+              )
+
+              private fun currentTheme(): AppThemeStyle = themes[themeIndex.coerceIn(0, themes.lastIndex)]
+
               private val categories = listOf(
                   "★ Избранное",
                   "Все каналы",
@@ -2444,25 +2782,43 @@ jobs:
                   }
               }
 
-              private fun makeGlassBg(alphaHex: String = "D8", radius: Float = 22f, strokeColor: String = "#4000E5FF"): GradientDrawable {
+              private fun makeThemedPanelBg(): GradientDrawable {
+                  val t = currentTheme()
                   return GradientDrawable().apply {
-                      setColor(Color.parseColor("#" + alphaHex + "0B0914"))
-                      cornerRadius = radius
-                      setStroke(2, Color.parseColor(strokeColor))
+                      setColor(t.panelBgColor)
+                      cornerRadius = t.cornerRadiusDp
+                      setStroke(2, t.strokeColor)
                   }
               }
 
+              private fun makeThemedSubBg(): GradientDrawable {
+                  val t = currentTheme()
+                  return GradientDrawable().apply {
+                      setColor(t.cardBgColor)
+                      cornerRadius = (t.cornerRadiusDp - 6f).coerceAtLeast(12f)
+                      setStroke(1, Color.parseColor("#25FFFFFF"))
+                  }
+              }
+
+              private fun applyCurrentThemeToAllPanels() {
+                  val t = currentTheme()
+                  sidePanel.background = makeThemedPanelBg()
+                  infoPanel.background = makeThemedPanelBg()
+                  centerOsdPanel.background = makeThemedPanelBg()
+                  settingsTileOverlay.background = makeThemedPanelBg()
+                  subModalOverlay.background = makeThemedPanelBg()
+                  fullEpgOverlay.background = makeThemedPanelBg()
+                  categoryListView.background = makeThemedSubBg()
+                  channelListView.background = makeThemedSubBg()
+                  subModalList.background = makeThemedSubBg()
+                  fullEpgListView.background = makeThemedSubBg()
+                  osdChannelTitle.setTextColor(t.accentColor)
+                  subModalTitle.setTextColor(t.accentColor)
+                  fullEpgTitle.setTextColor(t.accentColor)
+                  sideModeTitle.setTextColor(t.accentColor)
+              }
+
               private fun makeModernButton(label: String, isIconOnly: Boolean = false, onClick: () -> Unit): TextView {
-                  val normalBg = GradientDrawable().apply {
-                      setColor(Color.parseColor("#2A2640"))
-                      cornerRadius = if (isIconOnly) 24f else 14f
-                      setStroke(1, Color.parseColor("#5500E5FF"))
-                  }
-                  val focusBg = GradientDrawable().apply {
-                      setColor(Color.parseColor("#00E5FF"))
-                      cornerRadius = if (isIconOnly) 24f else 14f
-                      setStroke(2, Color.WHITE)
-                  }
                   return TextView(this).apply {
                       text = label
                       isSingleLine = true
@@ -2472,7 +2828,12 @@ jobs:
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isIconOnly) 18f else 14f)
                       typeface = condensedBoldFont
                       setTextColor(Color.WHITE)
-                      background = normalBg
+                      val t = currentTheme()
+                      background = GradientDrawable().apply {
+                          setColor(t.cardBgColor)
+                          cornerRadius = if (isIconOnly) 24f else 16f
+                          setStroke(1, t.strokeColor)
+                      }
                       isFocusable = true
                       isFocusableInTouchMode = false
                       if (isIconOnly) {
@@ -2480,17 +2841,22 @@ jobs:
                           minWidth = 48
                           minHeight = 48
                       } else {
-                          setPadding(20, 11, 20, 11)
+                          setPadding(18, 11, 18, 11)
                       }
                       layoutParams = LinearLayout.LayoutParams(
                           ViewGroup.LayoutParams.WRAP_CONTENT,
                           ViewGroup.LayoutParams.WRAP_CONTENT
                       ).apply {
-                          setMargins(6, 4, 6, 4)
+                          setMargins(5, 4, 5, 4)
                       }
                       setOnFocusChangeListener { _, hasFocus ->
-                          background = if (hasFocus) focusBg else normalBg
-                          setTextColor(if (hasFocus) Color.parseColor("#0B0914") else Color.WHITE)
+                          val curT = currentTheme()
+                          background = GradientDrawable().apply {
+                              setColor(if (hasFocus) curT.accentColor else curT.cardBgColor)
+                              cornerRadius = if (isIconOnly) 24f else 16f
+                              setStroke(if (hasFocus) 2 else 1, if (hasFocus) Color.WHITE else curT.strokeColor)
+                          }
+                          setTextColor(if (hasFocus) curT.textOnAccent else Color.WHITE)
                           if (hasFocus) resetMenuInactivityTimer()
                       }
                       setOnClickListener {
@@ -2513,7 +2879,7 @@ jobs:
 
                   playerView = PlayerView(this).apply {
                       useController = false
-                      resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                      resizeMode = if (isFullScreenStretch) AspectRatioFrameLayout.RESIZE_MODE_FILL else AspectRatioFrameLayout.RESIZE_MODE_FIT
                       layoutParams = FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.MATCH_PARENT,
                           FrameLayout.LayoutParams.MATCH_PARENT
@@ -2525,7 +2891,11 @@ jobs:
                       setTextColor(Color.WHITE)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                       typeface = condensedBoldFont
-                      background = makeGlassBg("90", 14f, "#25FFFFFF")
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#900B0914"))
+                          cornerRadius = 14f
+                          setStroke(1, Color.parseColor("#25FFFFFF"))
+                      }
                       setPadding(16, 6, 16, 6)
                       layoutParams = FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -2539,7 +2909,11 @@ jobs:
                       setTextColor(Color.parseColor("#00E5FF"))
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                       typeface = condensedBoldFont
-                      background = makeGlassBg("E0", 18f, "#6500E5FF")
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#E00B0914"))
+                          cornerRadius = 18f
+                          setStroke(2, Color.parseColor("#6500E5FF"))
+                      }
                       setPadding(22, 8, 22, 8)
                       visibility = View.GONE
                       layoutParams = FrameLayout.LayoutParams(
@@ -2553,7 +2927,11 @@ jobs:
                   signalContainer = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.BOTTOM
-                      background = makeGlassBg("90", 14f, "#25FFFFFF")
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#900B0914"))
+                          cornerRadius = 14f
+                          setStroke(1, Color.parseColor("#25FFFFFF"))
+                      }
                       setPadding(14, 10, 14, 10)
                       layoutParams = FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -2574,22 +2952,23 @@ jobs:
                   }
                   root.addView(signalContainer)
 
+                  // Пункт 2: Одноколоночное левое меню (показывает ЛИБО группы, ЛИБО каналы, шрифт увеличен на 20%)
                   sidePanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
-                      background = makeGlassBg("D9", 22f, "#4500E5FF")
+                      background = makeThemedPanelBg()
                       visibility = View.GONE
                       layoutParams = FrameLayout.LayoutParams(
-                          840,
+                          640,
                           FrameLayout.LayoutParams.MATCH_PARENT,
                           Gravity.START
-                      ).apply { setMargins(14, 14, 0, 14) }
-                      setPadding(18, 16, 18, 16)
+                      ).apply { setMargins(16, 16, 0, 16) }
+                      setPadding(20, 18, 20, 18)
                   }
 
                   val topBar = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER_VERTICAL
-                      setPadding(0, 0, 0, 10)
+                      setPadding(0, 0, 0, 8)
                   }
 
                   val btnIconPlaylists = makeModernButton("🗂", true) {
@@ -2607,7 +2986,7 @@ jobs:
 
                   activePlaylistLabel = TextView(this).apply {
                       setTextColor(Color.parseColor("#B2EBF2"))
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                       typeface = condensedBoldFont
                       isSingleLine = true
                       setPadding(10, 0, 0, 0)
@@ -2615,8 +2994,16 @@ jobs:
                   topBar.addView(activePlaylistLabel)
                   sidePanel.addView(topBar)
 
-                  val columnsLayout = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
+                  sideModeTitle = TextView(this).apply {
+                      text = "Каналы"
+                      setTextColor(currentTheme().accentColor)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+                      typeface = condensedBoldFont
+                      setPadding(4, 2, 4, 10)
+                  }
+                  sidePanel.addView(sideModeTitle)
+
+                  val singleColumnFrame = FrameLayout(this).apply {
                       layoutParams = LinearLayout.LayoutParams(
                           LinearLayout.LayoutParams.MATCH_PARENT,
                           LinearLayout.LayoutParams.MATCH_PARENT
@@ -2626,33 +3013,35 @@ jobs:
                   categoryListView = ListView(this).apply {
                       choiceMode = ListView.CHOICE_MODE_SINGLE
                       dividerHeight = 0
-                      background = makeGlassBg("75", 14f, "#18FFFFFF")
-                      setPadding(6, 6, 6, 6)
-                      layoutParams = LinearLayout.LayoutParams(
-                          275,
-                          LinearLayout.LayoutParams.MATCH_PARENT
-                      ).apply { setMargins(0, 0, 10, 0) }
+                      background = makeThemedSubBg()
+                      setPadding(10, 8, 10, 8)
+                      visibility = View.GONE
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.MATCH_PARENT
+                      )
                   }
 
                   channelListView = ListView(this).apply {
                       choiceMode = ListView.CHOICE_MODE_SINGLE
                       dividerHeight = 0
-                      background = makeGlassBg("60", 14f, "#18FFFFFF")
-                      setPadding(6, 6, 6, 6)
-                      layoutParams = LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          LinearLayout.LayoutParams.MATCH_PARENT
+                      background = makeThemedSubBg()
+                      setPadding(10, 8, 10, 8)
+                      visibility = View.VISIBLE
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.MATCH_PARENT
                       )
                   }
 
-                  columnsLayout.addView(categoryListView)
-                  columnsLayout.addView(channelListView)
-                  sidePanel.addView(columnsLayout)
+                  singleColumnFrame.addView(categoryListView)
+                  singleColumnFrame.addView(channelListView)
+                  sidePanel.addView(singleColumnFrame)
                   root.addView(sidePanel)
 
                   infoPanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
-                      background = makeGlassBg("D9", 22f, "#4500E5FF")
+                      background = makeThemedPanelBg()
                       visibility = View.GONE
                       layoutParams = FrameLayout.LayoutParams(
                           560,
@@ -2680,20 +3069,21 @@ jobs:
                   infoPanel.addView(infoTextView)
                   root.addView(infoPanel)
 
+                  // Центральное меню по кнопке OK (Пункт 1: добавлена кнопка "🔥 В ТОП")
                   centerOsdPanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
-                      background = makeGlassBg("DF", 24f, "#5500E5FF")
+                      background = makeThemedPanelBg()
                       visibility = View.GONE
                       setPadding(24, 18, 24, 18)
                       layoutParams = FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.MATCH_PARENT,
                           FrameLayout.LayoutParams.WRAP_CONTENT,
                           Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                      ).apply { setMargins(120, 0, 120, 24) }
+                      ).apply { setMargins(90, 0, 90, 24) }
                   }
 
                   osdChannelTitle = TextView(this).apply {
-                      setTextColor(Color.parseColor("#00E5FF"))
+                      setTextColor(currentTheme().accentColor)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
                       typeface = condensedBoldFont
                       gravity = Gravity.CENTER_HORIZONTAL
@@ -2745,6 +3135,10 @@ jobs:
                       )
                   }
 
+                  btnOsdTop = makeModernButton("🔥 В ТОП") {
+                      currentChannel?.let { toggleTopChannel(it) }
+                      updateCenterOsdContent()
+                  }
                   btnOsdFav = makeModernButton("★ Избранное") {
                       currentChannel?.let { toggleFavorite(it) }
                       updateCenterOsdContent()
@@ -2765,6 +3159,7 @@ jobs:
                       navigateToMenu("PLAYLISTS")
                   }
 
+                  osdButtonsRow.addView(btnOsdTop)
                   osdButtonsRow.addView(btnOsdFav)
                   osdButtonsRow.addView(btnOsdEpgList)
                   osdButtonsRow.addView(btnOsdSettings)
@@ -2776,7 +3171,7 @@ jobs:
 
                   fullEpgOverlay = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
-                      background = makeGlassBg("E4", 24f, "#5500E5FF")
+                      background = makeThemedPanelBg()
                       visibility = View.GONE
                       setPadding(28, 22, 28, 22)
                       layoutParams = FrameLayout.LayoutParams(
@@ -2789,7 +3184,7 @@ jobs:
                   }
 
                   fullEpgTitle = TextView(this).apply {
-                      setTextColor(Color.parseColor("#00E5FF"))
+                      setTextColor(currentTheme().accentColor)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
                       typeface = condensedBoldFont
                       setPadding(0, 0, 0, 12)
@@ -2798,7 +3193,7 @@ jobs:
 
                   fullEpgListView = ListView(this).apply {
                       dividerHeight = 0
-                      background = makeGlassBg("55", 16f, "#20FFFFFF")
+                      background = makeThemedSubBg()
                       layoutParams = LinearLayout.LayoutParams(
                           LinearLayout.LayoutParams.MATCH_PARENT,
                           LinearLayout.LayoutParams.MATCH_PARENT
@@ -2807,12 +3202,13 @@ jobs:
                   fullEpgOverlay.addView(fullEpgListView)
                   root.addView(fullEpgOverlay)
 
+                  // Пункты 5 и 6: Крупное центральное меню настроек Сетка 4 на 3 с прямыми 3D-иконками в стиле Tigad Pro
                   settingsTileOverlay = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       gravity = Gravity.CENTER
-                      background = makeGlassBg("E2", 26f, "#5500E5FF")
+                      background = makeThemedPanelBg()
                       visibility = View.GONE
-                      setPadding(32, 26, 32, 26)
+                      setPadding(42, 32, 42, 32)
                       layoutParams = FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.WRAP_CONTENT,
                           FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -2820,83 +3216,113 @@ jobs:
                       )
                   }
 
-                  val tilesRow = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER
-                  }
-
                   settingsSelectedLabel = TextView(this).apply {
                       text = "Плейлисты"
                       setTextColor(Color.WHITE)
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
                       typeface = condensedBoldFont
                       gravity = Gravity.CENTER
-                      setPadding(0, 18, 0, 0)
+                      setPadding(0, 20, 0, 0)
                   }
 
-                  val tileDefs = listOf(
-                      Triple("🗂", "Плейлисты") { navigateToMenu("PLAYLISTS") },
-                      Triple("☑", "Редактор каналов") { navigateToMenu("CHANNEL_EDITOR_GROUPS") },
-                      Triple("📡", "Анализатор каналов") { navigateToMenu("ANALYZER_GROUPS") },
-                      Triple("⚡", "Буфер подкачки") { navigateToMenu("BUFFER") },
-                      Triple("🎞", "Декодер") { navigateToMenu("DECODER") },
-                      Triple("⋯", "Полное меню") { navigateToMenu("MORE_SETTINGS") }
+                  data class GridTileSpec(val iconType: String, val baseHex: String, val accentHex: String, val title: String, val action: () -> Unit)
+
+                  val gridSpecs = listOf(
+                      // Ряд 1 (4 плитки)
+                      GridTileSpec("PLAYLISTS", "#1B8A6B", "#FFB300", "Плейлисты") { navigateToMenu("PLAYLISTS") },
+                      GridTileSpec("EDITOR", "#2E5B9A", "#00E676", "Редактор каналов") { navigateToMenu("CHANNEL_EDITOR_GROUPS") },
+                      GridTileSpec("ANALYZER", "#5E35B1", "#00E5FF", "Анализатор каналов") { navigateToMenu("ANALYZER_GROUPS") },
+                      GridTileSpec("THEMES", "#1E4E79", "#FF8F00", "Темы оформления (Material Design)") { navigateToMenu("THEMES") },
+                      // Ряд 2 (4 плитки)
+                      GridTileSpec("BUFFER", "#D84315", "#FFD600", "Буфер подкачки") { navigateToMenu("BUFFER") },
+                      GridTileSpec("DECODER", "#37474F", "#00B0FF", "Декодер видео и звука") { navigateToMenu("DECODER") },
+                      GridTileSpec("EPG_GRID", "#00695C", "#FF4081", "Программа передач") { navigateToMenu("FULL_EPG") },
+                      GridTileSpec("TOP_CHANNELS", "#283593", "#FFC107", "Управление ТОП-каналами") { navigateToMenu("TOP_MANAGER") },
+                      // Ряд 3 (4 плитки с заделом под расширение)
+                      GridTileSpec("FAVORITES", "#AD1457", "#FFD54F", "★ Избранные каналы") {
+                          selectCategory(0)
+                          isSideShowingChannels = true
+                          navigateToMenu("SIDE")
+                      },
+                      GridTileSpec("AUDIO", "#0277BD", "#69F0AE", "Выбор аудиодорожки") { navigateToMenu("AUDIO") },
+                      GridTileSpec("ASPECT", "#455A64", "#40C4FF", "Формат экрана (Растянуть / 16:9)") {
+                          isFullScreenStretch = !isFullScreenStretch
+                          playerView.resizeMode = if (isFullScreenStretch) AspectRatioFrameLayout.RESIZE_MODE_FILL else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                          Toast.makeText(this, if (isFullScreenStretch) "Экран: На весь экран" else "Экран: Оригинальные пропорции", Toast.LENGTH_SHORT).show()
+                      },
+                      GridTileSpec("MORE", "#4A148C", "#FFAB00", "Полное меню (Ключ VIP и адрес EPG)") { navigateToMenu("MORE_SETTINGS") }
                   )
 
-                  for ((iconStr, cleanLabel, action) in tileDefs) {
-                      val tileNormal = GradientDrawable().apply {
-                          setColor(Color.parseColor("#2A2640"))
-                          cornerRadius = 20f
-                          setStroke(2, Color.parseColor("#35FFFFFF"))
-                      }
-                      val tileFocused = GradientDrawable().apply {
-                          setColor(Color.parseColor("#00E5FF"))
-                          cornerRadius = 20f
-                          setStroke(3, Color.WHITE)
-                      }
-                      val tileView = TextView(this).apply {
-                          text = iconStr
-                          setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
-                          gravity = Gravity.CENTER
-                          background = tileNormal
-                          isFocusable = true
-                          layoutParams = LinearLayout.LayoutParams(104, 104).apply {
-                              setMargins(8, 0, 8, 0)
-                          }
-                          setOnFocusChangeListener { _, hasFocus ->
-                              background = if (hasFocus) tileFocused else tileNormal
-                              if (hasFocus) {
-                                  settingsSelectedLabel.text = cleanLabel
-                                  resetMenuInactivityTimer()
-                              }
-                          }
-                          setOnClickListener {
-                              resetMenuInactivityTimer()
-                              action()
-                          }
-                      }
-                      tilesRow.addView(tileView)
+                  val gridContainer = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      gravity = Gravity.CENTER
                   }
 
-                  settingsTileOverlay.addView(tilesRow)
+                  val tileViewsMatrix = Array(3) { arrayOfNulls<Tigad3DTileView>(4) }
+
+                  for (rowIdx in 0 until 3) {
+                      val rowLayout = LinearLayout(this).apply {
+                          orientation = LinearLayout.HORIZONTAL
+                          gravity = Gravity.CENTER
+                      }
+                      for (colIdx in 0 until 4) {
+                          val specIdx = rowIdx * 4 + colIdx
+                          val spec = gridSpecs[specIdx]
+                          val tile = Tigad3DTileView(this, spec.iconType, spec.baseHex, spec.accentHex).apply {
+                              isFocusable = true
+                              isFocusableInTouchMode = false
+                              id = 5000 + specIdx
+                              layoutParams = LinearLayout.LayoutParams(132, 132).apply {
+                                  setMargins(12, 10, 12, 10)
+                              }
+                              setOnFocusChangeListener { _, hasFocus ->
+                                  isTileFocused = hasFocus
+                                  if (hasFocus) {
+                                      settingsSelectedLabel.text = spec.title
+                                      resetMenuInactivityTimer()
+                                  }
+                              }
+                              setOnClickListener {
+                                  resetMenuInactivityTimer()
+                                  spec.action()
+                              }
+                          }
+                          tileViewsMatrix[rowIdx][colIdx] = tile
+                          rowLayout.addView(tile)
+                      }
+                      gridContainer.addView(rowLayout)
+                  }
+
+                  // Настраиваем явную навигацию пульта 4x3 между плитками
+                  for (r in 0 until 3) {
+                      for (c in 0 until 4) {
+                          val v = tileViewsMatrix[r][c] ?: continue
+                          v.nextFocusLeftId = tileViewsMatrix[r][(c + 3) % 4]!!.id
+                          v.nextFocusRightId = tileViewsMatrix[r][(c + 1) % 4]!!.id
+                          v.nextFocusUpId = tileViewsMatrix[(r + 2) % 3][c]!!.id
+                          v.nextFocusDownId = tileViewsMatrix[(r + 1) % 3][c]!!.id
+                      }
+                  }
+
+                  settingsTileOverlay.addView(gridContainer)
                   settingsTileOverlay.addView(settingsSelectedLabel)
                   root.addView(settingsTileOverlay)
 
                   subModalOverlay = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
-                      background = makeGlassBg("E6", 24f, "#5500E5FF")
+                      background = makeThemedPanelBg()
                       visibility = View.GONE
                       setPadding(26, 22, 26, 22)
                       layoutParams = FrameLayout.LayoutParams(
-                          820,
+                          840,
                           FrameLayout.LayoutParams.WRAP_CONTENT,
                           Gravity.CENTER
                       )
                   }
 
                   subModalTitle = TextView(this).apply {
-                      setTextColor(Color.parseColor("#00E5FF"))
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                      setTextColor(currentTheme().accentColor)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
                       typeface = condensedBoldFont
                       setPadding(0, 0, 0, 10)
                   }
@@ -2918,10 +3344,10 @@ jobs:
 
                   subModalList = ListView(this).apply {
                       dividerHeight = 0
-                      background = makeGlassBg("55", 14f, "#20FFFFFF")
+                      background = makeThemedSubBg()
                       layoutParams = LinearLayout.LayoutParams(
                           LinearLayout.LayoutParams.MATCH_PARENT,
-                          400
+                          420
                       )
                   }
                   subModalOverlay.addView(subModalList)
@@ -2929,9 +3355,9 @@ jobs:
 
                   currentChannelBanner = TextView(this).apply {
                       setTextColor(Color.WHITE)
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                       typeface = condensedBoldFont
-                      background = makeGlassBg("D8", 16f, "#4500E5FF")
+                      background = makeThemedPanelBg()
                       setPadding(22, 12, 22, 12)
                       visibility = View.GONE
                       layoutParams = FrameLayout.LayoutParams(
@@ -2949,7 +3375,7 @@ jobs:
                           FrameLayout.LayoutParams.MATCH_PARENT
                       )
                   }
-                  splashEyeView = EarthEyeView(this).apply {
+                  splashEyeView = RealisticEyeSplashView(this).apply {
                       alpha = 0f
                       eyeOpenFraction = 0.03f
                       layoutParams = FrameLayout.LayoutParams(
@@ -2967,20 +3393,19 @@ jobs:
                   initPlayer()
                   startClockAndWatchdogUpdater()
 
-                  categoryAdapter = createCompactAdapter(mutableListOf(), 14f)
+                  // Пункт 2: Шрифт в левом меню увеличен на 20% (17.5sp вместо 14sp)
+                  categoryAdapter = createCompactAdapter(mutableListOf(), 17.5f)
                   categoryListView.adapter = categoryAdapter
 
-                  channelAdapter = createCompactAdapter(mutableListOf(), 14f)
+                  channelAdapter = createCompactAdapter(mutableListOf(), 17.5f)
                   channelListView.adapter = channelAdapter
 
-                  // При выборе категории в левом меню курсор сразу перемещается на первый канал (индекс 0) в списке справа
+                  // Пункт 2: Навигация внутри одноколоночного левого меню:
+                  // В списке групп: нажатие OK или Вправо скрывает группы и открывает каналы, курсор ВСЕГДА сверху (индекс 0)
                   categoryListView.setOnItemClickListener { _, _, position, _ ->
                       resetMenuInactivityTimer()
                       selectCategory(position)
-                      if (displayedChannels.isNotEmpty()) {
-                          channelListView.setSelection(0)
-                          channelListView.requestFocus()
-                      }
+                      showSideChannelsMode(focusTop = true)
                   }
 
                   categoryListView.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -2991,26 +3416,22 @@ jobs:
                       override fun onNothingSelected(parent: AdapterView<*>?) {}
                   }
 
-                  // Обработка нажатий Вправо (из категорий -> на 1-й канал) и Влево (из списка каналов -> на активную категорию)
                   categoryListView.setOnKeyListener { _, keyCode, event ->
                       if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                           resetMenuInactivityTimer()
-                          if (displayedChannels.isNotEmpty()) {
-                              channelListView.setSelection(0)
-                              channelListView.requestFocus()
-                          }
+                          selectCategory(categoryListView.selectedItemPosition.coerceAtLeast(0))
+                          showSideChannelsMode(focusTop = true)
                           true
                       } else {
                           false
                       }
                   }
 
+                  // В списке каналов: нажатие Влево скрывает список каналов и открывает список групп, курсор на активной группе!
                   channelListView.setOnKeyListener { _, keyCode, event ->
                       if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                           resetMenuInactivityTimer()
-                          categoryListView.setSelection(currentCategoryIndex)
-                          categoryListView.setItemChecked(currentCategoryIndex, true)
-                          categoryListView.requestFocus()
+                          showSideGroupsMode()
                           true
                       } else {
                           false
@@ -3042,6 +3463,42 @@ jobs:
 
                   loadActivePlaylist(autoPlayLast = true)
                   loadEpgInBackground()
+              }
+
+              // Пункт 2: Переключение левой панели в режим показа только СПИСКА КАНАЛОВ
+              private fun showSideChannelsMode(focusTop: Boolean, focusCurrentChannel: Boolean = false) {
+                  isSideShowingChannels = true
+                  val catName = categories.getOrElse(currentCategoryIndex) { "Все каналы" }
+                  sideModeTitle.text = "◀ Влево: Группы   •   $catName (${displayedChannels.size})"
+                  categoryListView.visibility = View.GONE
+                  channelListView.visibility = View.VISIBLE
+                  refreshChannelAdapter()
+
+                  if (displayedChannels.isNotEmpty()) {
+                      val targetPos = when {
+                          focusCurrentChannel -> {
+                              val idx = displayedChannels.indexOfFirst { it.url == currentChannel?.url }
+                              if (idx >= 0) idx else 0
+                          }
+                          focusTop -> 0
+                          else -> 0
+                      }
+                      channelListView.setSelection(targetPos)
+                      channelListView.setItemChecked(targetPos, true)
+                      channelListView.requestFocus()
+                  }
+              }
+
+              // Пункт 2: Переключение левой панели в режим показа только СПИСКА ГРУПП (курсор на активной группе)
+              private fun showSideGroupsMode() {
+                  isSideShowingChannels = false
+                  sideModeTitle.text = "Группы каналов   •   ▶ Вправо: Каналы"
+                  updateCategoriesList()
+                  channelListView.visibility = View.GONE
+                  categoryListView.visibility = View.VISIBLE
+                  categoryListView.setSelection(currentCategoryIndex)
+                  categoryListView.setItemChecked(currentCategoryIndex, true)
+                  categoryListView.requestFocus()
               }
 
               private fun playSplashEyeAnimation() {
@@ -3096,7 +3553,7 @@ jobs:
                           tv.typeface = condensedFont
                           tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, spSize)
                           tv.setTextColor(Color.WHITE)
-                          tv.setPadding(16, 10, 16, 10)
+                          tv.setPadding(18, 12, 18, 12)
                           tv.minHeight = 0
                           tv.minimumHeight = 0
                           return tv
@@ -3155,15 +3612,16 @@ jobs:
                       "SIDE" -> {
                           clockTextView.visibility = View.GONE
                           sidePanel.visibility = View.VISIBLE
-                          updateCategoriesList()
-                          refreshChannelAdapter()
-                          categoryListView.setSelection(currentCategoryIndex)
-                          categoryListView.setItemChecked(currentCategoryIndex, true)
-                          if (displayedChannels.isNotEmpty()) {
-                              channelListView.setSelection(0)
-                              channelListView.requestFocus()
+                          // Пункт 2: Если приложение запустило ранее включённый канал — открываем список каналов с курсором на этом канале!
+                          if (openChannelsDirectlyWithCurrentFocus && currentChannel != null) {
+                              openChannelsDirectlyWithCurrentFocus = false
+                              val chCatIdx = categories.indexOf(currentChannel?.category ?: "Все каналы").takeIf { it >= 2 } ?: 1
+                              selectCategory(chCatIdx)
+                              showSideChannelsMode(focusTop = false, focusCurrentChannel = true)
+                          } else if (isSideShowingChannels) {
+                              showSideChannelsMode(focusTop = false, focusCurrentChannel = true)
                           } else {
-                              categoryListView.requestFocus()
+                              showSideGroupsMode()
                           }
                       }
                       "INFO" -> {
@@ -3174,14 +3632,17 @@ jobs:
                           currentChannelBanner.visibility = View.GONE
                           updateCenterOsdContent()
                           centerOsdPanel.visibility = View.VISIBLE
-                          btnOsdFav.requestFocus()
+                          btnOsdTop.requestFocus()
                       }
                       "FULL_EPG" -> openFullScreenChannelEpg()
                       "SETTINGS" -> {
                           settingsTileOverlay.visibility = View.VISIBLE
-                          val row = settingsTileOverlay.getChildAt(0) as? LinearLayout
-                          row?.getChildAt(0)?.requestFocus()
+                          val grid = settingsTileOverlay.getChildAt(0) as? LinearLayout
+                          val firstRow = grid?.getChildAt(0) as? LinearLayout
+                          firstRow?.getChildAt(0)?.requestFocus()
                       }
+                      "THEMES" -> openThemesSubModal()
+                      "TOP_MANAGER" -> openTopManagerSubModal()
                       "MORE_SETTINGS" -> openMoreSettingsSubModal()
                       "PLAYLISTS" -> openPlaylistsSubModal()
                       "FILE_BROWSER" -> openFolderExplorerModal(currentBrowseDir)
@@ -3209,6 +3670,65 @@ jobs:
                       }
                       "ADD_URL" -> openAddUrlSubModal()
                   }
+              }
+
+              // Пункт 4: Меню выбора темы оформления
+              private fun openThemesSubModal() {
+                  subModalTitle.text = "🎨 Темы оформления интерфейса"
+                  subModalInputContainer.visibility = View.GONE
+                  subModalList.visibility = View.VISIBLE
+
+                  val items = themes.mapIndexed { idx, t ->
+                      (if (idx == themeIndex) "●  " else "○  ") + t.name
+                  }.toMutableList()
+
+                  subModalList.adapter = createCompactAdapter(items, 16f)
+                  subModalList.setOnItemClickListener { _, _, which, _ ->
+                      themeIndex = which
+                      saveState()
+                      applyCurrentThemeToAllPanels()
+                      Toast.makeText(this, "Тема: ${themes[which].name}", Toast.LENGTH_SHORT).show()
+                      navigateBackInMenu()
+                  }
+                  subModalOverlay.visibility = View.VISIBLE
+                  subModalList.requestFocus()
+              }
+
+              // Пункт 1: Управление ТОП-каналами
+              private fun openTopManagerSubModal() {
+                  subModalTitle.text = "🔥 Каналы, закреплённые в ТОПе групп (${topUrls.size})"
+                  subModalInputContainer.visibility = View.GONE
+                  subModalList.visibility = View.VISIBLE
+                  subModalTopButtons.visibility = View.VISIBLE
+                  subModalTopButtons.removeAllViews()
+
+                  if (topUrls.isNotEmpty()) {
+                      subModalTopButtons.addView(makeModernButton("Очистить весь ТОП") {
+                          topUrls.clear()
+                          saveState()
+                          selectCategory(currentCategoryIndex)
+                          openTopManagerSubModal()
+                      })
+                  }
+
+                  val topChans = allChannels.filter { topUrls.contains(it.url) }
+                  val labels = if (topChans.isEmpty()) {
+                      mutableListOf("ℹ  В ТОПе пока нет каналов. Нажмите центральную кнопку OK во время просмотра и выберите «🔥 В ТОП».")
+                  } else {
+                      topChans.map { "🔥  ${it.name}  [${it.category}]  — нажмите OK, чтобы убрать из ТОПа" }.toMutableList()
+                  }
+
+                  subModalList.adapter = createCompactAdapter(labels, 15f)
+                  subModalList.setOnItemClickListener { _, _, idx, _ ->
+                      if (idx in topChans.indices) {
+                          topUrls.remove(topChans[idx].url)
+                          saveState()
+                          selectCategory(currentCategoryIndex)
+                          openTopManagerSubModal()
+                      }
+                  }
+                  subModalOverlay.visibility = View.VISIBLE
+                  subModalList.requestFocus()
               }
 
               private fun openFullScreenChannelEpg() {
@@ -3244,7 +3764,7 @@ jobs:
                       }
                   }
 
-                  fullEpgListView.adapter = createCompactAdapter(items, 15f)
+                  fullEpgListView.adapter = createCompactAdapter(items, 15.5f)
                   fullEpgOverlay.visibility = View.VISIBLE
                   fullEpgListView.requestFocus()
                   if (activeIndex > 0 && activeIndex < items.size) {
@@ -3269,7 +3789,7 @@ jobs:
                       "🔄  Принудительно обновить программу передач сейчас"
                   )
 
-                  subModalList.adapter = createCompactAdapter(items, 15f)
+                  subModalList.adapter = createCompactAdapter(items, 16f)
                   subModalList.setOnItemClickListener { _, _, which, _ ->
                       resetMenuInactivityTimer()
                       when (which) {
@@ -3425,7 +3945,7 @@ jobs:
                       .build()
 
                   newPlayer.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-                  playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                  playerView.resizeMode = if (isFullScreenStretch) AspectRatioFrameLayout.RESIZE_MODE_FILL else AspectRatioFrameLayout.RESIZE_MODE_FIT
 
                   newPlayer.addListener(object : Player.Listener {
                       override fun onPlaybackStateChanged(playbackState: Int) {
@@ -3471,8 +3991,8 @@ jobs:
                                   conn.setRequestProperty("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
                                   conn.setRequestProperty("Connection", "keep-alive")
                                   conn.instanceFollowRedirects = true
-                                  conn.connectTimeout = 4000
-                                  conn.readTimeout = 4000
+                                  conn.connectTimeout = 3500
+                                  conn.readTimeout = 3500
 
                                   if (conn.responseCode in 200..299) {
                                       val finalBaseUrl = conn.url.toString().substringBeforeLast("/") + "/"
@@ -3487,9 +4007,9 @@ jobs:
                                           val segConn = URL(targetUrl).openConnection() as HttpURLConnection
                                           segConn.setRequestProperty("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
                                           segConn.setRequestProperty("Connection", "keep-alive")
-                                          segConn.connectTimeout = 4000
-                                          segConn.readTimeout = 4000
-                                          val buf = ByteArray(64 * 1024)
+                                          segConn.connectTimeout = 3500
+                                          segConn.readTimeout = 3500
+                                          val buf = ByteArray(32 * 1024)
                                           segConn.inputStream.read(buf)
                                           segConn.disconnect()
                                       }
@@ -3687,8 +4207,12 @@ jobs:
               private fun updateCenterOsdContent() {
                   val ch = currentChannel ?: return
                   val isFav = favoriteUrls.contains(ch.url)
+                  val isTop = topUrls.contains(ch.url)
+                  btnOsdTop.text = if (isTop) "🔥 Убрать из ТОПа" else "🔥 В ТОП"
                   btnOsdFav.text = if (isFav) "★ В Избранном" else "☆ Избранное"
-                  osdChannelTitle.text = (if (isFav) "★ " else "") + ch.name + "  •  " + ch.category
+
+                  val badges = (if (isTop) "🔥 " else "") + (if (isFav) "★ " else "")
+                  osdChannelTitle.text = badges + ch.name + "  •  " + ch.category
 
                   val (curr, next) = getCurrentAndNextEpg(ch)
                   val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -3755,6 +4279,7 @@ jobs:
                       "Разрешение: " + width + "x" + height + " " + fps + " (" + vCodec + ")\n" +
                       "Поток: " + vBitrate + "  •  Буфер: " + bufSec + " сек\n" +
                       "Предзагрузка соседних: " + preloadedCount + " из 2 готовы ⚡\n" +
+                      "Тема: " + currentTheme().name + "\n" +
                       "Звук: " + aCodec + " " + aChannels + " " + aSampleRate + "\n\n" +
                       epgLine
               }
@@ -3777,7 +4302,7 @@ jobs:
                       items.add("🗑  Удалить выбранный плейлист")
                   }
 
-                  subModalList.adapter = createCompactAdapter(items, 15f)
+                  subModalList.adapter = createCompactAdapter(items, 16f)
                   subModalList.setOnItemClickListener { _, _, which, _ ->
                       resetMenuInactivityTimer()
                       when {
@@ -3861,7 +4386,7 @@ jobs:
                   }
 
                   val labels = entries.map { it.first }.toMutableList()
-                  subModalList.adapter = createCompactAdapter(labels, 14f)
+                  subModalList.adapter = createCompactAdapter(labels, 15f)
                   subModalList.setOnItemClickListener { _, _, idx, _ ->
                       resetMenuInactivityTimer()
                       val target = entries.getOrNull(idx)?.second ?: return@setOnItemClickListener
@@ -3914,7 +4439,7 @@ jobs:
                       "$box  $cat   [Активно: $activeInCat из $totalInCat]"
                   }.toMutableList()
 
-                  subModalList.adapter = createCompactAdapter(labels, 14f)
+                  subModalList.adapter = createCompactAdapter(labels, 15.5f)
                   subModalList.setOnItemClickListener { _, _, idx, _ ->
                       resetMenuInactivityTimer()
                       selectedEditorCategory = editableCats[idx]
@@ -3968,7 +4493,7 @@ jobs:
                   }.toMutableList()
 
                   val firstPos = subModalList.firstVisiblePosition
-                  subModalList.adapter = createCompactAdapter(labels, 14f)
+                  subModalList.adapter = createCompactAdapter(labels, 15f)
                   subModalList.setSelection(firstPos)
                   subModalList.setOnItemClickListener { _, _, idx, _ ->
                       resetMenuInactivityTimer()
@@ -4047,7 +4572,7 @@ jobs:
                       "📂  $gName (${groupChans.size} кан.)   —   🟢 $gAlive   🔴 $gDead$revivedBadge"
                   }.toMutableList()
 
-                  subModalList.adapter = createCompactAdapter(labels, 14f)
+                  subModalList.adapter = createCompactAdapter(labels, 15f)
                   subModalList.setOnItemClickListener { _, _, idx, _ ->
                       resetMenuInactivityTimer()
                       if (idx in groupNames.indices) {
@@ -4122,7 +4647,7 @@ jobs:
                   }.toMutableList()
 
                   val firstPos = subModalList.firstVisiblePosition
-                  subModalList.adapter = createCompactAdapter(labels, 14f)
+                  subModalList.adapter = createCompactAdapter(labels, 15f)
                   subModalList.setSelection(firstPos)
                   subModalList.setOnItemClickListener { _, _, idx, _ ->
                       resetMenuInactivityTimer()
@@ -4135,6 +4660,7 @@ jobs:
                   subModalList.requestFocus()
               }
 
+              // Пункт 7: Устранено зависание анализатора на последних 1-2 каналах (жёсткий таймаут + чтение 64 байт вместо бесконечного readLine)
               private fun startBackgroundChannelAnalyzer(targetChannels: List<Channel>) {
                   if (isAnalyzerRunning || targetChannels.isEmpty()) return
                   isAnalyzerRunning = true
@@ -4147,18 +4673,18 @@ jobs:
                   analyzerStatusBanner.visibility = View.VISIBLE
 
                   thread {
-                      val pool = Executors.newFixedThreadPool(8)
+                      val pool = Executors.newFixedThreadPool(10)
                       for (ch in snapshot) {
                           pool.submit {
                               if (!isAnalyzerRunning) return@submit
-                              val ok = checkStreamAlive(ch.url)
+                              val ok = checkStreamAliveWithHardTimeout(ch.url)
                               channelHealthMap[ch.url] = ok
                               val done = counter.incrementAndGet()
-                              if (done % 4 == 0 || done == total) {
+                              if (done % 3 == 0 || done >= total) {
                                   runOnUiThread {
                                       val aliveCount = snapshot.count { channelHealthMap[it.url] == true }
                                       val deadCount = snapshot.count { channelHealthMap[it.url] == false }
-                                      if (isAnalyzerRunning) {
+                                      if (isAnalyzerRunning && done < total) {
                                           analyzerStatusBanner.text = "📡 Тест: $done / $total   •   🟢 $aliveCount   🔴 $deadCount"
                                           val curMenu = menuHistory.lastOrNull()
                                           if (curMenu == "ANALYZER_GROUP_VIEW") {
@@ -4167,44 +4693,76 @@ jobs:
                                               openAnalyzerGroupsModal()
                                           }
                                       }
-                                      if (done == total) {
-                                          isAnalyzerRunning = false
-                                          analyzerStatusBanner.text = "✅ Тест завершён: 🟢 $aliveCount  |  🔴 $deadCount"
-                                          uiHandler.postDelayed({ analyzerStatusBanner.visibility = View.GONE }, 4000L)
-                                          navigateToMenu("ANALYZER_GROUP_VIEW")
-                                          subModalOverlay.translationY = -360f
-                                          subModalOverlay.scaleX = 0.6f
-                                          subModalOverlay.scaleY = 0.6f
-                                          subModalOverlay.animate()
-                                              .translationY(0f)
-                                              .scaleX(1f)
-                                              .scaleY(1f)
-                                              .setDuration(400L)
-                                              .setInterpolator(DecelerateInterpolator())
-                                              .start()
-                                      }
                                   }
                               }
                           }
                       }
                       pool.shutdown()
+                      try {
+                          // Даже если 1-2 сервера "зависли" на уровне сокета, ждём максимум 25 секунд и принудительно завершаем тест!
+                          pool.awaitTermination(25, TimeUnit.SECONDS)
+                      } catch (_: Exception) {}
+                      pool.shutdownNow()
+
+                      // Помечаем любые оставшиеся непроверенные зависшие потоки как нерабочие
+                      for (ch in snapshot) {
+                          if (!channelHealthMap.containsKey(ch.url)) {
+                              channelHealthMap[ch.url] = false
+                          }
+                      }
+
+                      if (isAnalyzerRunning) {
+                          isAnalyzerRunning = false
+                          runOnUiThread {
+                              val aliveCount = snapshot.count { channelHealthMap[it.url] == true }
+                              val deadCount = snapshot.count { channelHealthMap[it.url] == false }
+                              analyzerStatusBanner.text = "✅ Тест завершён: 🟢 $aliveCount  |  🔴 $deadCount"
+                              uiHandler.postDelayed({ analyzerStatusBanner.visibility = View.GONE }, 4000L)
+                              navigateToMenu("ANALYZER_GROUP_VIEW")
+                              subModalOverlay.translationY = -360f
+                              subModalOverlay.scaleX = 0.6f
+                              subModalOverlay.scaleY = 0.6f
+                              subModalOverlay.animate()
+                                  .translationY(0f)
+                                  .scaleX(1f)
+                                  .scaleY(1f)
+                                  .setDuration(400L)
+                                  .setInterpolator(DecelerateInterpolator())
+                                  .start()
+                          }
+                      }
                   }
               }
 
-              private fun checkStreamAlive(urlStr: String): Boolean {
+              // Пункт 7: Безопасная проверка потока с принудительным закрытием сокета через 3.2 секунды
+              private fun checkStreamAliveWithHardTimeout(urlStr: String): Boolean {
+                  var conn: HttpURLConnection? = null
                   return try {
-                      val conn = URL(urlStr).openConnection() as HttpURLConnection
+                      conn = URL(urlStr).openConnection() as HttpURLConnection
                       conn.setRequestProperty("User-Agent", "VLC/3.0.20 LibVLC/3.0.20")
                       conn.instanceFollowRedirects = true
-                      conn.connectTimeout = 4000
-                      conn.readTimeout = 4000
+                      conn.connectTimeout = 3000
+                      conn.readTimeout = 3000
+
+                      val killer = Thread {
+                          try {
+                              Thread.sleep(3400)
+                              conn?.disconnect()
+                          } catch (_: Exception) {}
+                      }
+                      killer.isDaemon = true
+                      killer.start()
+
                       val code = conn.responseCode
-                      val head = if (code in 200..299) {
-                          conn.inputStream.bufferedReader().readLine() ?: ""
-                      } else ""
+                      val buf = ByteArray(64)
+                      val readBytes = if (code in 200..299) {
+                          conn.inputStream.read(buf)
+                      } else -1
                       conn.disconnect()
-                      code in 200..299 && head.isNotEmpty()
+                      killer.interrupt()
+                      code in 200..299 && readBytes > 0
                   } catch (_: Exception) {
+                      try { conn?.disconnect() } catch (_: Exception) {}
                       false
                   }
               }
@@ -4222,7 +4780,7 @@ jobs:
                   ).mapIndexed { i, t ->
                       (if (i == bufferLevel) "●  " else "○  ") + t
                   }.toMutableList()
-                  subModalList.adapter = createCompactAdapter(options, 15f)
+                  subModalList.adapter = createCompactAdapter(options, 16f)
                   subModalList.setOnItemClickListener { _, _, which, _ ->
                       bufferLevel = which
                       saveState()
@@ -4241,7 +4799,7 @@ jobs:
                   val options = listOf("Аппаратный", "Автоматический", "Программный").mapIndexed { i, t ->
                       (if (i == decoderMode) "●  " else "○  ") + t
                   }.toMutableList()
-                  subModalList.adapter = createCompactAdapter(options, 15f)
+                  subModalList.adapter = createCompactAdapter(options, 16f)
                   subModalList.setOnItemClickListener { _, _, which, _ ->
                       decoderMode = which
                       saveState()
@@ -4276,7 +4834,7 @@ jobs:
                           overrides.add(TrackSelectionOverride(g.mediaTrackGroup, i))
                       }
                   }
-                  subModalList.adapter = createCompactAdapter(labels, 15f)
+                  subModalList.adapter = createCompactAdapter(labels, 16f)
                   subModalList.setOnItemClickListener { _, _, idx, _ ->
                       p.trackSelectionParameters = p.trackSelectionParameters
                           .buildUpon()
@@ -4369,7 +4927,6 @@ jobs:
                   nameInput.requestFocus()
               }
 
-              // Автораспределение каналов с поддержкой новой категории "2K"
               private fun mapToTenCategories(rawGroup: String, name: String): String {
                   val text = (rawGroup + " " + name).lowercase()
                   return when {
@@ -4510,13 +5067,19 @@ jobs:
                               allChannels.clear()
                               allChannels.addAll(finalChannels)
                               updateCategoriesList()
-                              selectCategory(1)
-                              val currentList = displayedChannels.toList()
+
+                              val currentList = allChannels.filter { isChannelActive(it) }
                               if (currentList.isNotEmpty()) {
                                   val resumeCh = if (autoPlayLast && lastSavedChannelUrl.isNotEmpty()) {
                                       currentList.firstOrNull { it.url == lastSavedChannelUrl }
                                   } else null
-                                  playChannelObj(resumeCh ?: currentList[0])
+                                  val targetCh = resumeCh ?: currentList[0]
+                                  val catIdx = categories.indexOf(targetCh.category).takeIf { it >= 2 } ?: 1
+                                  selectCategory(catIdx)
+                                  openChannelsDirectlyWithCurrentFocus = true
+                                  playChannelObj(targetCh)
+                              } else {
+                                  selectCategory(1)
                               }
                           }
                       } catch (e: Exception) {
@@ -4557,6 +5120,7 @@ jobs:
                   updateTopLabel()
               }
 
+              // Пункт 1: Сортировка внутри группы — каналы с меткой "В ТОПе" (topUrls) всегда идут в самом верху списка!
               private fun selectCategory(index: Int) {
                   if (index !in categories.indices) return
                   currentCategoryIndex = index
@@ -4564,12 +5128,18 @@ jobs:
                   val catName = categories[index]
                   val activeAll = allChannels.filter { isChannelActive(it) }
 
-                  displayedChannels.clear()
-                  when (catName) {
-                      "★ Избранное" -> displayedChannels.addAll(activeAll.filter { favoriteUrls.contains(it.url) })
-                      "Все каналы" -> displayedChannels.addAll(activeAll)
-                      else -> displayedChannels.addAll(activeAll.filter { it.category == catName })
+                  val rawFiltered = when (catName) {
+                      "★ Избранное" -> activeAll.filter { favoriteUrls.contains(it.url) }
+                      "Все каналы" -> activeAll
+                      else -> activeAll.filter { it.category == catName }
                   }
+
+                  val topPart = rawFiltered.filter { topUrls.contains(it.url) }
+                  val normalPart = rawFiltered.filter { !topUrls.contains(it.url) }
+
+                  displayedChannels.clear()
+                  displayedChannels.addAll(topPart)
+                  displayedChannels.addAll(normalPart)
 
                   refreshChannelAdapter()
               }
@@ -4577,14 +5147,28 @@ jobs:
               private fun refreshChannelAdapter() {
                   val snapshot = displayedChannels.toList()
                   val formatted = snapshot.mapIndexed { i, ch ->
-                      val star = if (favoriteUrls.contains(ch.url)) "★ " else ""
+                      val topBadge = if (topUrls.contains(ch.url)) "🔥 " else ""
+                      val starBadge = if (favoriteUrls.contains(ch.url)) "★ " else ""
                       val (epg, _) = getCurrentAndNextEpg(ch)
                       val epgSuffix = if (epg != null) " • " + epg.title else ""
-                      (i + 1).toString() + ". " + star + ch.name + epgSuffix
+                      (i + 1).toString() + ". " + topBadge + starBadge + ch.name + epgSuffix
                   }
                   channelAdapter.clear()
                   channelAdapter.addAll(formatted)
                   channelAdapter.notifyDataSetChanged()
+              }
+
+              // Пункт 1: Переключение канала "В ТОП" (перемещает вверх списка группы)
+              private fun toggleTopChannel(ch: Channel) {
+                  if (topUrls.contains(ch.url)) {
+                      topUrls.remove(ch.url)
+                      Toast.makeText(this, "Убрано из ТОПа: ${ch.name}", Toast.LENGTH_SHORT).show()
+                  } else {
+                      topUrls.add(ch.url)
+                      Toast.makeText(this, "🔥 Закреплено в ТОПе группы: ${ch.name}", Toast.LENGTH_SHORT).show()
+                  }
+                  saveState()
+                  selectCategory(currentCategoryIndex)
               }
 
               private fun toggleFavorite(ch: Channel) {
@@ -4610,10 +5194,11 @@ jobs:
                       player?.play()
                   } catch (_: Exception) {}
 
+                  val topBadge = if (topUrls.contains(channel.url)) "🔥 " else ""
                   val star = if (favoriteUrls.contains(channel.url)) "★ " else ""
                   val (epg, _) = getCurrentAndNextEpg(channel)
                   val epgLine = if (epg != null) "\n🎬 " + epg.title else ""
-                  showBanner(star + channel.name + "  •  " + channel.category + epgLine)
+                  showBanner(topBadge + star + channel.name + "  •  " + channel.category + epgLine)
                   updateSignalIndicator()
 
                   if (centerOsdPanel.visibility == View.VISIBLE) updateCenterOsdContent()
@@ -4654,10 +5239,12 @@ jobs:
                       .putInt("active_playlist", activePlaylistIndex)
                       .putInt("buffer_level", bufferLevel)
                       .putInt("decoder_mode", decoderMode)
+                      .putInt("theme_index", themeIndex)
                       .putString("vip_token", vipToken)
                       .putString("epg_url", epgUrl)
                       .putString("last_channel_url", lastSavedChannelUrl)
                       .putStringSet("favorites", favoriteUrls.toSet())
+                      .putStringSet("top_urls", topUrls.toSet())
                       .putStringSet("disabled_urls", disabledUrls.toSet())
                       .putStringSet("disabled_cats", disabledCategories.toSet())
                       .apply()
@@ -4667,6 +5254,7 @@ jobs:
                   val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
                   bufferLevel = prefs.getInt("buffer_level", 2)
                   decoderMode = prefs.getInt("decoder_mode", 1)
+                  themeIndex = prefs.getInt("theme_index", 0)
                   activePlaylistIndex = prefs.getInt("active_playlist", 0)
                   vipToken = prefs.getString("vip_token", BuiltinCatalog.defaultToken) ?: BuiltinCatalog.defaultToken
                   epgUrl = prefs.getString("epg_url", epgUrl) ?: epgUrl
@@ -4674,6 +5262,8 @@ jobs:
 
                   favoriteUrls.clear()
                   favoriteUrls.addAll(prefs.getStringSet("favorites", emptySet()) ?: emptySet())
+                  topUrls.clear()
+                  topUrls.addAll(prefs.getStringSet("top_urls", emptySet()) ?: emptySet())
                   disabledUrls.clear()
                   disabledUrls.addAll(prefs.getStringSet("disabled_urls", emptySet()) ?: emptySet())
                   disabledCategories.clear()
@@ -4718,7 +5308,6 @@ jobs:
                   playChannelObj(list[targetIdx])
               }
 
-              // Когда открыто центральное меню (OSD), плитки (SETTINGS) или INFO — кнопки Вверх/Вниз и CH+/CH- переключают каналы!
               override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
                   if (keyCode == KeyEvent.KEYCODE_BACK) {
                       if (navigateBackInMenu()) {
@@ -4734,7 +5323,6 @@ jobs:
                       return true
                   }
 
-                  // Кнопки Channel Up / Channel Down на пульте работают вообще в любом меню
                   if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP || keyCode == KeyEvent.KEYCODE_PAGE_UP) {
                       switchChannelByOffset(+1)
                       return true
@@ -4746,8 +5334,8 @@ jobs:
 
                   val activeMenu = menuHistory.lastOrNull()
 
-                  // Если открыто меню с горизонтальными кнопками (OSD, SETTINGS, INFO) — Вверх/Вниз переключают каналы
-                  if (activeMenu == null || activeMenu == "INFO" || activeMenu == "OSD" || activeMenu == "SETTINGS") {
+                  // В центральном меню OSD и окне INFO кнопки Вверх/Вниз переключают каналы (в SETTINGS 4x3 Вверх/Вниз ходят по рядам сетки)
+                  if (activeMenu == null || activeMenu == "INFO" || activeMenu == "OSD") {
                       if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                           switchChannelByOffset(+1)
                           return true
@@ -4816,7 +5404,6 @@ jobs:
           ''')
           PYEOF
 
-      # Восстанавливаем постоянный файл ключа app/permanent_key.jks из кэша GitHub Actions (или сохраняем его навсегда при первом создании)
       - name: Lock Permanent Signing Keystore in Cache
         uses: actions/cache@v4
         with:
@@ -4836,10 +5423,10 @@ jobs:
           fi
           cp app/permanent_key.jks ~/.android/debug.keystore || true
           gradle assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk MiBox-IPTV-v1.1.${GITHUB_RUN_NUMBER}.apk
+          cp app/build/outputs/apk/debug/app-debug.apk MiBox-IPTV-v1.2.${GITHUB_RUN_NUMBER}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiBox-IPTV-v1.1.${{ github.run_number }}
-          path: MiBox-IPTV-v1.1.${{ github.run_number }}.apk
+          name: MiBox-IPTV-v1.2.${{ github.run_number }}
+          path: MiBox-IPTV-v1.2.${{ github.run_number }}.apk
