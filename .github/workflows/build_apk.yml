@@ -1887,7 +1887,7 @@ jobs:
           ''')
           PYEOF
 
-      - name: Step 3.5 - Apply Patches v1.2 (Tigad 3D Icons + 4x3 Grid + Themes + Realistic Pupil)
+      - name: Step 3.5 - Apply Patches v1.3 (Touch Gestures + First Run Mode + Per-Theme Icons/Fonts + No VIP)
         run: |
           python3 - << 'PYEOF'
           import os, re
@@ -1896,10 +1896,10 @@ jobs:
               g = f.read()
 
           g = g.replace("targetSdk 34", "targetSdk 29")
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "30"))
-          new_ver_code = 3000 + run_num
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "35"))
+          new_ver_code = 4000 + run_num
           g = re.sub(r"versionCode\s+\d+", f"versionCode {new_ver_code}", g)
-          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "1.2.{run_num}"', g)
+          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "1.3.{run_num}"', g)
 
           signing_block = '''
               signingConfigs {
@@ -1949,7 +1949,7 @@ jobs:
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "w") as f:
               f.write(cat)
 
-          # Пункт 3: Иконка APK и баннер с настоящим реалистичным глубоким зрачком и живой радужкой
+          # Иконка APK и баннер с реалистичным живым зрачком
           realistic_eye_icon = '''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="108dp"
@@ -1963,29 +1963,22 @@ jobs:
               <path android:fillColor="#1692A8" android:pathData="M0,88 C42,72 78,56 108,42 L108,108 L0,108 Z"/>
               <path android:fillColor="#284596" android:pathData="M18,108 C54,88 84,74 108,62 L108,108 Z"/>
               <path android:fillColor="#7C1D7A" android:pathData="M48,108 C72,94 92,84 108,78 L108,108 Z"/>
-              <!-- Тёмная тень 3D-объёма под глазом -->
               <path android:fillColor="#55000000" android:pathData="M7,64 C24,30 84,30 101,64 C84,92 24,92 7,64 Z"/>
               <path android:fillColor="#19130E" android:pathData="M7,60 C24,26 84,26 101,60 C84,88 24,88 7,60 Z"/>
               <path android:fillColor="#19130E" android:pathData="M55,33 L62,21 L67,34 L77,24 L77,39 L89,32 L85,46 L96,42 L91,54 L101,53 L95,61 Z"/>
               <path android:fillColor="#2D1E12" android:pathData="M14,48 C28,31 46,27 57,29 C44,32 28,38 14,48 Z"/>
-              <!-- Склера с естественным затенением под верхним веком -->
               <path android:fillColor="#EFE5CF" android:pathData="M13,60 C28,34 80,34 95,60 C80,82 28,82 13,60 Z"/>
               <path android:fillColor="#C9B99B" android:pathData="M13,60 C28,34 80,34 95,60 C80,41 28,41 13,60 Z"/>
-              <!-- Лимбальное тёмное кольцо радужки -->
               <path android:fillColor="#12181B" android:pathData="M54,36 A24,24 0 1,0 54,84 A24,24 0 1,0 54,36 Z"/>
-              <!-- Живая многослойная радужка -->
               <path android:fillColor="#00838F" android:pathData="M54,38 A22,22 0 1,0 54,82 A22,22 0 1,0 54,38 Z"/>
               <path android:fillColor="#558B2F" android:pathData="M54,60 L35,49 A22,22 0 0,0 54,82 Z"/>
               <path android:fillColor="#F9A825" android:pathData="M54,60 L54,82 A22,22 0 0,0 73,71 Z"/>
               <path android:fillColor="#C62828" android:pathData="M54,60 L73,71 A22,22 0 0,0 73,49 Z"/>
               <path android:fillColor="#AD1457" android:pathData="M54,60 L73,49 A22,22 0 0,0 54,38 Z"/>
               <path android:fillColor="#283593" android:pathData="M54,60 L54,38 A22,22 0 0,0 35,49 Z"/>
-              <!-- Внутренний золотисто-янтарный ободок вокруг зрачка (колларета) -->
               <path android:fillColor="#55FFB300" android:pathData="M54,44 A16,16 0 1,0 54,76 A16,16 0 1,0 54,44 Z"/>
-              <!-- Настоящий глубокий бархатно-чёрный зрачок -->
               <path android:fillColor="#1E140F" android:pathData="M54,46.5 A13.5,13.5 0 1,0 54,73.5 A13.5,13.5 0 1,0 54,46.5 Z"/>
               <path android:fillColor="#070505" android:pathData="M54,48 A12,12 0 1,0 54,72 A12,12 0 1,0 54,48 Z"/>
-              <!-- Живые роговичные блики -->
               <path android:fillColor="#FFFFFF" android:pathData="M60.5,50.5 A3.2,3.2 0 1,0 60.5,56.9 A3.2,3.2 0 1,0 60.5,50.5 Z"/>
               <path android:fillColor="#E6FFFFFF" android:pathData="M65,55.5 A1.4,1.4 0 1,0 65,58.3 A1.4,1.4 0 1,0 65,55.5 Z"/>
               <path android:fillColor="#99FFFFFF" android:pathData="M46,64.5 A1.9,1.9 0 1,0 46,68.3 A1.9,1.9 0 1,0 46,64.5 Z"/>
@@ -2048,7 +2041,7 @@ jobs:
                       android:name=".MainActivity"
                       android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
                       android:exported="true"
-                      android:screenOrientation="landscape">
+                      android:screenOrientation="sensorLandscape">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
@@ -2058,7 +2051,7 @@ jobs:
               </application>
           </manifest>''')
 
-          # Записываем полный код MainActivity.kt (v1.2)
+          # Записываем полный код MainActivity.kt (v1.3)
           with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -2074,8 +2067,10 @@ jobs:
           import android.os.Looper
           import android.text.TextUtils
           import android.util.TypedValue
+          import android.view.GestureDetector
           import android.view.Gravity
           import android.view.KeyEvent
+          import android.view.MotionEvent
           import android.view.View
           import android.view.ViewGroup
           import android.view.WindowManager
@@ -2119,23 +2114,33 @@ jobs:
           import java.util.concurrent.atomic.AtomicInteger
           import java.util.zip.GZIPInputStream
           import kotlin.concurrent.thread
+          import kotlin.math.abs
 
           data class Channel(val name: String, val url: String, val category: String, val tvgId: String)
           data class PlaylistEntry(val title: String, val source: String, val isLocal: Boolean)
           data class EpgProgram(val title: String, val desc: String, val startMs: Long, val stopMs: Long)
 
-          // Пункт 4: Темы оформления (включая Material Design 3)
+          // Пункт 2: Каждая тема имеет свой шрифт, свои символы во всех меню и свой стиль отрисовки иконок
           data class AppThemeStyle(
+              val id: Int,
               val name: String,
               val panelBgColor: Int,
               val cardBgColor: Int,
               val accentColor: Int,
               val strokeColor: Int,
               val textOnAccent: Int,
-              val cornerRadiusDp: Float
+              val cornerRadiusDp: Float,
+              val normalFont: Typeface,
+              val boldFont: Typeface,
+              val iconPlaylists: String,
+              val iconSettings: String,
+              val iconAnalyzer: String,
+              val iconTop: String,
+              val iconFav: String,
+              val iconEpg: String,
+              val iconAudio: String
           )
 
-          // Пункт 3: Заставка "Советская психоделика" с настоящим реалистичным живым зрачком и волокнами радужки
           class RealisticEyeSplashView(context: Context) : View(context) {
               var eyeOpenFraction: Float = 0.02f
                   set(value) {
@@ -2231,7 +2236,6 @@ jobs:
                   canvas.save()
                   canvas.clipPath(innerEyePath)
 
-                  // Склера с объёмным градиентом
                   val scleraGrad = RadialGradient(
                       cx, cy, rx,
                       intArrayOf(Color.parseColor("#F7F0DE"), Color.parseColor("#E5D6BA"), Color.parseColor("#B8A486")),
@@ -2243,7 +2247,6 @@ jobs:
                   paint.shader = null
 
                   val irisRadius = maxRy * 0.96f
-                  // Тёмное лимбальное кольцо вокруг радужки (делает взгляд живым и глубоким)
                   paint.color = Color.parseColor("#11161A")
                   canvas.drawCircle(cx, cy, irisRadius * 1.04f, paint)
 
@@ -2261,7 +2264,6 @@ jobs:
                   canvas.drawCircle(cx, cy, irisRadius, paint)
                   paint.shader = null
 
-                  // Тонкие радиальные волокна настоящей радужки (Stroma fibers)
                   paint.style = Paint.Style.STROKE
                   paint.strokeWidth = 2.2f
                   for (deg in 0 until 360 step 5) {
@@ -2278,7 +2280,6 @@ jobs:
                       )
                   }
 
-                  // Внутреннее янтарное кольцо вокруг зрачка
                   paint.style = Paint.Style.FILL
                   val collaretteGrad = RadialGradient(
                       cx, cy, irisRadius * 0.65f,
@@ -2290,7 +2291,6 @@ jobs:
                   canvas.drawCircle(cx, cy, irisRadius * 0.65f, paint)
                   paint.shader = null
 
-                  // Настоящий глубокий анатомический чёрный зрачок
                   val pupilR = irisRadius * 0.48f
                   val pupilGrad = RadialGradient(
                       cx - pupilR * 0.15f, cy - pupilR * 0.15f, pupilR * 1.1f,
@@ -2302,7 +2302,6 @@ jobs:
                   canvas.drawCircle(cx, cy, pupilR, paint)
                   paint.shader = null
 
-                  // Естественные живые влажные блики на роговице и зрачке
                   paint.color = Color.parseColor("#F8FFFDF7")
                   canvas.drawCircle(cx + pupilR * 0.56f, cy - pupilR * 0.44f, pupilR * 0.24f, paint)
                   canvas.drawCircle(cx + pupilR * 0.90f, cy - pupilR * 0.14f, pupilR * 0.11f, paint)
@@ -2313,14 +2312,20 @@ jobs:
               }
           }
 
-          // Пункты 5 и 6: Кастомные прямые (не наклонённые) 3D-иконки в стиле Tigad Pro Icon Pack со скриншота
-          class Tigad3DTileView(
+          // Пункт 2: Плитка меню настроек, которая меняет свой дизайн иконки в зависимости от выбранной темы (themeStyleId)
+          class ThemedTileView(
               context: Context,
               private val iconType: String,
               private val baseColorHex: String,
               private val accentColorHex: String
           ) : View(context) {
               var isTileFocused: Boolean = false
+                  set(value) {
+                      field = value
+                      invalidate()
+                  }
+
+              var themeStyleId: Int = 0
                   set(value) {
                       field = value
                       invalidate()
@@ -2341,152 +2346,155 @@ jobs:
                   super.onDraw(canvas)
                   val w = width.toFloat()
                   val h = height.toFloat()
-                  val pad = if (isTileFocused) 6f else 12f
-                  val depth = 11f // Толщина нижней 3D-грани как на скриншоте
-
+                  val pad = if (isTileFocused) 5f else 11f
                   val mainColor = Color.parseColor(baseColorHex)
-                  val side3DColor = darken(mainColor, 0.58f)
                   val badgeColor = Color.parseColor(accentColorHex)
-                  val badge3DColor = darken(badgeColor, 0.62f)
 
-                  // 1. Внешнее свечение при наведении пульта
-                  if (isTileFocused) {
-                      paint.style = Paint.Style.FILL
-                      paint.color = Color.parseColor("#55FFFFFF")
-                      rect.set(2f, 2f, w - 2f, h - 2f)
-                      canvas.drawRoundRect(rect, 28f, 28f, paint)
-                  }
-
-                  // 2. Тёмная 3D-подложка (нижняя ступенька объёма, строго прямая без наклона)
-                  paint.style = Paint.Style.FILL
-                  paint.color = Color.parseColor("#66000000")
-                  rect.set(pad + 2f, pad + depth + 4f, w - pad + 2f, h - pad + 4f)
-                  canvas.drawRoundRect(rect, 24f, 24f, paint)
-
-                  paint.color = side3DColor
-                  rect.set(pad, pad + depth, w - pad, h - pad)
-                  canvas.drawRoundRect(rect, 24f, 24f, paint)
-
-                  // 3. Передняя грань 3D-плитки
-                  paint.color = mainColor
-                  rect.set(pad, pad, w - pad, h - pad - depth)
-                  canvas.drawRoundRect(rect, 24f, 24f, paint)
-
-                  // Верхний блик фаски
-                  paint.style = Paint.Style.STROKE
-                  paint.strokeWidth = if (isTileFocused) 3.5f else 1.8f
-                  paint.color = if (isTileFocused) Color.WHITE else Color.parseColor("#55FFFFFF")
-                  canvas.drawRoundRect(rect, 24f, 24f, paint)
-
-                  val cx = w / 2f
+                  // Внешняя часть плитки меняется под тему:
+                  // 0 = Material Design 3 (плоская Tonal-капсула с мягким кругом внутри)
+                  // 1 = Cyber Neon (чёрное стекло с ярким неоновым контуром)
+                  // 2 = AMOLED Black (чистый чёрный с тонким изумрудным кольцом)
+                  // 3 = Nordic Frost (матовая скандинавская карточка)
+                  // 4 = Sunset Retro / Tigad 3D (выпуклая 3D-плитка с толстой нижней гранью)
+                  val depth = if (themeStyleId == 4 || themeStyleId == 3) 11f else 0f
                   val cy = (h - depth) / 2f
+                  val cx = w / 2f
                   val r = (w - pad * 2) * 0.28f
 
-                  // 4. Отрисовка объёмного 3D-глифа внутри плитки (с собственным 3D-слоем тени)
+                  when (themeStyleId) {
+                      0 -> {
+                          // Material Design 3
+                          paint.style = Paint.Style.FILL
+                          paint.color = if (isTileFocused) Color.parseColor("#A8C7FA") else Color.parseColor("#2B2D30")
+                          rect.set(pad, pad, w - pad, h - pad)
+                          canvas.drawRoundRect(rect, 34f, 34f, paint)
+                          // Внутренний пастельный круг MD3
+                          paint.color = if (isTileFocused) Color.parseColor("#062E6F") else mainColor
+                          canvas.drawCircle(cx, cy, r * 1.15f, paint)
+                      }
+                      1 -> {
+                          // Cyber Neon Glass
+                          paint.style = Paint.Style.FILL
+                          paint.color = if (isTileFocused) Color.parseColor("#3300E5FF") else Color.parseColor("#141024")
+                          rect.set(pad, pad, w - pad, h - pad)
+                          canvas.drawRoundRect(rect, 18f, 18f, paint)
+                          paint.style = Paint.Style.STROKE
+                          paint.strokeWidth = if (isTileFocused) 4f else 2f
+                          paint.color = if (isTileFocused) Color.WHITE else Color.parseColor("#00E5FF")
+                          canvas.drawRoundRect(rect, 18f, 18f, paint)
+                      }
+                      2 -> {
+                          // AMOLED Pure Black
+                          paint.style = Paint.Style.FILL
+                          paint.color = Color.parseColor("#080808")
+                          rect.set(pad, pad, w - pad, h - pad)
+                          canvas.drawRoundRect(rect, 16f, 16f, paint)
+                          paint.style = Paint.Style.STROKE
+                          paint.strokeWidth = if (isTileFocused) 3.5f else 1.5f
+                          paint.color = if (isTileFocused) Color.parseColor("#00E676") else badgeColor
+                          canvas.drawCircle(cx, cy, r * 1.22f, paint)
+                      }
+                      else -> {
+                          // 3D Tigad style (Nordic & Sunset Retro)
+                          if (isTileFocused) {
+                              paint.style = Paint.Style.FILL
+                              paint.color = Color.parseColor("#55FFFFFF")
+                              rect.set(2f, 2f, w - 2f, h - 2f)
+                              canvas.drawRoundRect(rect, 28f, 28f, paint)
+                          }
+                          paint.style = Paint.Style.FILL
+                          paint.color = darken(mainColor, 0.56f)
+                          rect.set(pad, pad + depth, w - pad, h - pad)
+                          canvas.drawRoundRect(rect, 24f, 24f, paint)
+
+                          paint.color = mainColor
+                          rect.set(pad, pad, w - pad, h - pad - depth)
+                          canvas.drawRoundRect(rect, 24f, 24f, paint)
+
+                          paint.style = Paint.Style.STROKE
+                          paint.strokeWidth = if (isTileFocused) 3.5f else 1.8f
+                          paint.color = if (isTileFocused) Color.WHITE else Color.parseColor("#55FFFFFF")
+                          canvas.drawRoundRect(rect, 24f, 24f, paint)
+                      }
+                  }
+
+                  val fgColor = when {
+                      themeStyleId == 0 && isTileFocused -> Color.parseColor("#A8C7FA")
+                      themeStyleId == 1 -> Color.parseColor("#00E5FF")
+                      themeStyleId == 2 -> Color.parseColor("#00E676")
+                      else -> Color.WHITE
+                  }
+
                   paint.style = Paint.Style.FILL
                   when (iconType) {
                       "PLAYLISTS" -> {
-                          // Зелёно-бирюзовый 3D блокнот/список со скриншота + круглая шестерёнка справа внизу
                           for (i in -1..1) {
-                              val ly = cy + i * (r * 0.52f)
-                              paint.color = Color.parseColor("#44000000")
-                              rect.set(cx - r * 0.85f, ly - 5f + 4f, cx + r * 0.85f, ly + 5f + 4f)
-                              canvas.drawRoundRect(rect, 5f, 5f, paint)
-                              paint.color = Color.WHITE
-                              rect.set(cx - r * 0.85f, ly - 5f, cx + r * 0.85f, ly + 5f)
+                              val ly = cy + i * (r * 0.50f)
+                              paint.color = fgColor
+                              rect.set(cx - r * 0.75f, ly - 4.5f, cx + r * 0.75f, ly + 4.5f)
                               canvas.drawRoundRect(rect, 5f, 5f, paint)
                           }
                       }
                       "EDITOR" -> {
-                          // Объёмный щит/карточка с галочкой
-                          paint.color = badge3DColor
-                          canvas.drawCircle(cx, cy + 5f, r * 0.92f, paint)
-                          paint.color = badgeColor
-                          canvas.drawCircle(cx, cy, r * 0.92f, paint)
                           paint.style = Paint.Style.STROKE
                           paint.strokeWidth = 6f
                           paint.strokeCap = Paint.Cap.ROUND
-                          paint.color = Color.WHITE
+                          paint.color = fgColor
                           canvas.drawLine(cx - r * 0.42f, cy + 2f, cx - r * 0.08f, cy + r * 0.36f, paint)
                           canvas.drawLine(cx - r * 0.08f, cy + r * 0.36f, cx + r * 0.46f, cy - r * 0.32f, paint)
                       }
                       "ANALYZER" -> {
-                          // 3D-волны сигнала (как Wi-Fi/радар на правом верхнем углу скриншота)
                           paint.style = Paint.Style.STROKE
                           paint.strokeCap = Paint.Cap.ROUND
                           for (ring in 1..3) {
-                              val rad = r * (0.35f * ring)
-                              paint.strokeWidth = 6f
-                              paint.color = Color.parseColor("#44000000")
-                              rect.set(cx - rad, cy - rad + 10f, cx + rad, cy + rad + 10f)
-                              canvas.drawArc(rect, 215f, 110f, false, paint)
-                              paint.color = if (ring == 3) badgeColor else Color.WHITE
-                              rect.set(cx - rad, cy - rad + 5f, cx + rad, cy + rad + 5f)
+                              val rad = r * (0.34f * ring)
+                              paint.strokeWidth = 5.5f
+                              paint.color = if (ring == 3) badgeColor else fgColor
+                              rect.set(cx - rad, cy - rad + 6f, cx + rad, cy + rad + 6f)
                               canvas.drawArc(rect, 215f, 110f, false, paint)
                           }
                           paint.style = Paint.Style.FILL
                           paint.color = badgeColor
-                          canvas.drawCircle(cx, cy + r * 0.35f, 7f, paint)
+                          canvas.drawCircle(cx, cy + r * 0.35f, 6.5f, paint)
                       }
                       "THEMES" -> {
-                          // 3D-смартфон с круглой оранжевой палитрой художника (exact со скриншота!)
-                          paint.color = Color.parseColor("#102030")
-                          rect.set(cx - r * 0.75f, cy - r * 0.85f, cx + r * 0.35f, cy + r * 0.75f)
-                          canvas.drawRoundRect(rect, 10f, 10f, paint)
-                          paint.color = Color.parseColor("#29B6F6")
-                          rect.set(cx - r * 0.62f, cy - r * 0.68f, cx + r * 0.22f, cy + r * 0.58f)
-                          canvas.drawRoundRect(rect, 6f, 6f, paint)
-                          // Выступающий 3D-кружок палитры справа внизу
-                          paint.color = badge3DColor
-                          canvas.drawCircle(cx + r * 0.38f, cy + r * 0.38f + 5f, r * 0.58f, paint)
                           paint.color = badgeColor
-                          canvas.drawCircle(cx + r * 0.38f, cy + r * 0.38f, r * 0.58f, paint)
+                          canvas.drawCircle(cx, cy, r * 0.78f, paint)
                           paint.color = Color.WHITE
-                          canvas.drawCircle(cx + r * 0.24f, cy + r * 0.26f, 4f, paint)
-                          canvas.drawCircle(cx + r * 0.48f, cy + r * 0.24f, 4f, paint)
-                          canvas.drawCircle(cx + r * 0.52f, cy + r * 0.46f, 4f, paint)
+                          canvas.drawCircle(cx - r * 0.26f, cy - r * 0.18f, 5f, paint)
+                          canvas.drawCircle(cx + r * 0.18f, cy - r * 0.24f, 5f, paint)
+                          canvas.drawCircle(cx + r * 0.28f, cy + r * 0.16f, 5f, paint)
                       }
                       "BUFFER" -> {
-                          // Объёмный 3D спидометр / молния подкачки
-                          paint.color = badge3DColor
-                          canvas.drawCircle(cx, cy + 5f, r * 0.90f, paint)
-                          paint.color = badgeColor
-                          canvas.drawCircle(cx, cy, r * 0.90f, paint)
                           path.reset()
-                          path.moveTo(cx + r * 0.12f, cy - r * 0.58f)
-                          path.lineTo(cx - r * 0.36f, cy + r * 0.06f)
+                          path.moveTo(cx + r * 0.12f, cy - r * 0.62f)
+                          path.lineTo(cx - r * 0.38f, cy + r * 0.06f)
                           path.lineTo(cx + r * 0.02f, cy + r * 0.06f)
-                          path.lineTo(cx - r * 0.14f, cy + r * 0.58f)
-                          path.lineTo(cx + r * 0.38f, cy - r * 0.08f)
+                          path.lineTo(cx - r * 0.14f, cy + r * 0.62f)
+                          path.lineTo(cx + r * 0.40f, cy - r * 0.08f)
                           path.lineTo(cx + r * 0.02f, cy - r * 0.08f)
                           path.close()
-                          paint.color = Color.WHITE
+                          paint.color = fgColor
                           canvas.drawPath(path, paint)
                       }
                       "DECODER" -> {
-                          // 3D кинохлопушка / объектив камеры со скриншота
-                          paint.color = Color.parseColor("#263238")
-                          canvas.drawCircle(cx, cy + 4f, r * 0.92f, paint)
                           val rainbow = intArrayOf(Color.RED, Color.YELLOW, Color.GREEN, Color.CYAN, Color.BLUE, Color.MAGENTA, Color.RED)
                           paint.shader = SweepGradient(cx, cy, rainbow, null)
-                          canvas.drawCircle(cx, cy, r * 0.85f, paint)
+                          canvas.drawCircle(cx, cy, r * 0.80f, paint)
                           paint.shader = null
-                          paint.color = Color.parseColor("#212121")
-                          canvas.drawCircle(cx, cy, r * 0.52f, paint)
+                          paint.color = Color.parseColor("#181818")
+                          canvas.drawCircle(cx, cy, r * 0.46f, paint)
                           paint.color = Color.WHITE
-                          canvas.drawCircle(cx + r * 0.16f, cy - r * 0.16f, r * 0.12f, paint)
+                          canvas.drawCircle(cx + r * 0.14f, cy - r * 0.14f, r * 0.11f, paint)
                       }
                       "EPG_GRID" -> {
-                          // 3D-плитка с цветными кружками-календарём (нижний ряд скриншота)
-                          val dotR = r * 0.22f
+                          val dotR = r * 0.20f
                           val colors = listOf("#FF5252", "#FFB300", "#00E676", "#00B0FF", "#E040FB", "#FFFFFF")
                           var idx = 0
                           for (row in -1..0) {
                               for (col in -1..1) {
-                                  val dx = cx + col * (r * 0.62f)
-                                  val dy = cy + row * (r * 0.62f) + (r * 0.25f)
-                                  paint.color = Color.parseColor("#44000000")
-                                  canvas.drawCircle(dx, dy + 4f, dotR, paint)
+                                  val dx = cx + col * (r * 0.58f)
+                                  val dy = cy + row * (r * 0.58f) + (r * 0.24f)
                                   paint.color = Color.parseColor(colors[idx % colors.size])
                                   canvas.drawCircle(dx, dy, dotR, paint)
                                   idx++
@@ -2494,77 +2502,58 @@ jobs:
                           }
                       }
                       "TOP_CHANNELS" -> {
-                          // 3D-щит с золотой короной (как на правом скриншоте)
-                          paint.color = badge3DColor
-                          canvas.drawCircle(cx, cy + 5f, r * 0.9f, paint)
-                          paint.color = badgeColor
-                          canvas.drawCircle(cx, cy, r * 0.9f, paint)
                           path.reset()
-                          path.moveTo(cx - r * 0.48f, cy + r * 0.34f)
-                          path.lineTo(cx - r * 0.54f, cy - r * 0.28f)
+                          path.moveTo(cx - r * 0.48f, cy + r * 0.36f)
+                          path.lineTo(cx - r * 0.54f, cy - r * 0.30f)
                           path.lineTo(cx - r * 0.18f, cy + r * 0.02f)
-                          path.lineTo(cx, cy - r * 0.42f)
+                          path.lineTo(cx, cy - r * 0.44f)
                           path.lineTo(cx + r * 0.18f, cy + r * 0.02f)
-                          path.lineTo(cx + r * 0.54f, cy - r * 0.28f)
-                          path.lineTo(cx + r * 0.48f, cy + r * 0.34f)
+                          path.lineTo(cx + r * 0.54f, cy - r * 0.30f)
+                          path.lineTo(cx + r * 0.48f, cy + r * 0.36f)
                           path.close()
-                          paint.color = Color.WHITE
+                          paint.color = badgeColor
                           canvas.drawPath(path, paint)
                       }
                       "FAVORITES" -> {
-                          // 3D звезда
-                          paint.color = badge3DColor
-                          canvas.drawCircle(cx, cy + 5f, r * 0.9f, paint)
-                          paint.color = badgeColor
-                          canvas.drawCircle(cx, cy, r * 0.9f, paint)
                           path.reset()
                           for (i in 0 until 10) {
                               val a = Math.toRadians(-90.0 + i * 36.0)
-                              val rad = if (i % 2 == 0) r * 0.56f else r * 0.24f
+                              val rad = if (i % 2 == 0) r * 0.62f else r * 0.26f
                               val sx = cx + (rad * Math.cos(a)).toFloat()
                               val sy = cy + (rad * Math.sin(a)).toFloat()
                               if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
                           }
                           path.close()
-                          paint.color = Color.WHITE
+                          paint.color = badgeColor
                           canvas.drawPath(path, paint)
                       }
                       "AUDIO" -> {
-                          // 3D эквалайзер / динамик
-                          val widths = listOf(-0.55f, 0f, 0.55f)
-                          val heights = listOf(0.45f, 0.78f, 0.58f)
+                          val widths = listOf(-0.52f, 0f, 0.52f)
+                          val heights = listOf(0.42f, 0.76f, 0.56f)
                           for (i in widths.indices) {
                               val bx = cx + widths[i] * r
                               val bh = heights[i] * r
-                              paint.color = Color.parseColor("#44000000")
-                              rect.set(bx - 7f, cy - bh + 4f, bx + 7f, cy + bh + 4f)
-                              canvas.drawRoundRect(rect, 7f, 7f, paint)
-                              paint.color = if (i == 1) badgeColor else Color.WHITE
-                              rect.set(bx - 7f, cy - bh, bx + 7f, cy + bh)
-                              canvas.drawRoundRect(rect, 7f, 7f, paint)
+                              paint.color = if (i == 1) badgeColor else fgColor
+                              rect.set(bx - 6.5f, cy - bh, bx + 6.5f, cy + bh)
+                              canvas.drawRoundRect(rect, 6.5f, 6.5f, paint)
                           }
                       }
-                      "ASPECT" -> {
-                          // 3D экран 16:9
+                      "CONTROL_MODE" -> {
+                          // Иконка смартфона / пульта управления
                           paint.style = Paint.Style.STROKE
                           paint.strokeWidth = 5f
-                          paint.color = Color.WHITE
-                          rect.set(cx - r * 0.82f, cy - r * 0.54f, cx + r * 0.82f, cy + r * 0.54f)
+                          paint.color = fgColor
+                          rect.set(cx - r * 0.48f, cy - r * 0.76f, cx + r * 0.48f, cy + r * 0.76f)
                           canvas.drawRoundRect(rect, 10f, 10f, paint)
                           paint.style = Paint.Style.FILL
                           paint.color = badgeColor
-                          canvas.drawCircle(cx, cy, r * 0.24f, paint)
+                          canvas.drawCircle(cx, cy + r * 0.44f, 6f, paint)
                       }
                       else -> {
-                          // 3D шестерёнка / Дополнительно ("Полное меню")
-                          paint.color = badge3DColor
-                          canvas.drawCircle(cx, cy + 5f, r * 0.85f, paint)
-                          paint.color = badgeColor
-                          canvas.drawCircle(cx, cy, r * 0.85f, paint)
-                          paint.color = Color.WHITE
-                          canvas.drawCircle(cx - r * 0.42f, cy, 6.5f, paint)
+                          paint.color = fgColor
+                          canvas.drawCircle(cx - r * 0.45f, cy, 6.5f, paint)
                           canvas.drawCircle(cx, cy, 6.5f, paint)
-                          canvas.drawCircle(cx + r * 0.42f, cy, 6.5f, paint)
+                          canvas.drawCircle(cx + r * 0.45f, cy, 6.5f, paint)
                       }
                   }
               }
@@ -2579,26 +2568,35 @@ jobs:
 
               private lateinit var sidePanel: LinearLayout
               private lateinit var sideModeTitle: TextView
+              private lateinit var btnTouchBackToGroups: TextView
               private lateinit var infoPanel: LinearLayout
               private lateinit var centerOsdPanel: LinearLayout
               private lateinit var settingsTileOverlay: LinearLayout
               private lateinit var subModalOverlay: LinearLayout
               private lateinit var fullEpgOverlay: LinearLayout
+              private lateinit var firstRunModeOverlay: FrameLayout
               private lateinit var splashOverlay: FrameLayout
               private lateinit var splashEyeView: RealisticEyeSplashView
 
+              private val allGridTiles = mutableListOf<ThemedTileView>()
               private val menuHistory = mutableListOf<String>()
 
-              // Пункт 2: Состояние левого меню (true = открыт только список каналов, false = открыт только список групп)
               private var isSideShowingChannels = true
-              // Флаг первого нажатия Влево после старта приложения с сохранённым каналом
               private var openChannelsDirectlyWithCurrentFocus = true
+
+              // Пункт 1: Режим управления (0 = не выбран при первом старте, 1 = Сенсор/Жесты, 2 = Пульт ТВ)
+              private var controlMode = 0
+              private lateinit var gestureDetector: GestureDetector
 
               private lateinit var infoTextView: TextView
               private lateinit var clockTextView: TextView
               private lateinit var analyzerStatusBanner: TextView
               private lateinit var signalContainer: LinearLayout
               private val signalBars = mutableListOf<View>()
+
+              private lateinit var btnIconPlaylists: TextView
+              private lateinit var btnIconSettings: TextView
+              private lateinit var btnIconAnalyzer: TextView
 
               private lateinit var osdChannelTitle: TextView
               private lateinit var osdEpgCurrentTitle: TextView
@@ -2607,6 +2605,11 @@ jobs:
               private lateinit var osdEpgNextAndDesc: TextView
               private lateinit var btnOsdFav: TextView
               private lateinit var btnOsdTop: TextView
+              private lateinit var btnOsdEpgList: TextView
+              private lateinit var btnOsdSettings: TextView
+              private lateinit var btnOsdAnalyzer: TextView
+              private lateinit var btnOsdAudio: TextView
+              private lateinit var btnOsdPlaylist: TextView
 
               private lateinit var fullEpgTitle: TextView
               private lateinit var fullEpgListView: ListView
@@ -2624,7 +2627,6 @@ jobs:
               private val allChannels = CopyOnWriteArrayList<Channel>()
               private val displayedChannels = CopyOnWriteArrayList<Channel>()
               private val favoriteUrls = ConcurrentHashMap.newKeySet<String>()
-              // Пункт 1: Набор каналов, закреплённых в ТОПе своей группы (не Избранное!)
               private val topUrls = ConcurrentHashMap.newKeySet<String>()
               private val disabledUrls = ConcurrentHashMap.newKeySet<String>()
               private val disabledCategories = ConcurrentHashMap.newKeySet<String>()
@@ -2651,66 +2653,84 @@ jobs:
               private var activePlaylistIndex = 0
               private var bufferLevel = 2
               private var decoderMode = 1
-              private var themeIndex = 0 // 0 = Material Design 3 по умолчанию
+              private var themeIndex = 0
               private var isFullScreenStretch = true
-              private var vipToken = BuiltinCatalog.defaultToken
               private var lastBackPressTime = 0L
               private var bufferingStuckSeconds = 0
               private var currentBrowseDir: File = Environment.getExternalStorageDirectory()
 
-              private val condensedFont = Typeface.create("sans-serif-condensed", Typeface.NORMAL)
-              private val condensedBoldFont = Typeface.create("sans-serif-condensed", Typeface.BOLD)
-
-              // Пункт 4: Популярные темы оформления (включая обязательную Material Design 3)
+              // Пункт 2: 5 тем, у каждой СВОЙ шрифт и СВОИ иконки во всех меню
               private val themes = listOf(
                   AppThemeStyle(
-                      "Material Design 3 (Google Dark)",
+                      0,
+                      "Material Design 3 (Google Pixel)",
                       Color.parseColor("#EE1E1F22"),
                       Color.parseColor("#FF2B2D30"),
                       Color.parseColor("#FFA8C7FA"),
                       Color.parseColor("#66A8C7FA"),
                       Color.parseColor("#FF062E6F"),
-                      28f
+                      28f,
+                      Typeface.create("sans-serif-medium", Typeface.NORMAL),
+                      Typeface.create("sans-serif-medium", Typeface.BOLD),
+                      "▤", "⚙", "◎", "▲", "★", "📅", "♫"
                   ),
                   AppThemeStyle(
-                      "Cyber Neon Glass",
+                      1,
+                      "Cyber Neon Glass (Monospace)",
                       Color.parseColor("#DF0B0914"),
                       Color.parseColor("#FF231F38"),
                       Color.parseColor("#FF00E5FF"),
                       Color.parseColor("#6600E5FF"),
                       Color.parseColor("#FF0B0914"),
-                      22f
+                      20f,
+                      Typeface.MONOSPACE,
+                      Typeface.create(Typeface.MONOSPACE, Typeface.BOLD),
+                      "❖", "⚡", "📡", "🔥", "✦", "◷", "🔊"
                   ),
                   AppThemeStyle(
-                      "AMOLED Pure Black",
-                      Color.parseColor("#F4000000"),
-                      Color.parseColor("#FF141414"),
+                      2,
+                      "AMOLED Pure Black (Condensed)",
+                      Color.parseColor("#F6000000"),
+                      Color.parseColor("#FF121212"),
                       Color.parseColor("#FF00E676"),
                       Color.parseColor("#6600E676"),
                       Color.parseColor("#FF000000"),
-                      18f
+                      16f,
+                      Typeface.create("sans-serif-condensed", Typeface.NORMAL),
+                      Typeface.create("sans-serif-condensed", Typeface.BOLD),
+                      "☰", "⛭", "◉", "⬆", "✪", "▤", "♪"
                   ),
                   AppThemeStyle(
-                      "Nordic Frost Blue",
+                      3,
+                      "Nordic Frost (Light Sans)",
                       Color.parseColor("#EC1B222D"),
                       Color.parseColor("#FF2E3440"),
                       Color.parseColor("#FF88C0D0"),
                       Color.parseColor("#6688C0D0"),
                       Color.parseColor("#FF1B222D"),
-                      24f
+                      24f,
+                      Typeface.create("sans-serif-light", Typeface.NORMAL),
+                      Typeface.create("sans-serif", Typeface.BOLD),
+                      "🗂", "⚙", "❄", "👑", "☆", "🗓", "🔉"
                   ),
                   AppThemeStyle(
-                      "Sunset Warm Retro",
+                      4,
+                      "Sunset Warm Retro (Classic Serif)",
                       Color.parseColor("#EE1F130E"),
                       Color.parseColor("#FF36221A"),
                       Color.parseColor("#FFFFB300"),
                       Color.parseColor("#66FFB300"),
                       Color.parseColor("#FF1F130E"),
-                      24f
+                      24f,
+                      Typeface.SERIF,
+                      Typeface.create(Typeface.SERIF, Typeface.BOLD),
+                      "📻", "🛠", "📡", "🏆", "★", "📖", "🔔"
                   )
               )
 
               private fun currentTheme(): AppThemeStyle = themes[themeIndex.coerceIn(0, themes.lastIndex)]
+              private fun themeFont(): Typeface = currentTheme().normalFont
+              private fun themeBoldFont(): Typeface = currentTheme().boldFont
 
               private val categories = listOf(
                   "★ Избранное",
@@ -2751,7 +2771,7 @@ jobs:
                       val currentMenu = menuHistory.last()
                       if ((currentMenu == "ANALYZER_GROUP_VIEW" || currentMenu == "ANALYZER_GROUPS") && isAnalyzerRunning) {
                           collapseAnalyzerToTopBar()
-                      } else if (currentMenu != "TOKEN" && currentMenu != "EPG" && currentMenu != "ADD_URL" && currentMenu != "MANUAL_PATH") {
+                      } else if (currentMenu != "EPG" && currentMenu != "ADD_URL" && currentMenu != "MANUAL_PATH") {
                           closeAllMenus()
                       }
                   }
@@ -2778,7 +2798,7 @@ jobs:
               private fun resetMenuInactivityTimer() {
                   uiHandler.removeCallbacks(autoHideMenuRunnable)
                   if (menuHistory.isNotEmpty()) {
-                      uiHandler.postDelayed(autoHideMenuRunnable, 7000L)
+                      uiHandler.postDelayed(autoHideMenuRunnable, 7500L)
                   }
               }
 
@@ -2800,6 +2820,7 @@ jobs:
                   }
               }
 
+              // Пункт 2: Обновление цветов, уникальных шрифтов и уникальных иконок для выбранной темы
               private fun applyCurrentThemeToAllPanels() {
                   val t = currentTheme()
                   sidePanel.background = makeThemedPanelBg()
@@ -2812,10 +2833,46 @@ jobs:
                   channelListView.background = makeThemedSubBg()
                   subModalList.background = makeThemedSubBg()
                   fullEpgListView.background = makeThemedSubBg()
+
                   osdChannelTitle.setTextColor(t.accentColor)
+                  osdChannelTitle.typeface = t.boldFont
+                  osdEpgCurrentTitle.typeface = t.boldFont
+                  osdEpgTimeLabel.typeface = t.normalFont
+                  osdEpgNextAndDesc.typeface = t.normalFont
+
                   subModalTitle.setTextColor(t.accentColor)
+                  subModalTitle.typeface = t.boldFont
                   fullEpgTitle.setTextColor(t.accentColor)
+                  fullEpgTitle.typeface = t.boldFont
                   sideModeTitle.setTextColor(t.accentColor)
+                  sideModeTitle.typeface = t.boldFont
+                  clockTextView.typeface = t.boldFont
+                  settingsSelectedLabel.typeface = t.boldFont
+                  infoTextView.typeface = t.normalFont
+                  currentChannelBanner.typeface = t.boldFont
+
+                  // Меняем иконки в верхней панели и в меню по центральной кнопке под активную тему
+                  btnIconPlaylists.text = t.iconPlaylists
+                  btnIconSettings.text = t.iconSettings
+                  btnIconAnalyzer.text = t.iconAnalyzer
+
+                  btnOsdEpgList.text = "${t.iconEpg} Программа"
+                  btnOsdSettings.text = "${t.iconSettings} Настройки"
+                  btnOsdAnalyzer.text = "${t.iconAnalyzer} Тест"
+                  btnOsdAudio.text = "${t.iconAudio} Звук"
+                  btnOsdPlaylist.text = "${t.iconPlaylists} Плейлист"
+
+                  for (btn in listOf(btnIconPlaylists, btnIconSettings, btnIconAnalyzer, btnOsdTop, btnOsdFav, btnOsdEpgList, btnOsdSettings, btnOsdAnalyzer, btnOsdAudio, btnOsdPlaylist, btnTouchBackToGroups)) {
+                      btn.typeface = t.boldFont
+                  }
+
+                  for (tile in allGridTiles) {
+                      tile.themeStyleId = t.id
+                  }
+
+                  updateCategoriesList()
+                  refreshChannelAdapter()
+                  updateCenterOsdContent()
               }
 
               private fun makeModernButton(label: String, isIconOnly: Boolean = false, onClick: () -> Unit): TextView {
@@ -2826,7 +2883,7 @@ jobs:
                       ellipsize = TextUtils.TruncateAt.END
                       gravity = Gravity.CENTER
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isIconOnly) 18f else 14f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       setTextColor(Color.WHITE)
                       val t = currentTheme()
                       background = GradientDrawable().apply {
@@ -2836,6 +2893,7 @@ jobs:
                       }
                       isFocusable = true
                       isFocusableInTouchMode = false
+                      isClickable = true
                       if (isIconOnly) {
                           setPadding(16, 10, 16, 10)
                           minWidth = 48
@@ -2874,6 +2932,7 @@ jobs:
 
                   requestStoragePermissionsIfNeeded()
                   loadSavedState()
+                  initTouchGestureDetector()
 
                   val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
 
@@ -2884,13 +2943,18 @@ jobs:
                           FrameLayout.LayoutParams.MATCH_PARENT,
                           FrameLayout.LayoutParams.MATCH_PARENT
                       )
+                      // Пункт 1: Поддержка сенсорных жестов прямо по видеоэкрану
+                      setOnTouchListener { _, event ->
+                          gestureDetector.onTouchEvent(event)
+                          true
+                      }
                   }
                   root.addView(playerView)
 
                   clockTextView = TextView(this).apply {
                       setTextColor(Color.WHITE)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       background = GradientDrawable().apply {
                           setColor(Color.parseColor("#900B0914"))
                           cornerRadius = 14f
@@ -2908,7 +2972,7 @@ jobs:
                   analyzerStatusBanner = TextView(this).apply {
                       setTextColor(Color.parseColor("#00E5FF"))
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       background = GradientDrawable().apply {
                           setColor(Color.parseColor("#E00B0914"))
                           cornerRadius = 18f
@@ -2952,7 +3016,6 @@ jobs:
                   }
                   root.addView(signalContainer)
 
-                  // Пункт 2: Одноколоночное левое меню (показывает ЛИБО группы, ЛИБО каналы, шрифт увеличен на 20%)
                   sidePanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       background = makeThemedPanelBg()
@@ -2971,25 +3034,32 @@ jobs:
                       setPadding(0, 0, 0, 8)
                   }
 
-                  val btnIconPlaylists = makeModernButton("🗂", true) {
+                  val t = currentTheme()
+                  btnIconPlaylists = makeModernButton(t.iconPlaylists, true) {
                       navigateToMenu("PLAYLISTS")
                   }
-                  val btnIconSettings = makeModernButton("⚙", true) {
+                  btnIconSettings = makeModernButton(t.iconSettings, true) {
                       navigateToMenu("SETTINGS")
                   }
-                  val btnIconAnalyzer = makeModernButton("📡", true) {
+                  btnIconAnalyzer = makeModernButton(t.iconAnalyzer, true) {
                       navigateToMenu("ANALYZER_GROUPS")
                   }
+                  // Кнопка переключения Группы <-> Каналы для удобного нажатия пальцем на телефоне
+                  btnTouchBackToGroups = makeModernButton("◀ Группы") {
+                      if (isSideShowingChannels) showSideGroupsMode() else showSideChannelsMode(focusTop = true)
+                  }
+
                   topBar.addView(btnIconPlaylists)
                   topBar.addView(btnIconSettings)
                   topBar.addView(btnIconAnalyzer)
+                  topBar.addView(btnTouchBackToGroups)
 
                   activePlaylistLabel = TextView(this).apply {
                       setTextColor(Color.parseColor("#B2EBF2"))
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                      typeface = condensedBoldFont
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                      typeface = themeBoldFont()
                       isSingleLine = true
-                      setPadding(10, 0, 0, 0)
+                      setPadding(8, 0, 0, 0)
                   }
                   topBar.addView(activePlaylistLabel)
                   sidePanel.addView(topBar)
@@ -2998,8 +3068,11 @@ jobs:
                       text = "Каналы"
                       setTextColor(currentTheme().accentColor)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       setPadding(4, 2, 4, 10)
+                      setOnClickListener {
+                          if (isSideShowingChannels) showSideGroupsMode() else showSideChannelsMode(focusTop = true)
+                      }
                   }
                   sidePanel.addView(sideModeTitle)
 
@@ -3055,7 +3128,7 @@ jobs:
                       text = "Параметры канала"
                       setTextColor(Color.parseColor("#00E5FF"))
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       setPadding(0, 0, 0, 8)
                   }
                   infoPanel.addView(infoTitle)
@@ -3063,13 +3136,12 @@ jobs:
                   infoTextView = TextView(this).apply {
                       setTextColor(Color.WHITE)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                      typeface = condensedFont
+                      typeface = themeFont()
                       setLineSpacing(4f, 1f)
                   }
                   infoPanel.addView(infoTextView)
                   root.addView(infoPanel)
 
-                  // Центральное меню по кнопке OK (Пункт 1: добавлена кнопка "🔥 В ТОП")
                   centerOsdPanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       background = makeThemedPanelBg()
@@ -3085,7 +3157,7 @@ jobs:
                   osdChannelTitle = TextView(this).apply {
                       setTextColor(currentTheme().accentColor)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       gravity = Gravity.CENTER_HORIZONTAL
                   }
                   centerOsdPanel.addView(osdChannelTitle)
@@ -3093,7 +3165,7 @@ jobs:
                   osdEpgCurrentTitle = TextView(this).apply {
                       setTextColor(Color.WHITE)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       gravity = Gravity.CENTER_HORIZONTAL
                       setPadding(0, 4, 0, 2)
                   }
@@ -3102,7 +3174,7 @@ jobs:
                   osdEpgTimeLabel = TextView(this).apply {
                       setTextColor(Color.parseColor("#B0BEC5"))
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                      typeface = condensedFont
+                      typeface = themeFont()
                       gravity = Gravity.CENTER_HORIZONTAL
                   }
                   centerOsdPanel.addView(osdEpgTimeLabel)
@@ -3120,7 +3192,7 @@ jobs:
                   osdEpgNextAndDesc = TextView(this).apply {
                       setTextColor(Color.parseColor("#E0E0E0"))
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                      typeface = condensedFont
+                      typeface = themeFont()
                       gravity = Gravity.CENTER_HORIZONTAL
                       setPadding(0, 0, 0, 12)
                   }
@@ -3135,27 +3207,27 @@ jobs:
                       )
                   }
 
-                  btnOsdTop = makeModernButton("🔥 В ТОП") {
+                  btnOsdTop = makeModernButton("${t.iconTop} В ТОП") {
                       currentChannel?.let { toggleTopChannel(it) }
                       updateCenterOsdContent()
                   }
-                  btnOsdFav = makeModernButton("★ Избранное") {
+                  btnOsdFav = makeModernButton("${t.iconFav} Избранное") {
                       currentChannel?.let { toggleFavorite(it) }
                       updateCenterOsdContent()
                   }
-                  val btnOsdEpgList = makeModernButton("📅 Программа") {
+                  btnOsdEpgList = makeModernButton("${t.iconEpg} Программа") {
                       navigateToMenu("FULL_EPG")
                   }
-                  val btnOsdSettings = makeModernButton("⚙ Настройки") {
+                  btnOsdSettings = makeModernButton("${t.iconSettings} Настройки") {
                       navigateToMenu("SETTINGS")
                   }
-                  val btnOsdAnalyzer = makeModernButton("📡 Тест") {
+                  btnOsdAnalyzer = makeModernButton("${t.iconAnalyzer} Тест") {
                       navigateToMenu("ANALYZER_GROUPS")
                   }
-                  val btnOsdAudio = makeModernButton("🔊 Звук") {
+                  btnOsdAudio = makeModernButton("${t.iconAudio} Звук") {
                       navigateToMenu("AUDIO")
                   }
-                  val btnOsdPlaylist = makeModernButton("🗂 Плейлист") {
+                  btnOsdPlaylist = makeModernButton("${t.iconPlaylists} Плейлист") {
                       navigateToMenu("PLAYLISTS")
                   }
 
@@ -3186,7 +3258,7 @@ jobs:
                   fullEpgTitle = TextView(this).apply {
                       setTextColor(currentTheme().accentColor)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       setPadding(0, 0, 0, 12)
                   }
                   fullEpgOverlay.addView(fullEpgTitle)
@@ -3202,7 +3274,7 @@ jobs:
                   fullEpgOverlay.addView(fullEpgListView)
                   root.addView(fullEpgOverlay)
 
-                  // Пункты 5 и 6: Крупное центральное меню настроек Сетка 4 на 3 с прямыми 3D-иконками в стиле Tigad Pro
+                  // Сетка 4 на 3 с тематическими иконками
                   settingsTileOverlay = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       gravity = Gravity.CENTER
@@ -3220,7 +3292,7 @@ jobs:
                       text = "Плейлисты"
                       setTextColor(Color.WHITE)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       gravity = Gravity.CENTER
                       setPadding(0, 20, 0, 0)
                   }
@@ -3228,29 +3300,24 @@ jobs:
                   data class GridTileSpec(val iconType: String, val baseHex: String, val accentHex: String, val title: String, val action: () -> Unit)
 
                   val gridSpecs = listOf(
-                      // Ряд 1 (4 плитки)
                       GridTileSpec("PLAYLISTS", "#1B8A6B", "#FFB300", "Плейлисты") { navigateToMenu("PLAYLISTS") },
                       GridTileSpec("EDITOR", "#2E5B9A", "#00E676", "Редактор каналов") { navigateToMenu("CHANNEL_EDITOR_GROUPS") },
                       GridTileSpec("ANALYZER", "#5E35B1", "#00E5FF", "Анализатор каналов") { navigateToMenu("ANALYZER_GROUPS") },
-                      GridTileSpec("THEMES", "#1E4E79", "#FF8F00", "Темы оформления (Material Design)") { navigateToMenu("THEMES") },
-                      // Ряд 2 (4 плитки)
+                      GridTileSpec("THEMES", "#1E4E79", "#FF8F00", "Темы оформления и шрифты") { navigateToMenu("THEMES") },
                       GridTileSpec("BUFFER", "#D84315", "#FFD600", "Буфер подкачки") { navigateToMenu("BUFFER") },
                       GridTileSpec("DECODER", "#37474F", "#00B0FF", "Декодер видео и звука") { navigateToMenu("DECODER") },
                       GridTileSpec("EPG_GRID", "#00695C", "#FF4081", "Программа передач") { navigateToMenu("FULL_EPG") },
                       GridTileSpec("TOP_CHANNELS", "#283593", "#FFC107", "Управление ТОП-каналами") { navigateToMenu("TOP_MANAGER") },
-                      // Ряд 3 (4 плитки с заделом под расширение)
                       GridTileSpec("FAVORITES", "#AD1457", "#FFD54F", "★ Избранные каналы") {
                           selectCategory(0)
                           isSideShowingChannels = true
                           navigateToMenu("SIDE")
                       },
                       GridTileSpec("AUDIO", "#0277BD", "#69F0AE", "Выбор аудиодорожки") { navigateToMenu("AUDIO") },
-                      GridTileSpec("ASPECT", "#455A64", "#40C4FF", "Формат экрана (Растянуть / 16:9)") {
-                          isFullScreenStretch = !isFullScreenStretch
-                          playerView.resizeMode = if (isFullScreenStretch) AspectRatioFrameLayout.RESIZE_MODE_FILL else AspectRatioFrameLayout.RESIZE_MODE_FIT
-                          Toast.makeText(this, if (isFullScreenStretch) "Экран: На весь экран" else "Экран: Оригинальные пропорции", Toast.LENGTH_SHORT).show()
+                      GridTileSpec("CONTROL_MODE", "#00838F", "#FFD54F", "Режим управления (Сенсор / Пульт)") {
+                          showFirstRunControlPicker(forceShow = true)
                       },
-                      GridTileSpec("MORE", "#4A148C", "#FFAB00", "Полное меню (Ключ VIP и адрес EPG)") { navigateToMenu("MORE_SETTINGS") }
+                      GridTileSpec("MORE", "#4A148C", "#FFAB00", "Дополнительно (Настройка EPG и Формат)") { navigateToMenu("MORE_SETTINGS") }
                   )
 
                   val gridContainer = LinearLayout(this).apply {
@@ -3258,7 +3325,8 @@ jobs:
                       gravity = Gravity.CENTER
                   }
 
-                  val tileViewsMatrix = Array(3) { arrayOfNulls<Tigad3DTileView>(4) }
+                  val tileViewsMatrix = Array(3) { arrayOfNulls<ThemedTileView>(4) }
+                  allGridTiles.clear()
 
                   for (rowIdx in 0 until 3) {
                       val rowLayout = LinearLayout(this).apply {
@@ -3268,9 +3336,11 @@ jobs:
                       for (colIdx in 0 until 4) {
                           val specIdx = rowIdx * 4 + colIdx
                           val spec = gridSpecs[specIdx]
-                          val tile = Tigad3DTileView(this, spec.iconType, spec.baseHex, spec.accentHex).apply {
+                          val tile = ThemedTileView(this, spec.iconType, spec.baseHex, spec.accentHex).apply {
+                              themeStyleId = currentTheme().id
                               isFocusable = true
                               isFocusableInTouchMode = false
+                              isClickable = true
                               id = 5000 + specIdx
                               layoutParams = LinearLayout.LayoutParams(132, 132).apply {
                                   setMargins(12, 10, 12, 10)
@@ -3283,17 +3353,18 @@ jobs:
                                   }
                               }
                               setOnClickListener {
+                                  settingsSelectedLabel.text = spec.title
                                   resetMenuInactivityTimer()
                                   spec.action()
                               }
                           }
+                          allGridTiles.add(tile)
                           tileViewsMatrix[rowIdx][colIdx] = tile
                           rowLayout.addView(tile)
                       }
                       gridContainer.addView(rowLayout)
                   }
 
-                  // Настраиваем явную навигацию пульта 4x3 между плитками
                   for (r in 0 until 3) {
                       for (c in 0 until 4) {
                           val v = tileViewsMatrix[r][c] ?: continue
@@ -3323,7 +3394,7 @@ jobs:
                   subModalTitle = TextView(this).apply {
                       setTextColor(currentTheme().accentColor)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       setPadding(0, 0, 0, 10)
                   }
                   subModalOverlay.addView(subModalTitle)
@@ -3356,7 +3427,7 @@ jobs:
                   currentChannelBanner = TextView(this).apply {
                       setTextColor(Color.WHITE)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                      typeface = condensedBoldFont
+                      typeface = themeBoldFont()
                       background = makeThemedPanelBg()
                       setPadding(22, 12, 22, 12)
                       visibility = View.GONE
@@ -3367,6 +3438,18 @@ jobs:
                       ).apply { setMargins(26, 0, 26, 26) }
                   }
                   root.addView(currentChannelBanner)
+
+                  // Пункт 1: Первое окно выбора управления (Сенсорное или Пульт) при установке приложения
+                  firstRunModeOverlay = FrameLayout(this).apply {
+                      setBackgroundColor(Color.parseColor("#E608070D"))
+                      visibility = View.GONE
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.MATCH_PARENT
+                      )
+                  }
+                  buildFirstRunControlPickerView()
+                  root.addView(firstRunModeOverlay)
 
                   splashOverlay = FrameLayout(this).apply {
                       setBackgroundColor(Color.BLACK)
@@ -3393,15 +3476,12 @@ jobs:
                   initPlayer()
                   startClockAndWatchdogUpdater()
 
-                  // Пункт 2: Шрифт в левом меню увеличен на 20% (17.5sp вместо 14sp)
                   categoryAdapter = createCompactAdapter(mutableListOf(), 17.5f)
                   categoryListView.adapter = categoryAdapter
 
                   channelAdapter = createCompactAdapter(mutableListOf(), 17.5f)
                   channelListView.adapter = channelAdapter
 
-                  // Пункт 2: Навигация внутри одноколоночного левого меню:
-                  // В списке групп: нажатие OK или Вправо скрывает группы и открывает каналы, курсор ВСЕГДА сверху (индекс 0)
                   categoryListView.setOnItemClickListener { _, _, position, _ ->
                       resetMenuInactivityTimer()
                       selectCategory(position)
@@ -3427,7 +3507,6 @@ jobs:
                       }
                   }
 
-                  // В списке каналов: нажатие Влево скрывает список каналов и открывает список групп, курсор на активной группе!
                   channelListView.setOnKeyListener { _, keyCode, event ->
                       if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                           resetMenuInactivityTimer()
@@ -3461,15 +3540,155 @@ jobs:
                       true
                   }
 
+                  applyCurrentThemeToAllPanels()
                   loadActivePlaylist(autoPlayLast = true)
                   loadEpgInBackground()
               }
 
-              // Пункт 2: Переключение левой панели в режим показа только СПИСКА КАНАЛОВ
+              // Пункт 1: Сборка стартового окна выбора управления (Сенсор / Пульт)
+              private fun buildFirstRunControlPickerView() {
+                  firstRunModeOverlay.removeAllViews()
+                  val card = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      gravity = Gravity.CENTER
+                      background = makeThemedPanelBg()
+                      setPadding(48, 40, 48, 40)
+                      layoutParams = FrameLayout.LayoutParams(
+                          880,
+                          FrameLayout.LayoutParams.WRAP_CONTENT,
+                          Gravity.CENTER
+                      )
+                  }
+
+                  val title = TextView(this).apply {
+                      text = "Выберите режим управления"
+                      setTextColor(Color.WHITE)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+                      typeface = themeBoldFont()
+                      gravity = Gravity.CENTER
+                  }
+                  val subtitle = TextView(this).apply {
+                      text = "Свайпы и касания для телефона или кнопки пульта для ТВ-приставки"
+                      setTextColor(Color.parseColor("#B0BEC5"))
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                      typeface = themeFont()
+                      gravity = Gravity.CENTER
+                      setPadding(0, 8, 0, 28)
+                  }
+                  card.addView(title)
+                  card.addView(subtitle)
+
+                  val row = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER
+                  }
+
+                  val btnTouchMode = makeModernButton("📱 Сенсорное (Жесты)\nСмартфон / Планшет") {
+                      controlMode = 1
+                      saveState()
+                      firstRunModeOverlay.visibility = View.GONE
+                      btnTouchBackToGroups.visibility = View.VISIBLE
+                      Toast.makeText(this, "Включено управление жестами: Свайп Вверх/Вниз — каналы, Вправо — список, Касание — меню", Toast.LENGTH_LONG).show()
+                  }.apply {
+                      setPadding(34, 28, 34, 28)
+                      isSingleLine = false
+                      maxLines = 3
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+                  }
+
+                  val btnRemoteMode = makeModernButton("📺 Пульт управления\nТВ-приставка / Телевизор") {
+                      controlMode = 2
+                      saveState()
+                      firstRunModeOverlay.visibility = View.GONE
+                      btnTouchBackToGroups.visibility = View.GONE
+                      Toast.makeText(this, "Включено управление пультом ТВ", Toast.LENGTH_SHORT).show()
+                  }.apply {
+                      setPadding(34, 28, 34, 28)
+                      isSingleLine = false
+                      maxLines = 3
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+                  }
+
+                  row.addView(btnTouchMode)
+                  row.addView(btnRemoteMode)
+                  card.addView(row)
+                  firstRunModeOverlay.addView(card)
+              }
+
+              private fun showFirstRunControlPicker(forceShow: Boolean = false) {
+                  if (controlMode == 0 || forceShow) {
+                      closeAllMenus()
+                      buildFirstRunControlPickerView()
+                      firstRunModeOverlay.visibility = View.VISIBLE
+                      val card = firstRunModeOverlay.getChildAt(0) as? LinearLayout
+                      val row = card?.getChildAt(2) as? LinearLayout
+                      row?.getChildAt(if (controlMode == 1) 0 else 1)?.requestFocus()
+                  }
+              }
+
+              // Пункт 1: Детектор жестов для смартфона (Свайпы Вверх/Вниз/Влево/Вправо, Одиночный и Двойной тап)
+              private fun initTouchGestureDetector() {
+                  gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+                      override fun onDown(e: MotionEvent): Boolean = true
+
+                      override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                          if (firstRunModeOverlay.visibility == View.VISIBLE) return true
+                          if (menuHistory.isNotEmpty()) {
+                              closeAllMenus()
+                          } else {
+                              navigateToMenu("OSD")
+                          }
+                          return true
+                      }
+
+                      override fun onDoubleTap(e: MotionEvent): Boolean {
+                          if (firstRunModeOverlay.visibility == View.VISIBLE) return true
+                          navigateToMenu("SETTINGS")
+                          return true
+                      }
+
+                      override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+                          if (e1 == null || firstRunModeOverlay.visibility == View.VISIBLE) return false
+                          val dx = e2.x - e1.x
+                          val dy = e2.y - e1.y
+                          val minSwipe = 85f
+
+                          if (abs(dx) > abs(dy) && abs(dx) > minSwipe) {
+                              if (dx > 0) {
+                                  // Свайп вправо -> открываем левое меню со списком каналов/групп
+                                  navigateToMenu("SIDE")
+                              } else {
+                                  // Свайп влево -> открываем окно информации о потоке (или закрываем левое меню)
+                                  if (menuHistory.lastOrNull() == "SIDE") {
+                                      closeAllMenus()
+                                  } else {
+                                      navigateToMenu("INFO")
+                                  }
+                              }
+                              return true
+                          } else if (abs(dy) > abs(dx) && abs(dy) > minSwipe) {
+                              if (menuHistory.isEmpty() || menuHistory.lastOrNull() == "OSD" || menuHistory.lastOrNull() == "INFO") {
+                                  if (dy < 0) {
+                                      // Свайп вверх -> следующий канал
+                                      switchChannelByOffset(+1)
+                                  } else {
+                                      // Свайп вниз -> предыдущий канал
+                                      switchChannelByOffset(-1)
+                                  }
+                                  return true
+                              }
+                          }
+                          return false
+                      }
+                  })
+              }
+
               private fun showSideChannelsMode(focusTop: Boolean, focusCurrentChannel: Boolean = false) {
                   isSideShowingChannels = true
                   val catName = categories.getOrElse(currentCategoryIndex) { "Все каналы" }
-                  sideModeTitle.text = "◀ Влево: Группы   •   $catName (${displayedChannels.size})"
+                  sideModeTitle.text = "◀ Группы   •   $catName (${displayedChannels.size})"
+                  btnTouchBackToGroups.text = "◀ Группы"
+                  btnTouchBackToGroups.visibility = if (controlMode == 1) View.VISIBLE else View.GONE
                   categoryListView.visibility = View.GONE
                   channelListView.visibility = View.VISIBLE
                   refreshChannelAdapter()
@@ -3489,10 +3708,11 @@ jobs:
                   }
               }
 
-              // Пункт 2: Переключение левой панели в режим показа только СПИСКА ГРУПП (курсор на активной группе)
               private fun showSideGroupsMode() {
                   isSideShowingChannels = false
-                  sideModeTitle.text = "Группы каналов   •   ▶ Вправо: Каналы"
+                  sideModeTitle.text = "Группы каналов   •   ▶ Каналы"
+                  btnTouchBackToGroups.text = "▶ Каналы"
+                  btnTouchBackToGroups.visibility = if (controlMode == 1) View.VISIBLE else View.GONE
                   updateCategoriesList()
                   channelListView.visibility = View.GONE
                   categoryListView.visibility = View.VISIBLE
@@ -3526,7 +3746,13 @@ jobs:
                                   .alpha(0f)
                                   .setDuration(600L)
                                   .setInterpolator(DecelerateInterpolator())
-                                  .withEndAction { splashOverlay.visibility = View.GONE }
+                                  .withEndAction {
+                                      splashOverlay.visibility = View.GONE
+                                      // Пункт 1: Если приложение установлено впервые (controlMode == 0), сразу после заставки открываем выбор Сенсор / Пульт
+                                      if (controlMode == 0) {
+                                          showFirstRunControlPicker(forceShow = true)
+                                      }
+                                  }
                                   .start()
                           }
                       }
@@ -3550,7 +3776,7 @@ jobs:
                   return object : ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_list_item_1, items) {
                       override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                           val tv = (super.getView(position, convertView, parent) as TextView)
-                          tv.typeface = condensedFont
+                          tv.typeface = themeFont()
                           tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, spSize)
                           tv.setTextColor(Color.WHITE)
                           tv.setPadding(18, 12, 18, 12)
@@ -3586,6 +3812,10 @@ jobs:
               }
 
               private fun navigateBackInMenu(): Boolean {
+                  if (firstRunModeOverlay.visibility == View.VISIBLE && controlMode != 0) {
+                      firstRunModeOverlay.visibility = View.GONE
+                      return true
+                  }
                   if (menuHistory.isEmpty()) return false
                   val leaving = menuHistory.removeAt(menuHistory.lastIndex)
                   if ((leaving == "ANALYZER_GROUP_VIEW" || leaving == "ANALYZER_GROUPS") && isAnalyzerRunning) {
@@ -3612,7 +3842,6 @@ jobs:
                       "SIDE" -> {
                           clockTextView.visibility = View.GONE
                           sidePanel.visibility = View.VISIBLE
-                          // Пункт 2: Если приложение запустило ранее включённый канал — открываем список каналов с курсором на этом канале!
                           if (openChannelsDirectlyWithCurrentFocus && currentChannel != null) {
                               openChannelsDirectlyWithCurrentFocus = false
                               val chCatIdx = categories.indexOf(currentChannel?.category ?: "Все каналы").takeIf { it >= 2 } ?: 1
@@ -3653,13 +3882,6 @@ jobs:
                       "BUFFER" -> openBufferSubModal()
                       "DECODER" -> openDecoderSubModal()
                       "AUDIO" -> openAudioSubModal()
-                      "TOKEN" -> openInputSubModal("Ключ доступа VIP-плейлиста", vipToken) { newVal ->
-                          if (newVal.isNotEmpty()) {
-                              vipToken = newVal
-                              saveState()
-                              loadActivePlaylist(autoPlayLast = false)
-                          }
-                      }
                       "EPG" -> openInputSubModal("Ссылка на телепрограмму XMLTV", epgUrl) { newVal ->
                           if (newVal.isNotEmpty()) {
                               epgUrl = newVal
@@ -3672,14 +3894,13 @@ jobs:
                   }
               }
 
-              // Пункт 4: Меню выбора темы оформления
               private fun openThemesSubModal() {
-                  subModalTitle.text = "🎨 Темы оформления интерфейса"
+                  subModalTitle.text = "${currentTheme().iconSettings} Темы оформления (Иконки + Шрифт)"
                   subModalInputContainer.visibility = View.GONE
                   subModalList.visibility = View.VISIBLE
 
                   val items = themes.mapIndexed { idx, t ->
-                      (if (idx == themeIndex) "●  " else "○  ") + t.name
+                      (if (idx == themeIndex) "●  " else "○  ") + "${t.iconPlaylists} ${t.iconSettings} ${t.iconTop}   " + t.name
                   }.toMutableList()
 
                   subModalList.adapter = createCompactAdapter(items, 16f)
@@ -3687,16 +3908,16 @@ jobs:
                       themeIndex = which
                       saveState()
                       applyCurrentThemeToAllPanels()
-                      Toast.makeText(this, "Тема: ${themes[which].name}", Toast.LENGTH_SHORT).show()
+                      Toast.makeText(this, "Применена тема: ${themes[which].name}", Toast.LENGTH_SHORT).show()
                       navigateBackInMenu()
                   }
                   subModalOverlay.visibility = View.VISIBLE
                   subModalList.requestFocus()
               }
 
-              // Пункт 1: Управление ТОП-каналами
               private fun openTopManagerSubModal() {
-                  subModalTitle.text = "🔥 Каналы, закреплённые в ТОПе групп (${topUrls.size})"
+                  val t = currentTheme()
+                  subModalTitle.text = "${t.iconTop} Каналы в ТОПе групп (${topUrls.size})"
                   subModalInputContainer.visibility = View.GONE
                   subModalList.visibility = View.VISIBLE
                   subModalTopButtons.visibility = View.VISIBLE
@@ -3713,9 +3934,9 @@ jobs:
 
                   val topChans = allChannels.filter { topUrls.contains(it.url) }
                   val labels = if (topChans.isEmpty()) {
-                      mutableListOf("ℹ  В ТОПе пока нет каналов. Нажмите центральную кнопку OK во время просмотра и выберите «🔥 В ТОП».")
+                      mutableListOf("ℹ  В ТОПе пока нет каналов. Откройте центральное меню и нажмите «${t.iconTop} В ТОП».")
                   } else {
-                      topChans.map { "🔥  ${it.name}  [${it.category}]  — нажмите OK, чтобы убрать из ТОПа" }.toMutableList()
+                      topChans.map { "${t.iconTop}  ${it.name}  [${it.category}]  — убрать из ТОПа" }.toMutableList()
                   }
 
                   subModalList.adapter = createCompactAdapter(labels, 15f)
@@ -3734,11 +3955,11 @@ jobs:
               private fun openFullScreenChannelEpg() {
                   val ch = currentChannel
                   val progs = getChannelEpgList(ch)
-                  val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
                   val dateFmt = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault())
                   val now = System.currentTimeMillis()
+                  val t = currentTheme()
 
-                  fullEpgTitle.text = "📅 Программа передач: " + (ch?.name ?: "Канал не выбран")
+                  fullEpgTitle.text = "${t.iconEpg} Программа передач: " + (ch?.name ?: "Канал не выбран")
                   val items = mutableListOf<String>()
                   var activeIndex = 0
 
@@ -3758,7 +3979,7 @@ jobs:
                               p.stopMs < now -> "✓ Прошло   "
                               else -> "🕒 Далее     "
                           }
-                          val timeRange = dateFmt.format(Date(p.startMs)) + " — " + timeFmt.format(Date(p.stopMs))
+                          val timeRange = dateFmt.format(Date(p.startMs)) + " — " + dateFmt.format(Date(p.stopMs))
                           val descPart = if (p.desc.isNotEmpty()) "\n      " + p.desc.take(140) else ""
                           items.add("$prefix$timeRange   •   ${p.title}$descPart")
                       }
@@ -3778,27 +3999,38 @@ jobs:
                   })
               }
 
+              // Пункт 3: Из дополнительных настроек убран VIP-токен
               private fun openMoreSettingsSubModal() {
-                  subModalTitle.text = "⋯ Полные настройки"
+                  val t = currentTheme()
+                  subModalTitle.text = "⋯ Дополнительные настройки"
                   subModalInputContainer.visibility = View.GONE
                   subModalList.visibility = View.VISIBLE
 
+                  val modeText = if (controlMode == 1) "Сенсорное (Жесты)" else "Пульт ТВ"
+                  val stretchText = if (isFullScreenStretch) "Растянуть на весь экран" else "Оригинальные пропорции"
+
                   val items = mutableListOf(
-                      "🔑  Ключ доступа VIP-плейлиста (Токен)",
-                      "📅  Адрес программы передач (XMLTV EPG)",
-                      "🔄  Принудительно обновить программу передач сейчас"
+                      "${t.iconEpg}  Адрес программы передач (XMLTV EPG)",
+                      "🔄  Принудительно обновить программу передач сейчас",
+                      "📱  Сменить режим управления (текущий: $modeText)",
+                      "🖥  Формат экрана (текущий: $stretchText)"
                   )
 
                   subModalList.adapter = createCompactAdapter(items, 16f)
                   subModalList.setOnItemClickListener { _, _, which, _ ->
                       resetMenuInactivityTimer()
                       when (which) {
-                          0 -> navigateToMenu("TOKEN")
-                          1 -> navigateToMenu("EPG")
-                          2 -> {
+                          0 -> navigateToMenu("EPG")
+                          1 -> {
                               Toast.makeText(this, "Запущено обновление телепрограммы...", Toast.LENGTH_SHORT).show()
                               loadEpgInBackground()
                               navigateBackInMenu()
+                          }
+                          2 -> showFirstRunControlPicker(forceShow = true)
+                          3 -> {
+                              isFullScreenStretch = !isFullScreenStretch
+                              playerView.resizeMode = if (isFullScreenStretch) AspectRatioFrameLayout.RESIZE_MODE_FILL else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                              openMoreSettingsSubModal()
                           }
                       }
                   }
@@ -4206,12 +4438,13 @@ jobs:
 
               private fun updateCenterOsdContent() {
                   val ch = currentChannel ?: return
+                  val t = currentTheme()
                   val isFav = favoriteUrls.contains(ch.url)
                   val isTop = topUrls.contains(ch.url)
-                  btnOsdTop.text = if (isTop) "🔥 Убрать из ТОПа" else "🔥 В ТОП"
-                  btnOsdFav.text = if (isFav) "★ В Избранном" else "☆ Избранное"
+                  btnOsdTop.text = if (isTop) "${t.iconTop} Убрать ТОП" else "${t.iconTop} В ТОП"
+                  btnOsdFav.text = if (isFav) "${t.iconFav} В Избранном" else "${t.iconFav} Избранное"
 
-                  val badges = (if (isTop) "🔥 " else "") + (if (isFav) "★ " else "")
+                  val badges = (if (isTop) "${t.iconTop} " else "") + (if (isFav) "${t.iconFav} " else "")
                   osdChannelTitle.text = badges + ch.name + "  •  " + ch.category
 
                   val (curr, next) = getCurrentAndNextEpg(ch)
@@ -4264,6 +4497,7 @@ jobs:
                   val aSampleRate = if (aFormat != null && aFormat.sampleRate > 0) aFormat.sampleRate.toString() + " Гц" else ""
                   val bufSec = p.totalBufferedDuration / 1000L
                   val preloadedCount = synchronized(preloadedLock) { preloadedNeighbors.size }
+                  val modeStr = if (controlMode == 1) "Сенсорное (Жесты)" else "Пульт ТВ"
 
                   val (epg, _) = getCurrentAndNextEpg(ch)
                   val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -4279,6 +4513,7 @@ jobs:
                       "Разрешение: " + width + "x" + height + " " + fps + " (" + vCodec + ")\n" +
                       "Поток: " + vBitrate + "  •  Буфер: " + bufSec + " сек\n" +
                       "Предзагрузка соседних: " + preloadedCount + " из 2 готовы ⚡\n" +
+                      "Управление: " + modeStr + "\n" +
                       "Тема: " + currentTheme().name + "\n" +
                       "Звук: " + aCodec + " " + aChannels + " " + aSampleRate + "\n\n" +
                       epgLine
@@ -4286,7 +4521,7 @@ jobs:
 
               private fun openPlaylistsSubModal() {
                   ensureDefaultPlaylists()
-                  subModalTitle.text = "Плейлисты"
+                  subModalTitle.text = "${currentTheme().iconPlaylists} Плейлисты"
                   subModalInputContainer.visibility = View.GONE
                   subModalList.visibility = View.VISIBLE
 
@@ -4298,7 +4533,7 @@ jobs:
 
                   items.add("➕  Добавить по ссылке (URL)")
                   items.add("📂  Проводник: выбрать файл с устройства / USB")
-                  if (snapshot.size > 2 && activePlaylistIndex >= 2) {
+                  if (snapshot.size > 1 && activePlaylistIndex >= 1) {
                       items.add("🗑  Удалить выбранный плейлист")
                   }
 
@@ -4319,7 +4554,7 @@ jobs:
                               navigateToMenu("FILE_BROWSER")
                           }
                           else -> {
-                              if (activePlaylistIndex >= 2 && activePlaylistIndex < playlists.size) {
+                              if (activePlaylistIndex >= 1 && activePlaylistIndex < playlists.size) {
                                   playlists.removeAt(activePlaylistIndex)
                                   activePlaylistIndex = 0
                                   saveState()
@@ -4520,7 +4755,7 @@ jobs:
                   val deadTotal = channelHealthMap.values.count { !it }
                   val revivedUrls = snapshot.filter { disabledUrls.contains(it.url) && channelHealthMap[it.url] == true }.map { it.url }
 
-                  subModalTitle.text = "📡 Анализатор каналов по группам (🟢 $aliveTotal  •  🔴 $deadTotal)"
+                  subModalTitle.text = "${currentTheme().iconAnalyzer} Анализатор каналов по группам (🟢 $aliveTotal  •  🔴 $deadTotal)"
                   subModalInputContainer.visibility = View.GONE
                   subModalList.visibility = View.VISIBLE
                   subModalTopButtons.visibility = View.VISIBLE
@@ -4591,7 +4826,7 @@ jobs:
                   val dead = groupChans.count { channelHealthMap[it.url] == false }
                   val revived = groupChans.filter { disabledUrls.contains(it.url) && channelHealthMap[it.url] == true }
 
-                  subModalTitle.text = "📡 Группа: $catName (Всего: ${groupChans.size}  •  🟢 $alive  •  🔴 $dead)"
+                  subModalTitle.text = "${currentTheme().iconAnalyzer} Группа: $catName (Всего: ${groupChans.size}  •  🟢 $alive  •  🔴 $dead)"
                   subModalInputContainer.visibility = View.GONE
                   subModalList.visibility = View.VISIBLE
                   subModalTopButtons.visibility = View.VISIBLE
@@ -4660,7 +4895,6 @@ jobs:
                   subModalList.requestFocus()
               }
 
-              // Пункт 7: Устранено зависание анализатора на последних 1-2 каналах (жёсткий таймаут + чтение 64 байт вместо бесконечного readLine)
               private fun startBackgroundChannelAnalyzer(targetChannels: List<Channel>) {
                   if (isAnalyzerRunning || targetChannels.isEmpty()) return
                   isAnalyzerRunning = true
@@ -4669,7 +4903,7 @@ jobs:
                   val total = snapshot.size
                   val counter = AtomicInteger(0)
 
-                  analyzerStatusBanner.text = "📡 Тест: 0 / $total"
+                  analyzerStatusBanner.text = "${currentTheme().iconAnalyzer} Тест: 0 / $total"
                   analyzerStatusBanner.visibility = View.VISIBLE
 
                   thread {
@@ -4685,7 +4919,7 @@ jobs:
                                       val aliveCount = snapshot.count { channelHealthMap[it.url] == true }
                                       val deadCount = snapshot.count { channelHealthMap[it.url] == false }
                                       if (isAnalyzerRunning && done < total) {
-                                          analyzerStatusBanner.text = "📡 Тест: $done / $total   •   🟢 $aliveCount   🔴 $deadCount"
+                                          analyzerStatusBanner.text = "${currentTheme().iconAnalyzer} Тест: $done / $total   •   🟢 $aliveCount   🔴 $deadCount"
                                           val curMenu = menuHistory.lastOrNull()
                                           if (curMenu == "ANALYZER_GROUP_VIEW") {
                                               openAnalyzerGroupChannelsModal(selectedAnalyzerCategory)
@@ -4699,12 +4933,10 @@ jobs:
                       }
                       pool.shutdown()
                       try {
-                          // Даже если 1-2 сервера "зависли" на уровне сокета, ждём максимум 25 секунд и принудительно завершаем тест!
                           pool.awaitTermination(25, TimeUnit.SECONDS)
                       } catch (_: Exception) {}
                       pool.shutdownNow()
 
-                      // Помечаем любые оставшиеся непроверенные зависшие потоки как нерабочие
                       for (ch in snapshot) {
                           if (!channelHealthMap.containsKey(ch.url)) {
                               channelHealthMap[ch.url] = false
@@ -4734,7 +4966,6 @@ jobs:
                   }
               }
 
-              // Пункт 7: Безопасная проверка потока с принудительным закрытием сокета через 3.2 секунды
               private fun checkStreamAliveWithHardTimeout(urlStr: String): Boolean {
                   var conn: HttpURLConnection? = null
                   return try {
@@ -4818,7 +5049,7 @@ jobs:
                       navigateBackInMenu()
                       return
                   }
-                  subModalTitle.text = "Аудиодорожка"
+                  subModalTitle.text = "${currentTheme().iconAudio} Аудиодорожка"
                   subModalInputContainer.visibility = View.GONE
                   subModalList.visibility = View.VISIBLE
 
@@ -4855,6 +5086,7 @@ jobs:
                   val input = EditText(this).apply {
                       setText(initialValue)
                       setTextColor(Color.WHITE)
+                      typeface = themeFont()
                       setSingleLine()
                   }
                   subModalInputContainer.addView(input)
@@ -4889,12 +5121,14 @@ jobs:
                       hint = "Название плейлиста"
                       setTextColor(Color.WHITE)
                       setHintTextColor(Color.GRAY)
+                      typeface = themeFont()
                       setSingleLine()
                   }
                   val urlInput = EditText(this).apply {
                       hint = "http://... (.m3u8)"
                       setTextColor(Color.WHITE)
                       setHintTextColor(Color.GRAY)
+                      typeface = themeFont()
                       setSingleLine()
                   }
                   subModalInputContainer.addView(nameInput)
@@ -4996,17 +5230,16 @@ jobs:
                   return byNormName.values.toList()
               }
 
+              // Пункт 3: Встроенный VIP-плейлист убран из сборки (оставлен только основной открытый плейлист + пользовательские)
               private fun ensureDefaultPlaylists() {
+                  playlists.removeAll { it.source == "BUILTIN_VIP_PROVIDER" }
                   if (playlists.isEmpty()) {
-                      playlists.add(PlaylistEntry("1. Открытые RU + 2K + Sport/Music EN", "BUILTIN_OPEN_RU", false))
-                      playlists.add(PlaylistEntry("2. VIP Провайдер", "BUILTIN_VIP_PROVIDER", false))
-                  } else {
-                      if (playlists.none { it.source == "BUILTIN_OPEN_RU" }) {
-                          playlists.add(0, PlaylistEntry("1. Открытые RU + 2K + Sport/Music EN", "BUILTIN_OPEN_RU", false))
-                      }
-                      if (playlists.none { it.source == "BUILTIN_VIP_PROVIDER" }) {
-                          playlists.add(1, PlaylistEntry("2. VIP Провайдер", "BUILTIN_VIP_PROVIDER", false))
-                      }
+                      playlists.add(PlaylistEntry("Основной (RU + 2K + Sport/Music EN)", "BUILTIN_OPEN_RU", false))
+                  } else if (playlists.none { it.source == "BUILTIN_OPEN_RU" }) {
+                      playlists.add(0, PlaylistEntry("Основной (RU + 2K + Sport/Music EN)", "BUILTIN_OPEN_RU", false))
+                  }
+                  if (activePlaylistIndex !in playlists.indices) {
+                      activePlaylistIndex = 0
                   }
               }
 
@@ -5016,21 +5249,12 @@ jobs:
 
               private fun loadActivePlaylist(autoPlayLast: Boolean) {
                   ensureDefaultPlaylists()
-                  if (activePlaylistIndex !in playlists.indices) activePlaylistIndex = 0
                   val entry = playlists[activePlaylistIndex]
                   updateTopLabel()
 
                   thread {
                       try {
                           val finalChannels: List<Channel> = when {
-                              entry.source == "BUILTIN_VIP_PROVIDER" -> {
-                                  val rawVip = BuiltinCatalog.buildVipChannels(vipToken)
-                                  rawVip.map { ch ->
-                                      if (ch.name.contains("4K", true) || ch.name.contains("UHD", true) || ch.name.contains("2K", true)) {
-                                          Channel(ch.name, ch.url, "2K", ch.tvgId)
-                                      } else ch
-                                  }
-                              }
                               entry.source == "BUILTIN_OPEN_RU" -> {
                                   val combinedLines = mutableListOf<String>()
                                   for (srcUrl in openRusSources) {
@@ -5120,7 +5344,6 @@ jobs:
                   updateTopLabel()
               }
 
-              // Пункт 1: Сортировка внутри группы — каналы с меткой "В ТОПе" (topUrls) всегда идут в самом верху списка!
               private fun selectCategory(index: Int) {
                   if (index !in categories.indices) return
                   currentCategoryIndex = index
@@ -5146,9 +5369,10 @@ jobs:
 
               private fun refreshChannelAdapter() {
                   val snapshot = displayedChannels.toList()
+                  val t = currentTheme()
                   val formatted = snapshot.mapIndexed { i, ch ->
-                      val topBadge = if (topUrls.contains(ch.url)) "🔥 " else ""
-                      val starBadge = if (favoriteUrls.contains(ch.url)) "★ " else ""
+                      val topBadge = if (topUrls.contains(ch.url)) "${t.iconTop} " else ""
+                      val starBadge = if (favoriteUrls.contains(ch.url)) "${t.iconFav} " else ""
                       val (epg, _) = getCurrentAndNextEpg(ch)
                       val epgSuffix = if (epg != null) " • " + epg.title else ""
                       (i + 1).toString() + ". " + topBadge + starBadge + ch.name + epgSuffix
@@ -5158,14 +5382,13 @@ jobs:
                   channelAdapter.notifyDataSetChanged()
               }
 
-              // Пункт 1: Переключение канала "В ТОП" (перемещает вверх списка группы)
               private fun toggleTopChannel(ch: Channel) {
                   if (topUrls.contains(ch.url)) {
                       topUrls.remove(ch.url)
                       Toast.makeText(this, "Убрано из ТОПа: ${ch.name}", Toast.LENGTH_SHORT).show()
                   } else {
                       topUrls.add(ch.url)
-                      Toast.makeText(this, "🔥 Закреплено в ТОПе группы: ${ch.name}", Toast.LENGTH_SHORT).show()
+                      Toast.makeText(this, "${currentTheme().iconTop} Закреплено в ТОПе группы: ${ch.name}", Toast.LENGTH_SHORT).show()
                   }
                   saveState()
                   selectCategory(currentCategoryIndex)
@@ -5194,8 +5417,9 @@ jobs:
                       player?.play()
                   } catch (_: Exception) {}
 
-                  val topBadge = if (topUrls.contains(channel.url)) "🔥 " else ""
-                  val star = if (favoriteUrls.contains(channel.url)) "★ " else ""
+                  val t = currentTheme()
+                  val topBadge = if (topUrls.contains(channel.url)) "${t.iconTop} " else ""
+                  val star = if (favoriteUrls.contains(channel.url)) "${t.iconFav} " else ""
                   val (epg, _) = getCurrentAndNextEpg(channel)
                   val epgLine = if (epg != null) "\n🎬 " + epg.title else ""
                   showBanner(topBadge + star + channel.name + "  •  " + channel.category + epgLine)
@@ -5228,6 +5452,7 @@ jobs:
                   val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
                   val arr = JSONArray()
                   for (p in playlists) {
+                      if (p.source == "BUILTIN_VIP_PROVIDER") continue
                       val obj = JSONObject()
                       obj.put("title", p.title)
                       obj.put("source", p.source)
@@ -5240,7 +5465,7 @@ jobs:
                       .putInt("buffer_level", bufferLevel)
                       .putInt("decoder_mode", decoderMode)
                       .putInt("theme_index", themeIndex)
-                      .putString("vip_token", vipToken)
+                      .putInt("control_mode_v13", controlMode)
                       .putString("epg_url", epgUrl)
                       .putString("last_channel_url", lastSavedChannelUrl)
                       .putStringSet("favorites", favoriteUrls.toSet())
@@ -5255,8 +5480,8 @@ jobs:
                   bufferLevel = prefs.getInt("buffer_level", 2)
                   decoderMode = prefs.getInt("decoder_mode", 1)
                   themeIndex = prefs.getInt("theme_index", 0)
+                  controlMode = prefs.getInt("control_mode_v13", 0)
                   activePlaylistIndex = prefs.getInt("active_playlist", 0)
-                  vipToken = prefs.getString("vip_token", BuiltinCatalog.defaultToken) ?: BuiltinCatalog.defaultToken
                   epgUrl = prefs.getString("epg_url", epgUrl) ?: epgUrl
                   lastSavedChannelUrl = prefs.getString("last_channel_url", "") ?: ""
 
@@ -5276,13 +5501,16 @@ jobs:
                           val arr = JSONArray(jsonStr)
                           for (i in 0 until arr.length()) {
                               val o = arr.getJSONObject(i)
-                              playlists.add(
-                                  PlaylistEntry(
-                                      o.getString("title"),
-                                      o.getString("source"),
-                                      o.getBoolean("isLocal")
+                              val src = o.getString("source")
+                              if (src != "BUILTIN_VIP_PROVIDER") {
+                                  playlists.add(
+                                      PlaylistEntry(
+                                          o.getString("title"),
+                                          src,
+                                          o.getBoolean("isLocal")
+                                      )
                                   )
-                              )
+                              }
                           }
                       } catch (_: Exception) {}
                   }
@@ -5294,6 +5522,13 @@ jobs:
                       resetMenuInactivityTimer()
                   }
                   return super.dispatchKeyEvent(event)
+              }
+
+              override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+                  if (ev.action == MotionEvent.ACTION_DOWN && menuHistory.isNotEmpty()) {
+                      resetMenuInactivityTimer()
+                  }
+                  return super.dispatchTouchEvent(ev)
               }
 
               private fun switchChannelByOffset(offset: Int) {
@@ -5323,6 +5558,10 @@ jobs:
                       return true
                   }
 
+                  if (firstRunModeOverlay.visibility == View.VISIBLE) {
+                      return super.onKeyDown(keyCode, event)
+                  }
+
                   if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP || keyCode == KeyEvent.KEYCODE_PAGE_UP) {
                       switchChannelByOffset(+1)
                       return true
@@ -5334,7 +5573,6 @@ jobs:
 
                   val activeMenu = menuHistory.lastOrNull()
 
-                  // В центральном меню OSD и окне INFO кнопки Вверх/Вниз переключают каналы (в SETTINGS 4x3 Вверх/Вниз ходят по рядам сетки)
                   if (activeMenu == null || activeMenu == "INFO" || activeMenu == "OSD") {
                       if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                           switchChannelByOffset(+1)
@@ -5423,10 +5661,10 @@ jobs:
           fi
           cp app/permanent_key.jks ~/.android/debug.keystore || true
           gradle assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk MiBox-IPTV-v1.2.${GITHUB_RUN_NUMBER}.apk
+          cp app/build/outputs/apk/debug/app-debug.apk MiBox-IPTV-v1.3.${GITHUB_RUN_NUMBER}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiBox-IPTV-v1.2.${{ github.run_number }}
-          path: MiBox-IPTV-v1.2.${{ github.run_number }}.apk
+          name: MiBox-IPTV-v1.3.${{ github.run_number }}
+          path: MiBox-IPTV-v1.3.${{ github.run_number }}.apk
