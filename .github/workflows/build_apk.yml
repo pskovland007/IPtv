@@ -6096,8 +6096,6 @@ jobs:
           ''')
           PYEOF
 
-      PYEOF
-
       - name: Step 3.6 - Fix TrackSelection Builder Reference
         run: |
           python3 - << 'PYEOF'
