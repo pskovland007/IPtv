@@ -1887,7 +1887,7 @@ jobs:
           ''')
           PYEOF
 
-      - name: Step 3.5 - Apply Patches v1.4
+      - name: Step 3.5 - Apply Patches v1.5
         run: |
           python3 - << 'PYEOF'
           import os, re
@@ -1895,12 +1895,11 @@ jobs:
           with open("app/build.gradle", "r") as f:
               g = f.read()
 
-          # Пункт 7: Ставим targetSdk 33 вместо 29, чтобы Google Play Protect на телефонах не блокировал APK как устаревший/подозрительный
           g = re.sub(r"targetSdk\s+\d+", "targetSdk 33", g)
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "40"))
-          new_ver_code = 5000 + run_num
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "45"))
+          new_ver_code = 6000 + run_num
           g = re.sub(r"versionCode\s+\d+", f"versionCode {new_ver_code}", g)
-          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "1.4.{run_num}"', g)
+          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "1.5.{run_num}"', g)
 
           signing_block = '''
               signingConfigs {
@@ -1923,42 +1922,115 @@ jobs:
           if "media3-datasource" not in g:
               g = g.replace(
                   'implementation "androidx.media3:media3-exoplayer:1.2.1"',
-                  'implementation "androidx.media3:media3-common:1.2.1"\n    implementation "androidx.media3:media3-datasource:1.2.1"\n    implementation "androidx.media3:media3-exoplayer:1.2.1"'
+                  'implementation "androidx.media3:media3-common:1.2.1"\n    implementation "androidx.media3:media3-datasource:1.2.1"\n    implementation "androidx.media3:media3-extractor:1.2.1"\n    implementation "androidx.media3:media3-exoplayer:1.2.1"'
               )
           with open("app/build.gradle", "w") as f:
               f.write(g)
 
-          # Добавляем русскоязычные киноканалы и 2K в BuiltinCatalog.kt (Пункт 3)
+          # Пункт 1: Масштабное расширение встроенного каталога каналов во ВСЕХ категориях (Познавательные, Детские, Развлечения, Кино, Новости, 2K)
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "r") as f:
               cat = f.read()
 
-          channels_ru_movies_and_2k = '''Channel("Мосфильм. Золотая коллекция HD", "https://ott-cdn.ucom.am/s48/index.m3u8", "Кино и сериалы", ""),
-                  Channel("Киносемья FHD (RU)", "https://sc.id-tv.kz/Kinosemya.m3u8", "Кино и сериалы", ""),
-                  Channel("Кинохит HD (RU)", "https://sc.id-tv.kz/Kinohit.m3u8", "Кино и сериалы", ""),
-                  Channel("Киносвидание HD (RU)", "https://sc.id-tv.kz/Kinosvidanie.m3u8", "Кино и сериалы", ""),
-                  Channel("Мужское Кино HD (RU)", "https://sc.id-tv.kz/Muzhskoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Наше Новое Кино HD (RU)", "https://sc.id-tv.kz/Nashe_novoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Кинокомедия HD (RU)", "https://sc.id-tv.kz/Kinokomediya.m3u8", "Кино и сериалы", ""),
-                  Channel("Киномикс HD (RU)", "https://sc.id-tv.kz/Kinomiks.m3u8", "Кино и сериалы", ""),
-                  Channel("Дом Кино Премиум HD (RU)", "https://sc.id-tv.kz/Dom_kino_premium.m3u8", "Кино и сериалы", ""),
-                  Channel("Дом Кино (RU)", "https://sc.id-tv.kz/Dom_kino.m3u8", "Кино и сериалы", ""),
+          massive_channels_pack = '''Channel("Мосфильм. Золотая коллекция HD", "https://ott-cdn.ucom.am/s48/index.m3u8", "Кино и сериалы", ""),
+                  Channel("Киносемья FHD", "https://sc.id-tv.kz/Kinosemya.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинохит HD", "https://sc.id-tv.kz/Kinohit.m3u8", "Кино и сериалы", ""),
+                  Channel("Киносвидание HD", "https://sc.id-tv.kz/Kinosvidanie.m3u8", "Кино и сериалы", ""),
+                  Channel("Мужское Кино HD", "https://sc.id-tv.kz/Muzhskoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Наше Новое Кино HD", "https://sc.id-tv.kz/Nashe_novoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинокомедия HD", "https://sc.id-tv.kz/Kinokomediya.m3u8", "Кино и сериалы", ""),
+                  Channel("Киномикс HD", "https://sc.id-tv.kz/Kinomiks.m3u8", "Кино и сериалы", ""),
+                  Channel("Дом Кино Премиум HD", "https://sc.id-tv.kz/Dom_kino_premium.m3u8", "Кино и сериалы", ""),
+                  Channel("Дом Кино", "https://sc.id-tv.kz/Dom_kino.m3u8", "Кино и сериалы", ""),
                   Channel("Русский Иллюзион HD", "https://sc.id-tv.kz/Russkiy_illyuzion.m3u8", "Кино и сериалы", ""),
-                  Channel("Иллюзион+ HD (RU)", "https://sc.id-tv.kz/Illyuzion_plus.m3u8", "Кино и сериалы", ""),
-                  Channel("Еврокино HD (RU)", "https://sc.id-tv.kz/Evrokino.m3u8", "Кино и сериалы", ""),
+                  Channel("Иллюзион+ HD", "https://sc.id-tv.kz/Illyuzion_plus.m3u8", "Кино и сериалы", ""),
+                  Channel("Еврокино HD", "https://sc.id-tv.kz/Evrokino.m3u8", "Кино и сериалы", ""),
                   Channel("TV 1000 Русское Кино HD", "https://sc.id-tv.kz/TV1000_Russkoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000 HD (RU)", "https://sc.id-tv.kz/TV1000.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000 Action HD (RU)", "https://sc.id-tv.kz/TV1000_Action.m3u8", "Кино и сериалы", ""),
-                  Channel("Остросюжетное HD (RU)", "https://sc.id-tv.kz/Ostrosyuzhetnoe_HD.m3u8", "Кино и сериалы", ""),
-                  Channel("Комедийное HD (RU)", "https://sc.id-tv.kz/Komediya.m3u8", "Кино и сериалы", ""),
-                  Channel("Индийское Кино (RU)", "https://sc.id-tv.kz/Indiyskoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Родное Кино (RU)", "https://sc.id-tv.kz/Rodnoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Любимое Кино (RU)", "https://sc.id-tv.kz/Lyubimoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Мир Сериала (RU)", "https://sc.id-tv.kz/Mir_seriala.m3u8", "Кино и сериалы", ""),
-                  Channel("Русский Бестселлер (RU)", "https://sc.id-tv.kz/Russkiy_bestseller.m3u8", "Кино и сериалы", ""),
-                  Channel("Русский Детектив (RU)", "https://sc.id-tv.kz/Russkiy_detektiv.m3u8", "Кино и сериалы", ""),
-                  Channel("Русский Роман (RU)", "https://sc.id-tv.kz/Russkiy_roman.m3u8", "Кино и сериалы", ""),
-                  Channel("НСТ Страшное Кино (RU)", "https://sc.id-tv.kz/NST.m3u8", "Кино и сериалы", ""),
-                  Channel("Hollywood HD (RU)", "https://sc.id-tv.kz/Hollywood_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("TV 1000 HD", "https://sc.id-tv.kz/TV1000.m3u8", "Кино и сериалы", ""),
+                  Channel("TV 1000 Action HD", "https://sc.id-tv.kz/TV1000_Action.m3u8", "Кино и сериалы", ""),
+                  Channel("Остросюжетное HD", "https://sc.id-tv.kz/Ostrosyuzhetnoe_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Комедийное HD", "https://sc.id-tv.kz/Komediya.m3u8", "Кино и сериалы", ""),
+                  Channel("Индийское Кино", "https://sc.id-tv.kz/Indiyskoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Родное Кино", "https://sc.id-tv.kz/Rodnoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Любимое Кино", "https://sc.id-tv.kz/Lyubimoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Мир Сериала", "https://sc.id-tv.kz/Mir_seriala.m3u8", "Кино и сериалы", ""),
+                  Channel("Русский Бестселлер", "https://sc.id-tv.kz/Russkiy_bestseller.m3u8", "Кино и сериалы", ""),
+                  Channel("Русский Детектив", "https://sc.id-tv.kz/Russkiy_detektiv.m3u8", "Кино и сериалы", ""),
+                  Channel("Русский Роман", "https://sc.id-tv.kz/Russkiy_roman.m3u8", "Кино и сериалы", ""),
+                  Channel("НСТ Страшное Кино", "https://sc.id-tv.kz/NST.m3u8", "Кино и сериалы", ""),
+                  Channel("Hollywood HD", "https://sc.id-tv.kz/Hollywood_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Киноужас HD", "https://sc.id-tv.kz/Kinouzhas.m3u8", "Кино и сериалы", ""),
+                  Channel("Киносерия HD", "https://sc.id-tv.kz/Kinoseriya.m3u8", "Кино и сериалы", ""),
+                  Channel("Феникс+ Кино", "https://sc.id-tv.kz/Feniks_plus_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Discovery Channel HD", "https://sc.id-tv.kz/Discovery_channel.m3u8", "Познавательные", ""),
+                  Channel("National Geographic HD", "https://sc.id-tv.kz/Nat_Geo_HD.m3u8", "Познавательные", ""),
+                  Channel("Nat Geo Wild HD", "https://sc.id-tv.kz/Nat_Geo_Wild_HD.m3u8", "Познавательные", ""),
+                  Channel("Animal Planet HD", "https://sc.id-tv.kz/Animal_Planet_HD.m3u8", "Познавательные", ""),
+                  Channel("Моя Планета HD", "https://sc.id-tv.kz/Moya_planeta.m3u8", "Познавательные", ""),
+                  Channel("Наука 2.0 HD", "https://sc.id-tv.kz/Nauka.m3u8", "Познавательные", ""),
+                  Channel("История", "https://sc.id-tv.kz/Istoriya.m3u8", "Познавательные", ""),
+                  Channel("Viasat History HD", "https://sc.id-tv.kz/Viasat_History.m3u8", "Познавательные", ""),
+                  Channel("Viasat Explore HD", "https://sc.id-tv.kz/Viasat_Explore.m3u8", "Познавательные", ""),
+                  Channel("Viasat Nature HD", "https://sc.id-tv.kz/Viasat_Nature.m3u8", "Познавательные", ""),
+                  Channel("Живая Планета", "https://sc.id-tv.kz/Zhivaya_planeta.m3u8", "Познавательные", ""),
+                  Channel("Техно 24", "https://sc.id-tv.kz/Tehno_24.m3u8", "Познавательные", ""),
+                  Channel("Оружие", "https://sc.id-tv.kz/Oruzhie.m3u8", "Познавательные", ""),
+                  Channel("Охота и Рыбалка", "https://sc.id-tv.kz/Ohota_i_rybalka.m3u8", "Познавательные", ""),
+                  Channel("Дикая Охота HD", "https://sc.id-tv.kz/Dikaya_ohota.m3u8", "Познавательные", ""),
+                  Channel("Дикая Рыбалка HD", "https://sc.id-tv.kz/Dikaya_rybalka.m3u8", "Познавательные", ""),
+                  Channel("Авто Плюс", "https://sc.id-tv.kz/Avto_plyus.m3u8", "Познавательные", ""),
+                  Channel("Драйв ТВ", "https://sc.id-tv.kz/Drayv.m3u8", "Познавательные", ""),
+                  Channel("Телепутешествия", "https://sc.id-tv.kz/Teleputeshestviya.m3u8", "Познавательные", ""),
+                  Channel("Зоопарк", "https://sc.id-tv.kz/Zoopark.m3u8", "Познавательные", ""),
+                  Channel("Домашние Животные", "https://sc.id-tv.kz/Domashnie_zhivotnye.m3u8", "Познавательные", ""),
+                  Channel("Психология 21", "https://sc.id-tv.kz/Psihologiya_21.m3u8", "Познавательные", ""),
+                  Channel("Вопросы и Ответы", "https://sc.id-tv.kz/Voprosy_i_otvety.m3u8", "Познавательные", ""),
+                  Channel("Карусель", "https://sc.id-tv.kz/Karusel.m3u8", "Детские", ""),
+                  Channel("Мульт HD", "https://sc.id-tv.kz/Mult.m3u8", "Детские", ""),
+                  Channel("Мультиландия", "https://sc.id-tv.kz/Multimaniya.m3u8", "Детские", ""),
+                  Channel("Детский Мир", "https://sc.id-tv.kz/Detskiy_mir.m3u8", "Детские", ""),
+                  Channel("СТС Kids HD", "https://sc.id-tv.kz/STS_Kids.m3u8", "Детские", ""),
+                  Channel("О! Детский", "https://sc.id-tv.kz/O.m3u8", "Детские", ""),
+                  Channel("Рыжий", "https://sc.id-tv.kz/Ryzhiy.m3u8", "Детские", ""),
+                  Channel("Радость Моя", "https://sc.id-tv.kz/Radost_moya.m3u8", "Детские", ""),
+                  Channel("В гостях у сказки", "https://sc.id-tv.kz/V_gostyah_u_skazki.m3u8", "Детские", ""),
+                  Channel("Gulli Girl", "https://sc.id-tv.kz/Gulli_Girl.m3u8", "Детские", ""),
+                  Channel("Tiji Детский", "https://sc.id-tv.kz/TiJi.m3u8", "Детские", ""),
+                  Channel("Nickelodeon", "https://sc.id-tv.kz/Nickelodeon.m3u8", "Детские", ""),
+                  Channel("Nick Jr.", "https://sc.id-tv.kz/Nick_Jr.m3u8", "Детские", ""),
+                  Channel("Cartoon Network", "https://sc.id-tv.kz/Cartoon_Network.m3u8", "Детские", ""),
+                  Channel("Ani Мультфильмы", "https://sc.id-tv.kz/Ani.m3u8", "Детские", ""),
+                  Channel("ТНТ HD", "https://sc.id-tv.kz/TNT_HD.m3u8", "Развлечения", ""),
+                  Channel("ТНТ4", "https://sc.id-tv.kz/TNT4.m3u8", "Развлечения", ""),
+                  Channel("СТС HD", "https://sc.id-tv.kz/STS_HD.m3u8", "Развлечения", ""),
+                  Channel("СТС Love", "https://sc.id-tv.kz/STS_Love.m3u8", "Развлечения", ""),
+                  Channel("Пятница! HD", "https://sc.id-tv.kz/Pyatnica.m3u8", "Развлечения", ""),
+                  Channel("Суббота!", "https://sc.id-tv.kz/Subbota.m3u8", "Развлечения", ""),
+                  Channel("Че!", "https://sc.id-tv.kz/Che.m3u8", "Развлечения", ""),
+                  Channel("Ю ТВ", "https://sc.id-tv.kz/Yu.m3u8", "Развлечения", ""),
+                  Channel("Домашний HD", "https://sc.id-tv.kz/Domashniy.m3u8", "Развлечения", ""),
+                  Channel("КВН ТВ", "https://sc.id-tv.kz/KVN_TV.m3u8", "Развлечения", ""),
+                  Channel("Сарафан", "https://sc.id-tv.kz/Sarafan.m3u8", "Развлечения", ""),
+                  Channel("Кухня ТВ", "https://sc.id-tv.kz/Kuhnya_TV.m3u8", "Развлечения", ""),
+                  Channel("Еда Премиум HD", "https://sc.id-tv.kz/Eda_HD.m3u8", "Развлечения", ""),
+                  Channel("TLC HD", "https://sc.id-tv.kz/TLC.m3u8", "Развлечения", ""),
+                  Channel("Бобёр", "https://sc.id-tv.kz/Bober.m3u8", "Развлечения", ""),
+                  Channel("Усадьба", "https://sc.id-tv.kz/Usadba.m3u8", "Развлечения", ""),
+                  Channel("Первый канал HD", "https://sc.id-tv.kz/Perviy_kanal_HD.m3u8", "Новости и общие", ""),
+                  Channel("Россия 1 HD", "https://sc.id-tv.kz/Rossiya_1_HD.m3u8", "Новости и общие", ""),
+                  Channel("НТВ HD", "https://sc.id-tv.kz/NTV_HD.m3u8", "Новости и общие", ""),
+                  Channel("РЕН ТВ HD", "https://sc.id-tv.kz/Ren_TV.m3u8", "Новости и общие", ""),
+                  Channel("ТВ Центр (ТВЦ)", "https://sc.id-tv.kz/TVC.m3u8", "Новости и общие", ""),
+                  Channel("Пятый Канал", "https://sc.id-tv.kz/5_kanal.m3u8", "Новости и общие", ""),
+                  Channel("Звезда HD", "https://sc.id-tv.kz/Zvezda.m3u8", "Новости и общие", ""),
+                  Channel("МИР HD", "https://sc.id-tv.kz/Mir_HD.m3u8", "Новости и общие", ""),
+                  Channel("МИР 24", "https://sc.id-tv.kz/Mir_24.m3u8", "Новости и общие", ""),
+                  Channel("Россия 24", "https://sc.id-tv.kz/Rossiya_24.m3u8", "Новости и общие", ""),
+                  Channel("РБК ТВ", "https://sc.id-tv.kz/RBK.m3u8", "Новости и общие", ""),
+                  Channel("360° Подмосковье HD", "https://sc.id-tv.kz/360_Podmoskove.m3u8", "Новости и общие", ""),
+                  Channel("Москва 24", "https://sc.id-tv.kz/Moskva_24.m3u8", "Новости и общие", ""),
+                  Channel("ОТР", "https://sc.id-tv.kz/OTR.m3u8", "Новости и общие", ""),
+                  Channel("Спас", "https://sc.id-tv.kz/Spas.m3u8", "Новости и общие", ""),
+                  Channel("Россия К (Культура)", "https://sc.id-tv.kz/Rossiya_K.m3u8", "Новости и общие", ""),
                   Channel("Home 2K QuadHD Nature", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/love-nature-4k/manifest.m3u8", "2K", ""),
                   Channel("NASA TV 2K QHD", "https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8", "2K", ""),
                   Channel("Red Bull 2K Extreme", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master_3360.m3u8", "2K", ""),
@@ -1972,8 +2044,8 @@ jobs:
                   Channel("Clubbing TV 2K Ultra", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/clubbing-tv/manifest.m3u8", "2K", ""),
                   Channel("Deluxe Lounge 2K", "https://sdn-global-live-streaming-packager-cache.3qsdn.com/13456/13456_264_live.m3u8", "2K", ""),'''
 
-          if "Мосфильм. Золотая коллекция HD" not in cat:
-              cat = cat.replace("val extraOpenStreams = listOf(", "val extraOpenStreams = listOf(\n        " + channels_ru_movies_and_2k)
+          if "Discovery Channel HD" not in cat:
+              cat = cat.replace("val extraOpenStreams = listOf(", "val extraOpenStreams = listOf(\n        " + massive_channels_pack)
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "w") as f:
               f.write(cat)
 
@@ -2047,7 +2119,6 @@ jobs:
           with open("app/src/main/res/drawable/ic_banner.xml", "w") as f:
               f.write(realistic_eye_banner)
 
-          # Пункт 7: Убираем MANAGE_EXTERNAL_STORAGE (главный триггер Google Play Protect "Подозрительное приложение")
           with open("app/src/main/AndroidManifest.xml", "w") as f:
               f.write('''<?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -2079,7 +2150,7 @@ jobs:
               </application>
           </manifest>''')
 
-          # Записываем полный код MainActivity.kt (v1.4)
+          # Записываем полный код MainActivity.kt (v1.5)
           with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -2105,6 +2176,7 @@ jobs:
           import android.view.WindowInsetsController
           import android.view.WindowManager
           import android.view.animation.DecelerateInterpolator
+          import android.view.animation.OvershootInterpolator
           import android.widget.*
           import androidx.annotation.OptIn
           import androidx.appcompat.app.AppCompatActivity
@@ -2115,6 +2187,7 @@ jobs:
           import androidx.media3.common.MediaItem
           import androidx.media3.common.PlaybackException
           import androidx.media3.common.Player
+          import androidx.media3.common.Tracks
           import androidx.media3.common.TrackSelectionOverride
           import androidx.media3.common.util.UnstableApi
           import androidx.media3.datasource.DefaultHttpDataSource
@@ -2132,7 +2205,6 @@ jobs:
           import java.io.File
           import java.io.InputStream
           import java.net.HttpURLConnection
-          import java.net.InetAddress
           import java.net.URL
           import java.security.SecureRandom
           import java.security.cert.X509Certificate
@@ -2179,7 +2251,6 @@ jobs:
               val iconAudio: String
           )
 
-          // Пункт 10: Исправлены пропорции глаза (1:1 как на иконке, без растягивания по ширине экрана) + живая анимация взгляда и моргания
           class RealisticEyeSplashView(context: Context) : View(context) {
               var eyeOpenFraction: Float = 0.02f
                   set(value) {
@@ -2212,7 +2283,6 @@ jobs:
                   val cx = w / 2f
                   val cy = h / 2f
 
-                  // 1. Винтажные диагональные волны на фоне
                   canvas.drawColor(Color.parseColor("#D83A18"))
                   val waveStripes = listOf(
                       Triple(0.14f, -0.05f, "#EA7317"),
@@ -2238,13 +2308,11 @@ jobs:
                       canvas.drawPath(wavePath, paint)
                   }
 
-                  // Пункт 10: Привязываем размер глаза к квадрату min(w, h), чтобы пропорции были точными как на иконке (без растяжения!)
                   val unit = min(w, h)
                   val rx = unit * 0.36f
                   val maxRy = unit * 0.21f
                   val ry = maxRy * eyeOpenFraction
 
-                  // Мягкая тень под глазом как на иконке
                   outerEyePath.reset()
                   outerEyePath.moveTo(cx - rx * 1.06f, cy + unit * 0.025f)
                   outerEyePath.cubicTo(cx - rx * 0.55f, cy - ry * 1.75f, cx + rx * 0.55f, cy - ry * 1.75f, cx + rx * 1.06f, cy + unit * 0.025f)
@@ -2253,7 +2321,6 @@ jobs:
                   paint.color = Color.parseColor("#50000000")
                   canvas.drawPath(outerEyePath, paint)
 
-                  // 2. Тёмный контур века с естественным миндалевидным изгибом (Cubic Bezier как в SVG иконки)
                   outerEyePath.reset()
                   outerEyePath.moveTo(cx - rx * 1.06f, cy)
                   outerEyePath.cubicTo(cx - rx * 0.55f, cy - ry * 1.82f, cx + rx * 0.55f, cy - ry * 1.82f, cx + rx * 1.06f, cy)
@@ -2262,7 +2329,6 @@ jobs:
                   paint.color = Color.parseColor("#19130E")
                   canvas.drawPath(outerEyePath, paint)
 
-                  // Складка верхнего века слева
                   if (eyeOpenFraction > 0.2f) {
                       paint.style = Paint.Style.STROKE
                       paint.strokeWidth = unit * 0.012f
@@ -2275,7 +2341,6 @@ jobs:
                       paint.style = Paint.Style.FILL
                   }
 
-                  // Фигурные ресницы справа сверху (точные пропорции с иконки)
                   if (eyeOpenFraction > 0.15f) {
                       paint.color = Color.parseColor("#19130E")
                       lashPath.reset()
@@ -2295,7 +2360,6 @@ jobs:
                       canvas.drawPath(lashPath, paint)
                   }
 
-                  // 3. Внутренний разрез склеры
                   innerEyePath.reset()
                   innerEyePath.moveTo(cx - rx * 0.92f, cy)
                   innerEyePath.cubicTo(cx - rx * 0.48f, cy - ry * 1.54f, cx + rx * 0.48f, cy - ry * 1.54f, cx + rx * 0.92f, cy)
@@ -2315,7 +2379,6 @@ jobs:
                   canvas.drawPath(innerEyePath, paint)
                   paint.shader = null
 
-                  // Смещение центра радужки и зрачка при живом движении взгляда
                   val eyeCenterX = cx + lookOffsetX * (rx * 0.18f)
                   val irisRadius = maxRy * 0.96f
 
@@ -2362,14 +2425,12 @@ jobs:
                   paint.color = Color.parseColor("#070505")
                   canvas.drawCircle(eyeCenterX, cy, pupilR, paint)
 
-                  // Живые блики как на иконке
                   paint.color = Color.parseColor("#FFFFFF")
                   canvas.drawCircle(eyeCenterX + pupilR * 0.52f, cy - pupilR * 0.44f, pupilR * 0.25f, paint)
                   canvas.drawCircle(eyeCenterX + pupilR * 0.86f, cy - pupilR * 0.14f, pupilR * 0.11f, paint)
                   paint.color = Color.parseColor("#99FFFFFF")
                   canvas.drawCircle(eyeCenterX - pupilR * 0.56f, cy + pupilR * 0.50f, pupilR * 0.16f, paint)
 
-                  // Тень от верхнего века на глазном яблоке
                   paint.color = Color.parseColor("#33000000")
                   canvas.drawRect(cx - rx, cy - ry * 1.6f, cx + rx, cy - ry * 0.72f, paint)
 
@@ -2377,6 +2438,7 @@ jobs:
               }
           }
 
+          // Пункт 3 и 6: Векторная 3D-плитка для сетки 4x3 и для красивых кнопок в шапке левого меню
           class ThemedTileView(
               context: Context,
               private val iconType: String,
@@ -2410,21 +2472,23 @@ jobs:
                   super.onDraw(canvas)
                   val w = width.toFloat()
                   val h = height.toFloat()
-                  val pad = if (isTileFocused) 4f else 9f
+                  val minDim = min(w, h)
+                  val pad = if (isTileFocused) minDim * 0.04f else minDim * 0.08f
                   val mainColor = Color.parseColor(baseColorHex)
                   val badgeColor = Color.parseColor(accentColorHex)
 
-                  val depth = if (themeStyleId == 4 || themeStyleId == 3) 9f else 0f
+                  val depth = if (themeStyleId == 4 || themeStyleId == 3) minDim * 0.08f else 0f
                   val cy = (h - depth) / 2f
                   val cx = w / 2f
-                  val r = (w - pad * 2) * 0.28f
+                  val r = (minDim - pad * 2) * 0.30f
+                  val corner = minDim * 0.22f
 
                   when (themeStyleId) {
                       0 -> {
                           paint.style = Paint.Style.FILL
                           paint.color = if (isTileFocused) Color.parseColor("#A8C7FA") else Color.parseColor("#2B2D30")
                           rect.set(pad, pad, w - pad, h - pad)
-                          canvas.drawRoundRect(rect, 30f, 30f, paint)
+                          canvas.drawRoundRect(rect, corner * 1.2f, corner * 1.2f, paint)
                           paint.color = if (isTileFocused) Color.parseColor("#062E6F") else mainColor
                           canvas.drawCircle(cx, cy, r * 1.15f, paint)
                       }
@@ -2432,42 +2496,42 @@ jobs:
                           paint.style = Paint.Style.FILL
                           paint.color = if (isTileFocused) Color.parseColor("#3300E5FF") else Color.parseColor("#141024")
                           rect.set(pad, pad, w - pad, h - pad)
-                          canvas.drawRoundRect(rect, 18f, 18f, paint)
+                          canvas.drawRoundRect(rect, corner, corner, paint)
                           paint.style = Paint.Style.STROKE
                           paint.strokeWidth = if (isTileFocused) 3.5f else 2f
                           paint.color = if (isTileFocused) Color.WHITE else Color.parseColor("#00E5FF")
-                          canvas.drawRoundRect(rect, 18f, 18f, paint)
+                          canvas.drawRoundRect(rect, corner, corner, paint)
                       }
                       2 -> {
                           paint.style = Paint.Style.FILL
                           paint.color = Color.parseColor("#080808")
                           rect.set(pad, pad, w - pad, h - pad)
-                          canvas.drawRoundRect(rect, 16f, 16f, paint)
+                          canvas.drawRoundRect(rect, corner, corner, paint)
                           paint.style = Paint.Style.STROKE
                           paint.strokeWidth = if (isTileFocused) 3.5f else 1.5f
                           paint.color = if (isTileFocused) Color.parseColor("#00E676") else badgeColor
-                          canvas.drawCircle(cx, cy, r * 1.22f, paint)
+                          canvas.drawCircle(cx, cy, r * 1.20f, paint)
                       }
                       else -> {
                           if (isTileFocused) {
                               paint.style = Paint.Style.FILL
                               paint.color = Color.parseColor("#55FFFFFF")
                               rect.set(2f, 2f, w - 2f, h - 2f)
-                              canvas.drawRoundRect(rect, 24f, 24f, paint)
+                              canvas.drawRoundRect(rect, corner, corner, paint)
                           }
                           paint.style = Paint.Style.FILL
                           paint.color = darken(mainColor, 0.56f)
                           rect.set(pad, pad + depth, w - pad, h - pad)
-                          canvas.drawRoundRect(rect, 22f, 22f, paint)
+                          canvas.drawRoundRect(rect, corner, corner, paint)
 
                           paint.color = mainColor
                           rect.set(pad, pad, w - pad, h - pad - depth)
-                          canvas.drawRoundRect(rect, 22f, 22f, paint)
+                          canvas.drawRoundRect(rect, corner, corner, paint)
 
                           paint.style = Paint.Style.STROKE
                           paint.strokeWidth = if (isTileFocused) 3f else 1.5f
                           paint.color = if (isTileFocused) Color.WHITE else Color.parseColor("#55FFFFFF")
-                          canvas.drawRoundRect(rect, 22f, 22f, paint)
+                          canvas.drawRoundRect(rect, corner, corner, paint)
                       }
                   }
 
@@ -2482,15 +2546,39 @@ jobs:
                   when (iconType) {
                       "PLAYLISTS" -> {
                           for (i in -1..1) {
-                              val ly = cy + i * (r * 0.50f)
+                              val ly = cy + i * (r * 0.52f)
                               paint.color = fgColor
-                              rect.set(cx - r * 0.75f, ly - 4f, cx + r * 0.75f, ly + 4f)
+                              rect.set(cx - r * 0.72f, ly - r * 0.12f, cx + r * 0.72f, ly + r * 0.12f)
                               canvas.drawRoundRect(rect, 4f, 4f, paint)
                           }
                       }
+                      "SETTINGS_GEAR" -> {
+                          // Красивая векторная шестерёнка для шапки левого меню
+                          paint.color = fgColor
+                          for (deg in 0 until 360 step 45) {
+                              val rad = Math.toRadians(deg.toDouble())
+                              val tx = cx + (r * 0.72f * Math.cos(rad)).toFloat()
+                              val ty = cy + (r * 0.72f * Math.sin(rad)).toFloat()
+                              canvas.drawCircle(tx, ty, r * 0.20f, paint)
+                          }
+                          canvas.drawCircle(cx, cy, r * 0.68f, paint)
+                          paint.color = mainColor
+                          canvas.drawCircle(cx, cy, r * 0.32f, paint)
+                      }
+                      "SWAP_GROUPS" -> {
+                          // Две встречные стрелки переключения Группы <-> Каналы
+                          paint.style = Paint.Style.STROKE
+                          paint.strokeWidth = (r * 0.20f).coerceAtLeast(3.5f)
+                          paint.strokeCap = Paint.Cap.ROUND
+                          paint.color = fgColor
+                          canvas.drawLine(cx - r * 0.65f, cy - r * 0.28f, cx + r * 0.65f, cy - r * 0.28f, paint)
+                          canvas.drawLine(cx + r * 0.30f, cy - r * 0.58f, cx + r * 0.65f, cy - r * 0.28f, paint)
+                          canvas.drawLine(cx - r * 0.65f, cy + r * 0.28f, cx + r * 0.65f, cy + r * 0.28f, paint)
+                          canvas.drawLine(cx - r * 0.30f, cy + r * 0.58f, cx - r * 0.65f, cy + r * 0.28f, paint)
+                      }
                       "EDITOR" -> {
                           paint.style = Paint.Style.STROKE
-                          paint.strokeWidth = 5.5f
+                          paint.strokeWidth = (r * 0.22f).coerceAtLeast(4f)
                           paint.strokeCap = Paint.Cap.ROUND
                           paint.color = fgColor
                           canvas.drawLine(cx - r * 0.42f, cy + 2f, cx - r * 0.08f, cy + r * 0.36f, paint)
@@ -2501,30 +2589,30 @@ jobs:
                           paint.strokeCap = Paint.Cap.ROUND
                           for (ring in 1..3) {
                               val rad = r * (0.34f * ring)
-                              paint.strokeWidth = 5f
+                              paint.strokeWidth = (r * 0.16f).coerceAtLeast(3.5f)
                               paint.color = if (ring == 3) badgeColor else fgColor
-                              rect.set(cx - rad, cy - rad + 6f, cx + rad, cy + rad + 6f)
+                              rect.set(cx - rad, cy - rad + r * 0.20f, cx + rad, cy + rad + r * 0.20f)
                               canvas.drawArc(rect, 215f, 110f, false, paint)
                           }
                           paint.style = Paint.Style.FILL
                           paint.color = badgeColor
-                          canvas.drawCircle(cx, cy + r * 0.35f, 6f, paint)
+                          canvas.drawCircle(cx, cy + r * 0.35f, r * 0.18f, paint)
                       }
                       "THEMES" -> {
                           paint.color = badgeColor
-                          canvas.drawCircle(cx, cy, r * 0.78f, paint)
+                          canvas.drawCircle(cx, cy, r * 0.82f, paint)
                           paint.color = Color.WHITE
-                          canvas.drawCircle(cx - r * 0.26f, cy - r * 0.18f, 4.5f, paint)
-                          canvas.drawCircle(cx + r * 0.18f, cy - r * 0.24f, 4.5f, paint)
-                          canvas.drawCircle(cx + r * 0.28f, cy + r * 0.16f, 4.5f, paint)
+                          canvas.drawCircle(cx - r * 0.28f, cy - r * 0.18f, r * 0.15f, paint)
+                          canvas.drawCircle(cx + r * 0.18f, cy - r * 0.26f, r * 0.15f, paint)
+                          canvas.drawCircle(cx + r * 0.28f, cy + r * 0.18f, r * 0.15f, paint)
                       }
                       "BUFFER" -> {
                           path.reset()
-                          path.moveTo(cx + r * 0.12f, cy - r * 0.62f)
-                          path.lineTo(cx - r * 0.38f, cy + r * 0.06f)
+                          path.moveTo(cx + r * 0.12f, cy - r * 0.65f)
+                          path.lineTo(cx - r * 0.40f, cy + r * 0.06f)
                           path.lineTo(cx + r * 0.02f, cy + r * 0.06f)
-                          path.lineTo(cx - r * 0.14f, cy + r * 0.62f)
-                          path.lineTo(cx + r * 0.40f, cy - r * 0.08f)
+                          path.lineTo(cx - r * 0.14f, cy + r * 0.65f)
+                          path.lineTo(cx + r * 0.42f, cy - r * 0.08f)
                           path.lineTo(cx + r * 0.02f, cy - r * 0.08f)
                           path.close()
                           paint.color = fgColor
@@ -2533,15 +2621,15 @@ jobs:
                       "DECODER" -> {
                           val rainbow = intArrayOf(Color.RED, Color.YELLOW, Color.GREEN, Color.CYAN, Color.BLUE, Color.MAGENTA, Color.RED)
                           paint.shader = SweepGradient(cx, cy, rainbow, null)
-                          canvas.drawCircle(cx, cy, r * 0.80f, paint)
+                          canvas.drawCircle(cx, cy, r * 0.84f, paint)
                           paint.shader = null
                           paint.color = Color.parseColor("#181818")
-                          canvas.drawCircle(cx, cy, r * 0.46f, paint)
+                          canvas.drawCircle(cx, cy, r * 0.48f, paint)
                           paint.color = Color.WHITE
-                          canvas.drawCircle(cx + r * 0.14f, cy - r * 0.14f, r * 0.11f, paint)
+                          canvas.drawCircle(cx + r * 0.15f, cy - r * 0.15f, r * 0.12f, paint)
                       }
                       "EPG_GRID" -> {
-                          val dotR = r * 0.20f
+                          val dotR = r * 0.21f
                           val colors = listOf("#FF5252", "#FFB300", "#00E676", "#00B0FF", "#E040FB", "#FFFFFF")
                           var idx = 0
                           for (row in -1..0) {
@@ -2556,13 +2644,13 @@ jobs:
                       }
                       "TOP_CHANNELS" -> {
                           path.reset()
-                          path.moveTo(cx - r * 0.48f, cy + r * 0.36f)
-                          path.lineTo(cx - r * 0.54f, cy - r * 0.30f)
+                          path.moveTo(cx - r * 0.50f, cy + r * 0.38f)
+                          path.lineTo(cx - r * 0.56f, cy - r * 0.32f)
                           path.lineTo(cx - r * 0.18f, cy + r * 0.02f)
-                          path.lineTo(cx, cy - r * 0.44f)
+                          path.lineTo(cx, cy - r * 0.46f)
                           path.lineTo(cx + r * 0.18f, cy + r * 0.02f)
-                          path.lineTo(cx + r * 0.54f, cy - r * 0.30f)
-                          path.lineTo(cx + r * 0.48f, cy + r * 0.36f)
+                          path.lineTo(cx + r * 0.56f, cy - r * 0.32f)
+                          path.lineTo(cx + r * 0.50f, cy + r * 0.38f)
                           path.close()
                           paint.color = badgeColor
                           canvas.drawPath(path, paint)
@@ -2571,7 +2659,7 @@ jobs:
                           path.reset()
                           for (i in 0 until 10) {
                               val a = Math.toRadians(-90.0 + i * 36.0)
-                              val rad = if (i % 2 == 0) r * 0.62f else r * 0.26f
+                              val rad = if (i % 2 == 0) r * 0.66f else r * 0.28f
                               val sx = cx + (rad * Math.cos(a)).toFloat()
                               val sy = cy + (rad * Math.sin(a)).toFloat()
                               if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
@@ -2582,12 +2670,12 @@ jobs:
                       }
                       "AUDIO" -> {
                           val widths = listOf(-0.52f, 0f, 0.52f)
-                          val heights = listOf(0.42f, 0.76f, 0.56f)
+                          val heights = listOf(0.44f, 0.78f, 0.58f)
                           for (i in widths.indices) {
                               val bx = cx + widths[i] * r
                               val bh = heights[i] * r
                               paint.color = if (i == 1) badgeColor else fgColor
-                              rect.set(bx - 6f, cy - bh, bx + 6f, cy + bh)
+                              rect.set(bx - r * 0.16f, cy - bh, bx + r * 0.16f, cy + bh)
                               canvas.drawRoundRect(rect, 6f, 6f, paint)
                           }
                       }
@@ -2595,7 +2683,7 @@ jobs:
                           paint.style = Paint.Style.STROKE
                           paint.strokeWidth = 4.5f
                           paint.color = fgColor
-                          rect.set(cx - r * 0.48f, cy - r * 0.76f, cx + r * 0.48f, cy + r * 0.76f)
+                          rect.set(cx - r * 0.50f, cy - r * 0.78f, cx + r * 0.50f, cy + r * 0.78f)
                           canvas.drawRoundRect(rect, 9f, 9f, paint)
                           paint.style = Paint.Style.FILL
                           paint.color = badgeColor
@@ -2603,9 +2691,9 @@ jobs:
                       }
                       else -> {
                           paint.color = fgColor
-                          canvas.drawCircle(cx - r * 0.45f, cy, 6f, paint)
-                          canvas.drawCircle(cx, cy, 6f, paint)
-                          canvas.drawCircle(cx + r * 0.45f, cy, 6f, paint)
+                          canvas.drawCircle(cx - r * 0.46f, cy, r * 0.17f, paint)
+                          canvas.drawCircle(cx, cy, r * 0.17f, paint)
+                          canvas.drawCircle(cx + r * 0.46f, cy, r * 0.17f, paint)
                       }
                   }
               }
@@ -2620,7 +2708,6 @@ jobs:
 
               private lateinit var sidePanel: LinearLayout
               private lateinit var sideModeTitle: TextView
-              private lateinit var btnTouchBackToGroups: TextView
               private lateinit var infoPanel: LinearLayout
               private lateinit var centerOsdPanel: LinearLayout
               private lateinit var settingsTileOverlay: LinearLayout
@@ -2640,7 +2727,6 @@ jobs:
               private var controlMode = 0
               private lateinit var gestureDetector: GestureDetector
 
-              // Пункт 11: Антиблокировка / Обход ограничений РФ (включено по умолчанию)
               private var antiBlockEnabled = true
               private var userAgentIndex = 0
               private val russianSmartTvAgents = listOf(
@@ -2656,9 +2742,11 @@ jobs:
               private lateinit var signalContainer: LinearLayout
               private val signalBars = mutableListOf<View>()
 
-              private lateinit var btnIconPlaylists: TextView
-              private lateinit var btnIconSettings: TextView
-              private lateinit var btnIconAnalyzer: TextView
+              // Пункт 6: Красивые векторные 3D-иконки в шапке левого меню
+              private lateinit var headerTilePlaylists: ThemedTileView
+              private lateinit var headerTileSettings: ThemedTileView
+              private lateinit var headerTileAnalyzer: ThemedTileView
+              private lateinit var headerTileSwapGroups: ThemedTileView
 
               private lateinit var osdChannelTitle: TextView
               private lateinit var osdEpgCurrentTitle: TextView
@@ -2669,9 +2757,7 @@ jobs:
               private lateinit var btnOsdTop: TextView
               private lateinit var btnOsdEpgList: TextView
               private lateinit var btnOsdSettings: TextView
-              private lateinit var btnOsdAnalyzer: TextView
               private lateinit var btnOsdAudio: TextView
-              private lateinit var btnOsdPlaylist: TextView
 
               private lateinit var fullEpgTitle: TextView
               private lateinit var fullEpgListView: ListView
@@ -2715,7 +2801,8 @@ jobs:
               private var bufferLevel = 2
               private var decoderMode = 1
               private var themeIndex = 0
-              private var isFullScreenStretch = true
+              // Пункт 7: 0 = По размеру экрана без обрезки (FIT), 1 = Растянуть (FILL), 2 = Зум (ZOOM)
+              private var screenAspectMode = 0
               private var lastBackPressTime = 0L
               private var bufferingStuckSeconds = 0
               private var currentBrowseDir: File = Environment.getExternalStorageDirectory()
@@ -2806,13 +2893,20 @@ jobs:
                   "Прочее"
               )
 
-              // Пункт 3 и 11: Убраны англоязычные movies.m3u/entertainment.m3u; оставлены русскоязычные источники + зеркала для РФ
+              // Пункт 1: Расширенный пул источников, чтобы все категории были наполнены сотнями каналов
               private val openRusSources = listOf(
                   "https://iptv-org.github.io/iptv/languages/rus.m3u",
                   "https://iptv-org.github.io/iptv/countries/ru.m3u",
                   "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_russia.m3u8",
                   "https://iptv-org.github.io/iptv/countries/by.m3u",
                   "https://iptv-org.github.io/iptv/countries/kz.m3u",
+                  "https://iptv-org.github.io/iptv/countries/ua.m3u",
+                  "https://iptv-org.github.io/iptv/countries/am.m3u",
+                  "https://iptv-org.github.io/iptv/categories/movies.m3u",
+                  "https://iptv-org.github.io/iptv/categories/kids.m3u",
+                  "https://iptv-org.github.io/iptv/categories/science.m3u",
+                  "https://iptv-org.github.io/iptv/categories/documentary.m3u",
+                  "https://iptv-org.github.io/iptv/categories/entertainment.m3u",
                   "https://iptv-org.github.io/iptv/categories/music.m3u",
                   "https://iptv-org.github.io/iptv/categories/sports.m3u"
               )
@@ -2832,6 +2926,25 @@ jobs:
                           closeAllMenus()
                       }
                   }
+              }
+
+              // Пункт 5: Плавная анимация появления любого меню на экране
+              private fun animateMenuAppear(view: View, fromX: Float = 0f, fromY: Float = 28f) {
+                  view.visibility = View.VISIBLE
+                  view.alpha = 0f
+                  view.translationX = fromX
+                  view.translationY = fromY
+                  view.scaleX = 0.94f
+                  view.scaleY = 0.94f
+                  view.animate()
+                      .alpha(1f)
+                      .translationX(0f)
+                      .translationY(0f)
+                      .scaleX(1f)
+                      .scaleY(1f)
+                      .setDuration(220L)
+                      .setInterpolator(DecelerateInterpolator())
+                      .start()
               }
 
               private fun collapseAnalyzerToTopBar() {
@@ -2907,17 +3020,11 @@ jobs:
                   infoTextView.typeface = t.normalFont
                   currentChannelBanner.typeface = t.boldFont
 
-                  btnIconPlaylists.text = t.iconPlaylists
-                  btnIconSettings.text = t.iconSettings
-                  btnIconAnalyzer.text = t.iconAnalyzer
-
                   btnOsdEpgList.text = "${t.iconEpg} Программа"
                   btnOsdSettings.text = "${t.iconSettings} Настройки"
-                  btnOsdAnalyzer.text = "${t.iconAnalyzer} Тест"
                   btnOsdAudio.text = "${t.iconAudio} Звук"
-                  btnOsdPlaylist.text = "${t.iconPlaylists} Плейлист"
 
-                  for (btn in listOf(btnIconPlaylists, btnIconSettings, btnIconAnalyzer, btnOsdTop, btnOsdFav, btnOsdEpgList, btnOsdSettings, btnOsdAnalyzer, btnOsdAudio, btnOsdPlaylist, btnTouchBackToGroups)) {
+                  for (btn in listOf(btnOsdTop, btnOsdFav, btnOsdEpgList, btnOsdSettings, btnOsdAudio)) {
                       btn.typeface = t.boldFont
                   }
 
@@ -2925,7 +3032,7 @@ jobs:
                       tile.themeStyleId = t.id
                   }
                   for (cap in allGridCaptions) {
-                      cap.typeface = t.boldFont
+                      cap.typeface = t.normalFont
                   }
 
                   updateCategoriesList()
@@ -2933,38 +3040,18 @@ jobs:
                   updateCenterOsdContent()
               }
 
-              // Пункт 9: Крупные стильные кнопки-иконки в шапке левого меню
-              private fun makeStylishHeaderIconButton(iconText: String, onClick: () -> Unit): TextView {
-                  return TextView(this).apply {
-                      text = iconText
-                      gravity = Gravity.CENTER
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
-                      typeface = themeBoldFont()
-                      setTextColor(Color.WHITE)
-                      val t = currentTheme()
-                      background = GradientDrawable().apply {
-                          setColor(t.cardBgColor)
-                          cornerRadius = 18f
-                          setStroke(2, t.strokeColor)
-                      }
+              // Пункт 6: Создание красивой векторной 3D-кнопки в шапке списка каналов
+              private fun makeHeader3DIconButton(iconType: String, baseHex: String, accentHex: String, onClick: () -> Unit): ThemedTileView {
+                  val tile = ThemedTileView(this, iconType, baseHex, accentHex).apply {
+                      themeStyleId = currentTheme().id
                       isFocusable = true
                       isFocusableInTouchMode = false
                       isClickable = true
-                      layoutParams = LinearLayout.LayoutParams(
-                          0,
-                          62,
-                          1f
-                      ).apply {
-                          setMargins(6, 2, 6, 2)
+                      layoutParams = LinearLayout.LayoutParams(0, 74, 1f).apply {
+                          setMargins(8, 2, 8, 2)
                       }
                       setOnFocusChangeListener { _, hasFocus ->
-                          val curT = currentTheme()
-                          background = GradientDrawable().apply {
-                              setColor(if (hasFocus) curT.accentColor else curT.cardBgColor)
-                              cornerRadius = 18f
-                              setStroke(if (hasFocus) 3 else 2, if (hasFocus) Color.WHITE else curT.strokeColor)
-                          }
-                          setTextColor(if (hasFocus) curT.textOnAccent else Color.WHITE)
+                          isTileFocused = hasFocus
                           if (hasFocus) resetMenuInactivityTimer()
                       }
                       setOnClickListener {
@@ -2972,6 +3059,8 @@ jobs:
                           onClick()
                       }
                   }
+                  allGridTiles.add(tile)
+                  return tile
               }
 
               private fun makeModernButton(label: String, isIconOnly: Boolean = false, onClick: () -> Unit): TextView {
@@ -2998,13 +3087,13 @@ jobs:
                           minWidth = 54
                           minHeight = 54
                       } else {
-                          setPadding(18, 11, 18, 11)
+                          setPadding(22, 11, 22, 11)
                       }
                       layoutParams = LinearLayout.LayoutParams(
                           ViewGroup.LayoutParams.WRAP_CONTENT,
                           ViewGroup.LayoutParams.WRAP_CONTENT
                       ).apply {
-                          setMargins(5, 4, 5, 4)
+                          setMargins(6, 4, 6, 4)
                       }
                       setOnFocusChangeListener { _, hasFocus ->
                           val curT = currentTheme()
@@ -3023,7 +3112,6 @@ jobs:
                   }
               }
 
-              // Пункт 4: Полное скрытие верхней чёрной шторки со временем/зарядом батареи и выреза камеры на телефоне
               private fun enableTrueFullScreenImmersion() {
                   try {
                       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -3032,7 +3120,6 @@ jobs:
                           }
                       }
                       window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-                      window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
 
                       @Suppress("DEPRECATION")
                       window.decorView.systemUiVisibility = (
@@ -3061,7 +3148,33 @@ jobs:
                   }
               }
 
-              // Пункт 11: Инициализация SSL/TLS и обхода DPI/блокировок для РФ
+              // Пункт 7: Применение режима пропорций экрана без обрезания верха и низа на телефоне
+              private fun applyScreenAspectMode() {
+                  when (screenAspectMode) {
+                      0 -> {
+                          // Без обрезки сверху и снизу (идеально для телефонов 20:9 и ТВ)
+                          playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                          player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                      }
+                      1 -> {
+                          // Растянуть во весь экран без обрезки краёв
+                          playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                          player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                      }
+                      else -> {
+                          // Кинозум с заполнением
+                          playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                          player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                      }
+                  }
+              }
+
+              private fun screenAspectModeName(): String = when (screenAspectMode) {
+                  0 -> "По размеру экрана (без обрезки)"
+                  1 -> "Растянуть на весь экран"
+                  else -> "Кинозум (увеличение)"
+              }
+
               private fun setupRussiaNetworkBypass() {
                   try {
                       val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
@@ -3076,7 +3189,6 @@ jobs:
                   } catch (_: Exception) {}
               }
 
-              // Пункт 11: Загрузка текста с автоматическим переключением на резервный прокси при блокировке домена провайдером в РФ
               private fun openStreamWithRussiaBypass(rawUrl: String, timeoutMs: Int = 7000): InputStream {
                   val candidates = mutableListOf(rawUrl)
                   if (antiBlockEnabled) {
@@ -3121,12 +3233,14 @@ jobs:
 
                   val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
 
+                  // Пункт 7: На весь экран без обрезания картинки сверху и снизу
                   playerView = PlayerView(this).apply {
                       useController = false
-                      resizeMode = if (isFullScreenStretch) AspectRatioFrameLayout.RESIZE_MODE_FILL else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                      resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                       layoutParams = FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.MATCH_PARENT,
-                          FrameLayout.LayoutParams.MATCH_PARENT
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          Gravity.CENTER
                       )
                       setOnTouchListener { _, event ->
                           gestureDetector.onTouchEvent(event)
@@ -3200,7 +3314,7 @@ jobs:
                   }
                   root.addView(signalContainer)
 
-                  // Пункт 9: Левая панель БЕЗ надписи названия плейлиста, с крупными стильными иконками сверху над списком
+                  // Пункт 6: Левое меню с ровными векторными 3D-иконками в верхней шапке
                   sidePanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       background = makeThemedPanelBg()
@@ -3213,6 +3327,9 @@ jobs:
                       setPadding(20, 18, 20, 18)
                   }
 
+                  allGridTiles.clear()
+                  allGridCaptions.clear()
+
                   val topBar = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER
@@ -3223,24 +3340,23 @@ jobs:
                       setPadding(0, 0, 0, 10)
                   }
 
-                  val t = currentTheme()
-                  btnIconPlaylists = makeStylishHeaderIconButton(t.iconPlaylists) {
+                  headerTilePlaylists = makeHeader3DIconButton("PLAYLISTS", "#1B8A6B", "#FFB300") {
                       navigateToMenu("PLAYLISTS")
                   }
-                  btnIconSettings = makeStylishHeaderIconButton(t.iconSettings) {
+                  headerTileSettings = makeHeader3DIconButton("SETTINGS_GEAR", "#1E4E79", "#00E5FF") {
                       navigateToMenu("SETTINGS")
                   }
-                  btnIconAnalyzer = makeStylishHeaderIconButton(t.iconAnalyzer) {
+                  headerTileAnalyzer = makeHeader3DIconButton("ANALYZER", "#5E35B1", "#00E676") {
                       navigateToMenu("ANALYZER_GROUPS")
                   }
-                  btnTouchBackToGroups = makeStylishHeaderIconButton("⇄") {
+                  headerTileSwapGroups = makeHeader3DIconButton("SWAP_GROUPS", "#D84315", "#FFD54F") {
                       if (isSideShowingChannels) showSideGroupsMode() else showSideChannelsMode(focusTop = true)
                   }
 
-                  topBar.addView(btnIconPlaylists)
-                  topBar.addView(btnIconSettings)
-                  topBar.addView(btnIconAnalyzer)
-                  topBar.addView(btnTouchBackToGroups)
+                  topBar.addView(headerTilePlaylists)
+                  topBar.addView(headerTileSettings)
+                  topBar.addView(headerTileAnalyzer)
+                  topBar.addView(headerTileSwapGroups)
                   sidePanel.addView(topBar)
 
                   sideModeTitle = TextView(this).apply {
@@ -3321,6 +3437,7 @@ jobs:
                   infoPanel.addView(infoTextView)
                   root.addView(infoPanel)
 
+                  // Пункт 4: Центральное меню без кнопок "Тест" и "Плейлист"
                   centerOsdPanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       background = makeThemedPanelBg()
@@ -3330,7 +3447,7 @@ jobs:
                           FrameLayout.LayoutParams.MATCH_PARENT,
                           FrameLayout.LayoutParams.WRAP_CONTENT,
                           Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                      ).apply { setMargins(90, 0, 90, 24) }
+                      ).apply { setMargins(120, 0, 120, 24) }
                   }
 
                   osdChannelTitle = TextView(this).apply {
@@ -3386,6 +3503,7 @@ jobs:
                       )
                   }
 
+                  val t = currentTheme()
                   btnOsdTop = makeModernButton("${t.iconTop} В ТОП") {
                       currentChannel?.let { toggleTopChannel(it) }
                       updateCenterOsdContent()
@@ -3400,23 +3518,15 @@ jobs:
                   btnOsdSettings = makeModernButton("${t.iconSettings} Настройки") {
                       navigateToMenu("SETTINGS")
                   }
-                  btnOsdAnalyzer = makeModernButton("${t.iconAnalyzer} Тест") {
-                      navigateToMenu("ANALYZER_GROUPS")
-                  }
                   btnOsdAudio = makeModernButton("${t.iconAudio} Звук") {
                       navigateToMenu("AUDIO")
-                  }
-                  btnOsdPlaylist = makeModernButton("${t.iconPlaylists} Плейлист") {
-                      navigateToMenu("PLAYLISTS")
                   }
 
                   osdButtonsRow.addView(btnOsdTop)
                   osdButtonsRow.addView(btnOsdFav)
                   osdButtonsRow.addView(btnOsdEpgList)
                   osdButtonsRow.addView(btnOsdSettings)
-                  osdButtonsRow.addView(btnOsdAnalyzer)
                   osdButtonsRow.addView(btnOsdAudio)
-                  osdButtonsRow.addView(btnOsdPlaylist)
                   centerOsdPanel.addView(osdButtonsRow)
                   root.addView(centerOsdPanel)
 
@@ -3453,13 +3563,13 @@ jobs:
                   fullEpgOverlay.addView(fullEpgListView)
                   root.addView(fullEpgOverlay)
 
-                  // Пункт 2: Основное меню 4 на 3 с подписями прямо под каждой иконкой!
+                  // Пункт 3: Сетка 4 на 3 с УВЕЛИЧЕННЫМИ иконками (130x130) и уменьшенным аккуратным текстом (11.5sp)
                   settingsTileOverlay = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       gravity = Gravity.CENTER
                       background = makeThemedPanelBg()
                       visibility = View.GONE
-                      setPadding(36, 24, 36, 24)
+                      setPadding(36, 22, 36, 22)
                       layoutParams = FrameLayout.LayoutParams(
                           FrameLayout.LayoutParams.WRAP_CONTENT,
                           FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -3470,10 +3580,10 @@ jobs:
                   settingsSelectedLabel = TextView(this).apply {
                       text = "Плейлисты"
                       setTextColor(Color.WHITE)
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
                       typeface = themeBoldFont()
                       gravity = Gravity.CENTER
-                      setPadding(0, 12, 0, 0)
+                      setPadding(0, 10, 0, 0)
                   }
 
                   data class GridTileSpec(
@@ -3503,7 +3613,7 @@ jobs:
                       GridTileSpec("CONTROL_MODE", "#00838F", "#FFD54F", "Управление", "Режим: Сенсор или Пульт ТВ") {
                           showFirstRunControlPicker(forceShow = true)
                       },
-                      GridTileSpec("MORE", "#4A148C", "#FFAB00", "Обход и EPG", "Обход блокировок РФ, EPG и Экран") { navigateToMenu("MORE_SETTINGS") }
+                      GridTileSpec("MORE", "#4A148C", "#FFAB00", "Экран и РФ", "Формат экрана, Обход РФ и EPG") { navigateToMenu("MORE_SETTINGS") }
                   )
 
                   val gridContainer = LinearLayout(this).apply {
@@ -3512,8 +3622,6 @@ jobs:
                   }
 
                   val cellViewsMatrix = Array(3) { arrayOfNulls<LinearLayout>(4) }
-                  allGridTiles.clear()
-                  allGridCaptions.clear()
 
                   for (rowIdx in 0 until 3) {
                       val rowLayout = LinearLayout(this).apply {
@@ -3524,24 +3632,26 @@ jobs:
                           val specIdx = rowIdx * 4 + colIdx
                           val spec = gridSpecs[specIdx]
 
+                          // Пункт 3: Иконка увеличена до 130x130
                           val tileIcon = ThemedTileView(this, spec.iconType, spec.baseHex, spec.accentHex).apply {
                               themeStyleId = currentTheme().id
                               isFocusable = false
                               isClickable = false
-                              layoutParams = LinearLayout.LayoutParams(106, 106)
+                              layoutParams = LinearLayout.LayoutParams(130, 130)
                           }
                           allGridTiles.add(tileIcon)
 
+                          // Пункт 3: Текст под иконкой уменьшен до 11.5sp
                           val captionView = TextView(this).apply {
                               text = spec.shortCaption
-                              setTextColor(Color.parseColor("#E0E0E0"))
-                              setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                              typeface = themeBoldFont()
+                              setTextColor(Color.parseColor("#CCCCCC"))
+                              setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                              typeface = themeFont()
                               gravity = Gravity.CENTER
                               isSingleLine = true
                               ellipsize = TextUtils.TruncateAt.END
-                              setPadding(2, 2, 2, 0)
-                              layoutParams = LinearLayout.LayoutParams(132, ViewGroup.LayoutParams.WRAP_CONTENT)
+                              setPadding(2, 1, 2, 0)
+                              layoutParams = LinearLayout.LayoutParams(134, ViewGroup.LayoutParams.WRAP_CONTENT)
                           }
                           allGridCaptions.add(captionView)
 
@@ -3556,14 +3666,14 @@ jobs:
                                   ViewGroup.LayoutParams.WRAP_CONTENT,
                                   ViewGroup.LayoutParams.WRAP_CONTENT
                               ).apply {
-                                  setMargins(10, 6, 10, 6)
+                                  setMargins(10, 4, 10, 4)
                               }
                               addView(tileIcon)
                               addView(captionView)
 
                               setOnFocusChangeListener { _, hasFocus ->
                                   tileIcon.isTileFocused = hasFocus
-                                  captionView.setTextColor(if (hasFocus) currentTheme().accentColor else Color.parseColor("#E0E0E0"))
+                                  captionView.setTextColor(if (hasFocus) currentTheme().accentColor else Color.parseColor("#CCCCCC"))
                                   if (hasFocus) {
                                       settingsSelectedLabel.text = spec.fullTitle
                                       resetMenuInactivityTimer()
@@ -3690,6 +3800,7 @@ jobs:
 
                   playSplashEyeAnimation()
                   initPlayer()
+                  applyScreenAspectMode()
                   startClockAndWatchdogUpdater()
 
                   categoryAdapter = createCompactAdapter(mutableListOf(), 17.5f)
@@ -3758,7 +3869,6 @@ jobs:
 
                   applyCurrentThemeToAllPanels()
                   loadActivePlaylist(autoPlayLast = true)
-                  // Пункт 1: Проверяем локальный кэш EPG и обновляем из сети только раз в 24 часа
                   loadEpgOncePerDayInBackground(forceRefresh = false)
               }
 
@@ -3801,6 +3911,8 @@ jobs:
 
                   val btnTouchMode = makeModernButton("📱 Сенсорное (Жесты)\nСмартфон / Планшет") {
                       controlMode = 1
+                      screenAspectMode = 0 // Без обрезки кадра на смартфоне
+                      applyScreenAspectMode()
                       saveState()
                       enableTrueFullScreenImmersion()
                       firstRunModeOverlay.visibility = View.GONE
@@ -3835,14 +3947,13 @@ jobs:
                   if (controlMode == 0 || forceShow) {
                       closeAllMenus()
                       buildFirstRunControlPickerView()
-                      firstRunModeOverlay.visibility = View.VISIBLE
+                      animateMenuAppear(firstRunModeOverlay, 0f, 20f)
                       val card = firstRunModeOverlay.getChildAt(0) as? LinearLayout
                       val row = card?.getChildAt(2) as? LinearLayout
                       row?.getChildAt(if (controlMode == 1) 0 else 1)?.requestFocus()
                   }
               }
 
-              // Пункт 5: Зональные касания на экране (Слева -> Каналы, Справа -> О потоке, Центр -> OSD меню)
               private fun initTouchGestureDetector() {
                   gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
                       override fun onDown(e: MotionEvent): Boolean = true
@@ -3860,18 +3971,9 @@ jobs:
                           val tapX = e.x
 
                           when {
-                              tapX < screenW * 0.30f -> {
-                                  // Касание в левой части экрана -> появляется меню с каналами
-                                  navigateToMenu("SIDE")
-                              }
-                              tapX > screenW * 0.70f -> {
-                                  // Касание в правой части экрана -> появляется окно информации о потоке
-                                  navigateToMenu("INFO")
-                              }
-                              else -> {
-                                  // Касание по центру -> меню передачи и таймлайн
-                                  navigateToMenu("OSD")
-                              }
+                              tapX < screenW * 0.30f -> navigateToMenu("SIDE")
+                              tapX > screenW * 0.70f -> navigateToMenu("INFO")
+                              else -> navigateToMenu("OSD")
                           }
                           return true
                       }
@@ -3948,7 +4050,6 @@ jobs:
                   categoryListView.requestFocus()
               }
 
-              // Пункт 10: Живая анимация глаза (проявление -> открытие -> взгляд влево/вправо -> живое моргание -> эфир)
               private fun playSplashEyeAnimation() {
                   val startMs = System.currentTimeMillis()
                   val totalDuration = 3200L
@@ -3957,13 +4058,11 @@ jobs:
                       override fun run() {
                           val elapsed = System.currentTimeMillis() - startMs
                           if (elapsed <= 800L) {
-                              // Плавное проявление
                               val p = (elapsed / 800f).coerceIn(0f, 1f)
                               splashEyeView.alpha = p
                               splashEyeView.eyeOpenFraction = 0.05f + 0.15f * p
                               uiHandler.postDelayed(this, 16L)
                           } else if (elapsed <= 1700L) {
-                              // Плавное открытие века
                               splashEyeView.alpha = 1f
                               val p = ((elapsed - 800L) / 900f).coerceIn(0f, 1f)
                               val eased = 1f - (1f - p) * (1f - p)
@@ -3971,13 +4070,11 @@ jobs:
                               splashEyeView.pupilScale = 1.15f - 0.15f * eased
                               uiHandler.postDelayed(this, 16L)
                           } else if (elapsed <= 2700L) {
-                              // Живое движение взгляда (чуть влево -> чуть вправо -> центр)
                               val p = ((elapsed - 1700L) / 1000f).coerceIn(0f, 1f)
                               splashEyeView.lookOffsetX = (Math.sin(p * Math.PI * 2.0) * 0.45).toFloat()
                               splashEyeView.eyeOpenFraction = 1.0f
                               uiHandler.postDelayed(this, 16L)
                           } else if (elapsed <= totalDuration) {
-                              // Быстрое живое моргание перед стартом
                               val p = ((elapsed - 2700L) / 500f).coerceIn(0f, 1f)
                               splashEyeView.lookOffsetX = 0f
                               val blink = abs(p - 0.4f) / 0.6f
@@ -4072,14 +4169,17 @@ jobs:
 
               private var selectedEditorCategory: String = ""
 
+              // Пункт 5: Внедрена плавная анимация появления всех меню
               private fun renderMenuById(menuId: String) {
                   hideAllMenuViews()
+                  // Пункт 4: Скрываем нижний баннер канала при открытии любого меню, чтобы они никогда не наслаивались
+                  currentChannelBanner.visibility = View.GONE
                   subModalTopButtons.visibility = View.GONE
                   subModalTopButtons.removeAllViews()
                   when (menuId) {
                       "SIDE" -> {
                           clockTextView.visibility = View.GONE
-                          sidePanel.visibility = View.VISIBLE
+                          animateMenuAppear(sidePanel, -60f, 0f)
                           if (openChannelsDirectlyWithCurrentFocus && currentChannel != null) {
                               openChannelsDirectlyWithCurrentFocus = false
                               val chCatIdx = categories.indexOf(currentChannel?.category ?: "Все каналы").takeIf { it >= 2 } ?: 1
@@ -4093,17 +4193,16 @@ jobs:
                       }
                       "INFO" -> {
                           updateStreamInfoText()
-                          infoPanel.visibility = View.VISIBLE
+                          animateMenuAppear(infoPanel, 50f, 0f)
                       }
                       "OSD" -> {
-                          currentChannelBanner.visibility = View.GONE
                           updateCenterOsdContent()
-                          centerOsdPanel.visibility = View.VISIBLE
+                          animateMenuAppear(centerOsdPanel, 0f, 40f)
                           btnOsdTop.requestFocus()
                       }
                       "FULL_EPG" -> openFullScreenChannelEpg()
                       "SETTINGS" -> {
-                          settingsTileOverlay.visibility = View.VISIBLE
+                          animateMenuAppear(settingsTileOverlay, 0f, 25f)
                           val grid = settingsTileOverlay.getChildAt(0) as? LinearLayout
                           val firstRow = grid?.getChildAt(0) as? LinearLayout
                           firstRow?.getChildAt(0)?.requestFocus()
@@ -4149,7 +4248,7 @@ jobs:
                       Toast.makeText(this, "Применена тема: ${themes[which].name}", Toast.LENGTH_SHORT).show()
                       navigateBackInMenu()
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -4186,7 +4285,7 @@ jobs:
                           openTopManagerSubModal()
                       }
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -4224,7 +4323,7 @@ jobs:
                   }
 
                   fullEpgListView.adapter = createCompactAdapter(items, 15.5f)
-                  fullEpgOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(fullEpgOverlay)
                   fullEpgListView.requestFocus()
                   if (activeIndex > 0 && activeIndex < items.size) {
                       fullEpgListView.setSelection(activeIndex)
@@ -4237,28 +4336,26 @@ jobs:
                   })
               }
 
-              // Пункт 11: В дополнительных настройках добавлено управление обходом ограничений для РФ и ротацией SmartTV User-Agent
               private fun openMoreSettingsSubModal() {
                   val t = currentTheme()
-                  subModalTitle.text = "⋯ Обход ограничений РФ и EPG"
+                  subModalTitle.text = "⋯ Формат экрана, Обход РФ и EPG"
                   subModalInputContainer.visibility = View.GONE
                   subModalList.visibility = View.VISIBLE
 
-                  val bypassStatus = if (antiBlockEnabled) "Включён (DoH + Прокси-зеркала + SmartTV заголовки)" else "Выключен"
+                  val bypassStatus = if (antiBlockEnabled) "Включён (Прокси-зеркала + SmartTV заголовки)" else "Выключен"
                   val agentName = when (userAgentIndex % russianSmartTvAgents.size) {
                       0 -> "Wink Android TV (РФ)"
                       1 -> "Samsung SmartTV Tizen"
                       2 -> "VLC Media Player"
                       else -> "FFmpeg / Lavf"
                   }
-                  val stretchText = if (isFullScreenStretch) "Растянуть на весь экран" else "Оригинальные пропорции"
 
                   val items = mutableListOf(
+                      "🖥  Формат экрана: ${screenAspectModeName()}",
                       "🛡  Обход блокировок РФ: $bypassStatus",
                       "📡  Маскировка потока (User-Agent): $agentName",
                       "${t.iconEpg}  Адрес программы передач (обновление 1 раз в сутки)",
-                      "🔄  Обновить программу передач прямо сейчас",
-                      "🖥  Формат экрана: $stretchText"
+                      "🔄  Обновить программу передач прямо сейчас"
                   )
 
                   subModalList.adapter = createCompactAdapter(items, 15.5f)
@@ -4266,31 +4363,32 @@ jobs:
                       resetMenuInactivityTimer()
                       when (which) {
                           0 -> {
+                              screenAspectMode = (screenAspectMode + 1) % 3
+                              applyScreenAspectMode()
+                              saveState()
+                              openMoreSettingsSubModal()
+                          }
+                          1 -> {
                               antiBlockEnabled = !antiBlockEnabled
                               saveState()
                               initPlayer()
                               openMoreSettingsSubModal()
                           }
-                          1 -> {
+                          2 -> {
                               userAgentIndex = (userAgentIndex + 1) % russianSmartTvAgents.size
                               saveState()
                               initPlayer()
                               openMoreSettingsSubModal()
                           }
-                          2 -> navigateToMenu("EPG")
-                          3 -> {
+                          3 -> navigateToMenu("EPG")
+                          4 -> {
                               Toast.makeText(this, "Запущено принудительное обновление EPG...", Toast.LENGTH_SHORT).show()
                               loadEpgOncePerDayInBackground(forceRefresh = true)
                               navigateBackInMenu()
                           }
-                          4 -> {
-                              isFullScreenStretch = !isFullScreenStretch
-                              playerView.resizeMode = if (isFullScreenStretch) AspectRatioFrameLayout.RESIZE_MODE_FILL else AspectRatioFrameLayout.RESIZE_MODE_FIT
-                              openMoreSettingsSubModal()
-                          }
                       }
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -4308,7 +4406,6 @@ jobs:
                                       bufferingStuckSeconds += 2
                                       if (bufferingStuckSeconds >= 16) {
                                           bufferingStuckSeconds = 0
-                                          // Пункт 11: При зависании в РФ автоматически меняем профиль SmartTV User-Agent и переподключаем
                                           if (antiBlockEnabled) {
                                               userAgentIndex = (userAgentIndex + 1) % russianSmartTvAgents.size
                                           }
@@ -4376,6 +4473,7 @@ jobs:
                   }
               }
 
+              // Пункт 2: Полное восстановление звука на всех каналах (сняты ограничения на кодеки AC3/MP2/AAC и теги языка)
               private fun initPlayer() {
                   val currentUrl = currentChannel?.url
                   try { player?.release() } catch (_: Exception) {}
@@ -4399,12 +4497,14 @@ jobs:
                   val extensionMode = when (decoderMode) {
                       0 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
                       2 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-                      else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                      else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
                   }
 
                   val renderersFactory = DefaultRenderersFactory(this)
                       .setExtensionRendererMode(extensionMode)
                       .setEnableDecoderFallback(true)
+                      .setEnableAudioFloatOutput(false)
+                      .setEnableAudioTrackPlaybackParams(false)
 
                   val activeAgent = russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size]
                   val extraHeaders = if (antiBlockEnabled) {
@@ -4439,19 +4539,35 @@ jobs:
                   val newPlayer = ExoPlayer.Builder(this, renderersFactory)
                       .setMediaSourceFactory(mediaSourceFactory)
                       .setLoadControl(loadControl)
-                      .setAudioAttributes(audioAttrs, true)
+                      .setAudioAttributes(audioAttrs, false)
                       .build()
 
+                  newPlayer.volume = 1.0f
+
+                  // Пункт 2: Разрешаем воспроизведение ЛЮБЫХ аудиодорожек (даже если язык не указан или многоканальный AC3/EAC3 превышает возможности динамиков телефона)
                   newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
                       .buildUpon()
                       .setMaxVideoSize(2560, 1440)
-                      .setPreferredAudioLanguages("ru", "rus", "en", "eng", "und")
+                      .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                      .setExceedAudioConstraintsIfNecessary(true)
+                      .setExceedRendererCapabilitiesIfNecessary(true)
                       .build()
 
-                  newPlayer.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-                  playerView.resizeMode = if (isFullScreenStretch) AspectRatioFrameLayout.RESIZE_MODE_FILL else AspectRatioFrameLayout.RESIZE_MODE_FIT
-
                   newPlayer.addListener(object : Player.Listener {
+                      override fun onTracksChanged(tracks: Tracks) {
+                          // Если по какой-то причине ни одна аудиодорожка не выбрана автоматически — принудительно активируем первую доступную!
+                          val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                          if (audioGroups.isNotEmpty() && audioGroups.none { it.isSelected }) {
+                              val firstGroup = audioGroups.first()
+                              if (firstGroup.length > 0) {
+                                  newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
+                                      .buildUpon()
+                                      .setOverrideForType(TrackSelectionOverride(firstGroup.mediaTrackGroup, 0))
+                                      .build()
+                              }
+                          }
+                      }
+
                       override fun onPlaybackStateChanged(playbackState: Int) {
                           if (playbackState == Player.STATE_ENDED) {
                               reconnectCurrentStream()
@@ -4464,6 +4580,7 @@ jobs:
 
                   playerView.player = newPlayer
                   player = newPlayer
+                  applyScreenAspectMode()
 
                   if (currentUrl != null) {
                       newPlayer.setMediaItem(createLiveMediaItem(currentUrl))
@@ -4582,7 +4699,6 @@ jobs:
                   return Pair(curr, next)
               }
 
-              // Пункт 1: Обновление программы передач строго 1 раз в сутки (24 часа) с локальным кэшированием на устройстве
               private fun loadEpgOncePerDayInBackground(forceRefresh: Boolean) {
                   thread {
                       val cacheFile = File(filesDir, "epg_cache_v14.json")
@@ -4591,7 +4707,6 @@ jobs:
                       val now = System.currentTimeMillis()
                       val dayMs = 24 * 3600_000L
 
-                      // Если с последнего обновления прошло меньше 24 часов и есть кэш — загружаем мгновенно из памяти
                       if (!forceRefresh && cacheFile.exists() && (now - lastSyncMs) in 1 until dayMs) {
                           if (restoreEpgFromCacheFile(cacheFile)) {
                               return@thread
@@ -4698,7 +4813,6 @@ jobs:
                                       refreshChannelAdapter()
                                   }
 
-                                  // Сохраняем расписание в локальный кэш на 24 часа
                                   saveEpgToCacheFile(cacheFile, tempByName)
                                   prefs.edit().putLong("last_epg_sync_ms", System.currentTimeMillis()).apply()
                                   break
@@ -4818,7 +4932,6 @@ jobs:
                   }
               }
 
-              // Пункт 6: Из правого окна информации убраны статус обновления программы передач и тип управления (сенсор/пульт)
               private fun updateStreamInfoText() {
                   val p = player ?: return
                   val ch = currentChannel
@@ -4903,7 +5016,7 @@ jobs:
                           }
                       }
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -4970,7 +5083,7 @@ jobs:
                           addLocalPlaylistFile(target)
                       }
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -5019,7 +5132,7 @@ jobs:
                       selectedEditorCategory = editableCats[idx]
                       navigateToMenu("CHANNEL_EDITOR_ITEMS")
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -5084,7 +5197,7 @@ jobs:
                           openChannelEditorItemsModal(catName)
                       }
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -5154,7 +5267,7 @@ jobs:
                           navigateToMenu("ANALYZER_GROUP_VIEW")
                       }
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -5230,11 +5343,12 @@ jobs:
                           closeAllMenus()
                       }
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  if (subModalOverlay.visibility != View.VISIBLE) {
+                      animateMenuAppear(subModalOverlay)
+                  }
                   subModalList.requestFocus()
               }
 
-              // Пункт 8: Убран общий 25-секундный лимит, который обрывал тест на 200-м канале! Теперь проверяются ВСЕ каналы до конца.
               private fun startBackgroundChannelAnalyzer(targetChannels: List<Channel>) {
                   if (isAnalyzerRunning || targetChannels.isEmpty()) return
                   isAnalyzerRunning = true
@@ -5273,7 +5387,6 @@ jobs:
                       }
                       pool.shutdown()
                       try {
-                          // Даём достаточно времени для проверки даже 1500+ каналов (по 3 сек на пачку из 14 потоков)
                           pool.awaitTermination(15, TimeUnit.MINUTES)
                       } catch (_: Exception) {}
                       pool.shutdownNow()
@@ -5286,16 +5399,6 @@ jobs:
                               analyzerStatusBanner.text = "✅ Тест завершён: 🟢 $aliveCount  |  🔴 $deadCount"
                               uiHandler.postDelayed({ analyzerStatusBanner.visibility = View.GONE }, 4500L)
                               navigateToMenu("ANALYZER_GROUP_VIEW")
-                              subModalOverlay.translationY = -360f
-                              subModalOverlay.scaleX = 0.6f
-                              subModalOverlay.scaleY = 0.6f
-                              subModalOverlay.animate()
-                                  .translationY(0f)
-                                  .scaleX(1f)
-                                  .scaleY(1f)
-                                  .setDuration(400L)
-                                  .setInterpolator(DecelerateInterpolator())
-                                  .start()
                           }
                       }
                   }
@@ -5355,7 +5458,7 @@ jobs:
                       initPlayer()
                       navigateBackInMenu()
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -5374,7 +5477,7 @@ jobs:
                       initPlayer()
                       navigateBackInMenu()
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -5382,7 +5485,7 @@ jobs:
                   val p = player ?: return
                   val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
                   if (groups.isEmpty()) {
-                      Toast.makeText(this, "Дополнительные аудиодорожки не найдены", Toast.LENGTH_SHORT).show()
+                      Toast.makeText(this, "Аудиопоток один (переключение не требуется)", Toast.LENGTH_SHORT).show()
                       navigateBackInMenu()
                       return
                   }
@@ -5410,7 +5513,7 @@ jobs:
                           .build()
                       navigateBackInMenu()
                   }
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
               }
 
@@ -5444,7 +5547,7 @@ jobs:
                   btnRow.addView(btnCancel)
                   subModalInputContainer.addView(btnRow)
 
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   input.requestFocus()
               }
 
@@ -5494,21 +5597,8 @@ jobs:
                   btnRow.addView(btnBack)
                   subModalInputContainer.addView(btnRow)
 
-                  subModalOverlay.visibility = View.VISIBLE
+                  animateMenuAppear(subModalOverlay)
                   nameInput.requestFocus()
-              }
-
-              // Пункт 3: Проверка, является ли канал русскоязычным (кириллица или известные бренды кино в РФ/СНГ)
-              private fun isRussianLanguageChannel(name: String, extInf: String): Boolean {
-                  for (c in name) {
-                      if (c in 'а'..'я' || c in 'А'..'Я' || c == 'ё' || c == 'Ё') return true
-                  }
-                  val lower = (name + " " + extInf).lowercase()
-                  val ruBrands = listOf(
-                      "(ru)", "[ru]", "rus", "viju", "amedia", "tv1000", "tv 1000", "bcu",
-                      "cineman", "vip ", "kino", "film", "premier", "start", "okko", "kion"
-                  )
-                  return ruBrands.any { lower.contains(it) }
               }
 
               private fun mapToTenCategories(rawGroup: String, name: String): String {
@@ -5516,26 +5606,27 @@ jobs:
                   return when {
                       text.contains("2k") || text.contains("qhd") || text.contains("quadhd") || text.contains("1440p") || text.contains("uhd") || text.contains("4k") -> "2K"
                       text.contains("взросл") || text.contains("18+") || text.contains("adult") || text.contains("xxx") || text.contains("erot") -> "Прочее"
-                      text.contains("кино") || text.contains("фильм") || text.contains("сериал") || text.contains("movie") || text.contains("cinema") || text.contains("film") || text.contains("bcu") || text.contains("cineman") || text.contains("viju") || text.contains("amedia") || text.contains("tv1000") || text.contains("tv 1000") || text.contains("иллюзион") -> "Кино и сериалы"
+                      text.contains("кино") || text.contains("фильм") || text.contains("сериал") || text.contains("movie") || text.contains("cinema") || text.contains("film") || text.contains("bcu") || text.contains("cineman") || text.contains("viju") || text.contains("amedia") || text.contains("tv1000") || text.contains("tv 1000") || text.contains("иллюзион") || text.contains("hollywood") || text.contains("paramount") || text.contains("fox") || text.contains("sony") -> "Кино и сериалы"
                       text.contains("спорт") || text.contains("футбол") || text.contains("матч") || text.contains("sport") || text.contains("khl") || text.contains("ufc") || text.contains("mma") || text.contains("бокс") || text.contains("fight") || text.contains("racing") -> "Спорт"
-                      text.contains("детск") || text.contains("мульт") || text.contains("kids") || text.contains("ani") || text.contains("карусель") || text.contains("disney") || text.contains("nickelodeon") -> "Детские"
-                      text.contains("наук") || text.contains("док") || text.contains("познав") || text.contains("science") || text.contains("doc") || text.contains("history") || text.contains("discovery") || text.contains("nat geo") || text.contains("animal") || text.contains("планет") || text.contains("охот") -> "Познавательные"
+                      text.contains("детск") || text.contains("мульт") || text.contains("kids") || text.contains("ani") || text.contains("карусель") || text.contains("disney") || text.contains("nickelodeon") || text.contains("cartoon") || text.contains("tiji") || text.contains("gulli") || text.contains("рыжий") || text.contains("сказк") -> "Детские"
+                      text.contains("наук") || text.contains("док") || text.contains("познав") || text.contains("science") || text.contains("doc") || text.contains("history") || text.contains("discovery") || text.contains("nat geo") || text.contains("geographic") || text.contains("animal") || text.contains("планет") || text.contains("охот") || text.contains("рыбалк") || text.contains("оружи") || text.contains("авто") || text.contains("драйв") || text.contains("техно") || text.contains("travel") || text.contains("viasat") -> "Познавательные"
                       text.contains("муз") || text.contains("music") || text.contains("hit") || text.contains("rock") || text.contains("pop") || text.contains("шансон") || text.contains("mtv") || text.contains("bridge") || text.contains("mezzo") || text.contains("vevo") || text.contains("stingray") -> "Музыка"
-                      text.contains("новост") || text.contains("общ") || text.contains("инфо") || text.contains("news") || text.contains("general") || text.contains("россия") || text.contains("первый") || text.contains("нтв") || text.contains("рбк") || text.contains("псков") -> "Новости и общие"
-                      text.contains("развлеч") || text.contains("юмор") || text.contains("шоу") || text.contains("entertain") || text.contains("comedy") || text.contains("тнт") || text.contains("стс") || text.contains("пятница") -> "Развлечения"
+                      text.contains("новост") || text.contains("общ") || text.contains("инфо") || text.contains("news") || text.contains("general") || text.contains("россия") || text.contains("первый") || text.contains("нтв") || text.contains("рбк") || text.contains("псков") || text.contains("мир") || text.contains("звезда") || text.contains("рен") || text.contains("твц") -> "Новости и общие"
+                      text.contains("развлеч") || text.contains("юмор") || text.contains("шоу") || text.contains("entertain") || text.contains("comedy") || text.contains("тнт") || text.contains("стс") || text.contains("пятница") || text.contains("суббота") || text.contains("домашн") || text.contains("кухн") || text.contains("еда") || text.contains("tlc") || text.contains("квн") || text.contains("сарафан") -> "Развлечения"
                       else -> "Прочее"
                   }
               }
 
               private fun is1080or720Channel(extInfLine: String, name: String): Boolean {
                   val lower = (extInfLine + " " + name).lowercase()
-                  val lowRes = listOf("576p", "540p", "480p", "360p", "240p", "(sd)")
+                  val lowRes = listOf("360p", "240p")
                   for (tag in lowRes) {
                       if (lower.contains(tag)) return false
                   }
                   return true
               }
 
+              // Пункт 1: Убрана агрессивная блокировка каналов без кириллицы, которая урезала категории в v1.4
               private fun parseM3uLinesDeduplicated(lines: List<String>, filterQuality: Boolean): List<Channel> {
                   val byNormName = LinkedHashMap<String, Channel>()
                   var currentName = "Канал"
@@ -5562,19 +5653,17 @@ jobs:
                       } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
                           if (!filterQuality || is1080or720Channel(currentExtInf, currentName)) {
                               val cat = mapToTenCategories(currentGroup, currentName)
-                              // Пункт 3: В категорию "Кино и сериалы" (и "Развлечения"/"Детские") при сборке основного плейлиста пускаем только русскоязычные каналы!
-                              if (filterQuality && (cat == "Кино и сериалы" || cat == "Развлечения" || cat == "Детские" || cat == "Новости и общие") && !isRussianLanguageChannel(currentName, currentExtInf)) {
-                                  continue
-                              }
                               val ch = Channel(currentName, trimmed, cat, currentTvgId)
                               val key = normalizeName(currentName).ifEmpty { trimmed }
                               val existing = byNormName[key]
                               if (existing == null) {
                                   byNormName[key] = ch
                               } else {
+                                  val newIsRu = currentName.any { it in 'а'..'я' || it in 'А'..'Я' }
+                                  val oldIsRu = existing.name.any { it in 'а'..'я' || it in 'А'..'Я' }
                                   val newIsHigh = currentName.contains("2K", true) || currentName.contains("1080", true) || currentName.contains("FHD", true)
                                   val oldIsHigh = existing.name.contains("2K", true) || existing.name.contains("1080", true) || existing.name.contains("FHD", true)
-                                  if (newIsHigh && !oldIsHigh) {
+                                  if ((newIsRu && !oldIsRu) || (newIsHigh && !oldIsHigh)) {
                                       byNormName[key] = ch
                                   }
                               }
@@ -5587,9 +5676,9 @@ jobs:
               private fun ensureDefaultPlaylists() {
                   playlists.removeAll { it.source == "BUILTIN_VIP_PROVIDER" }
                   if (playlists.isEmpty()) {
-                      playlists.add(PlaylistEntry("Основной (RU Кино + 2K + Спорт/Музыка)", "BUILTIN_OPEN_RU", false))
+                      playlists.add(PlaylistEntry("Основной (Расширенный RU + 2K + Мир)", "BUILTIN_OPEN_RU", false))
                   } else if (playlists.none { it.source == "BUILTIN_OPEN_RU" }) {
-                      playlists.add(0, PlaylistEntry("Основной (RU Кино + 2K + Спорт/Музыка)", "BUILTIN_OPEN_RU", false))
+                      playlists.add(0, PlaylistEntry("Основной (Расширенный RU + 2K + Мир)", "BUILTIN_OPEN_RU", false))
                   }
                   if (activePlaylistIndex !in playlists.indices) {
                       activePlaylistIndex = 0
@@ -5608,17 +5697,16 @@ jobs:
                       try {
                           val finalChannels: List<Channel> = when {
                               entry.source == "BUILTIN_OPEN_RU" -> {
-                                  val combinedLines = mutableListOf<String>()
-                                  // Сначала добавляем встроенные русскоязычные киноканалы и 2K, чтобы они всегда были в приоритете
                                   val result = mutableListOf<Channel>()
                                   val existingKeys = HashSet<String>()
+                                  // Встроенный расширенный пакет русскоязычных каналов по всем категориям идёт первым в списке!
                                   for (extra in BuiltinCatalog.extraOpenStreams) {
-                                      if (extra.category == "Кино и сериалы" && !isRussianLanguageChannel(extra.name, "")) continue
                                       if (existingKeys.add(normalizeName(extra.name))) {
                                           result.add(extra)
                                       }
                                   }
 
+                                  val combinedLines = mutableListOf<String>()
                                   for (srcUrl in openRusSources) {
                                       try {
                                           val stream = openStreamWithRussiaBypass(srcUrl, 6000)
@@ -5753,6 +5841,7 @@ jobs:
                   selectCategory(currentCategoryIndex)
               }
 
+              // Пункт 4: Если открыто центральное меню (или любое другое меню), всплывающий баннер канала НЕ показывается, чтобы не наслаиваться!
               private fun playChannelObj(channel: Channel) {
                   currentChannel = channel
                   lastSavedChannelUrl = channel.url
@@ -5770,7 +5859,13 @@ jobs:
                   val star = if (favoriteUrls.contains(channel.url)) "${t.iconFav} " else ""
                   val (epg, _) = getCurrentAndNextEpg(channel)
                   val epgLine = if (epg != null) "\n🎬 " + epg.title else ""
-                  showBanner(topBadge + star + channel.name + "  •  " + channel.category + epgLine)
+
+                  if (menuHistory.isEmpty()) {
+                      showBanner(topBadge + star + channel.name + "  •  " + channel.category + epgLine)
+                  } else {
+                      currentChannelBanner.visibility = View.GONE
+                  }
+
                   updateSignalIndicator()
 
                   if (centerOsdPanel.visibility == View.VISIBLE) updateCenterOsdContent()
@@ -5786,8 +5881,12 @@ jobs:
               }
 
               private fun showBanner(text: String) {
+                  if (menuHistory.isNotEmpty()) {
+                      currentChannelBanner.visibility = View.GONE
+                      return
+                  }
                   currentChannelBanner.text = text
-                  currentChannelBanner.visibility = View.VISIBLE
+                  animateMenuAppear(currentChannelBanner, 0f, 18f)
                   currentChannelBanner.removeCallbacks(hideBannerRunnable)
                   currentChannelBanner.postDelayed(hideBannerRunnable, 4000)
               }
@@ -5814,6 +5913,7 @@ jobs:
                       .putInt("decoder_mode", decoderMode)
                       .putInt("theme_index", themeIndex)
                       .putInt("control_mode_v13", controlMode)
+                      .putInt("screen_aspect_v15", screenAspectMode)
                       .putBoolean("anti_block_ru", antiBlockEnabled)
                       .putInt("ua_index", userAgentIndex)
                       .putString("epg_url", epgUrl)
@@ -5831,6 +5931,7 @@ jobs:
                   decoderMode = prefs.getInt("decoder_mode", 1)
                   themeIndex = prefs.getInt("theme_index", 0)
                   controlMode = prefs.getInt("control_mode_v13", 0)
+                  screenAspectMode = prefs.getInt("screen_aspect_v15", 0)
                   antiBlockEnabled = prefs.getBoolean("anti_block_ru", true)
                   userAgentIndex = prefs.getInt("ua_index", 0)
                   activePlaylistIndex = prefs.getInt("active_playlist", 0)
@@ -6014,10 +6115,10 @@ jobs:
           fi
           cp app/permanent_key.jks ~/.android/debug.keystore || true
           gradle assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk MiBox-IPTV-v1.4.${GITHUB_RUN_NUMBER}.apk
+          cp app/build/outputs/apk/debug/app-debug.apk MiBox-IPTV-v1.5.${GITHUB_RUN_NUMBER}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiBox-IPTV-v1.4.${{ github.run_number }}
-          path: MiBox-IPTV-v1.4.${{ github.run_number }}.apk
+          name: MiBox-IPTV-v1.5.${{ github.run_number }}
+          path: MiBox-IPTV-v1.5.${{ github.run_number }}.apk
