@@ -1887,7 +1887,7 @@ jobs:
           ''')
           PYEOF
 
-      - name: Step 3.5 - Apply Patches v1.7 (TiViLook)
+      - name: Step 3.5 - Apply Patches v1.8 (TiViLook)
         run: |
           python3 - << 'PYEOF'
           import os, re
@@ -1896,10 +1896,10 @@ jobs:
               g = f.read()
 
           g = re.sub(r"targetSdk\s+\d+", "targetSdk 33", g)
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "55"))
-          new_ver_code = 8000 + run_num
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "60"))
+          new_ver_code = 9000 + run_num
           g = re.sub(r"versionCode\s+\d+", f"versionCode {new_ver_code}", g)
-          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "1.7.{run_num}"', g)
+          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "1.8.{run_num}"', g)
 
           signing_block = '''
               signingConfigs {
@@ -1937,66 +1937,60 @@ jobs:
           with open("app/build.gradle", "w") as f:
               f.write(g)
 
-          # Пункт 6: Масштабное расширение категории 2K (Спорт + Музыка, EN/RU) и остальных рубрик в BuiltinCatalog.kt
+          # Пункт 5: В категории 2K оставлены только настоящие 2K / QHD / UHD потоки (без дублей 1080p из других категорий)
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "r") as f:
               cat = f.read()
 
-          massive_channels_pack = '''Channel("Red Bull TV 2K Extreme Sport", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master_3360.m3u8", "2K", ""),
+          massive_channels_pack = '''Channel("Red Bull TV 2K Extreme", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master_3360.m3u8", "2K", ""),
+                  Channel("Home 2K QuadHD Nature", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/love-nature-4k/manifest.m3u8", "2K", ""),
+                  Channel("Louvre & Museum 2K UHD", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/museum-tv/manifest.m3u8", "2K", ""),
+                  Channel("Outdoor Ambient 2K QHD", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/loupe-4k/manifest.m3u8", "2K", ""),
                   Channel("Fuel TV 2K Action Sports", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/fuel-tv/manifest.m3u8", "2K", ""),
-                  Channel("MotorVision 2K Supercars & Racing", "https://motorvision-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("MotorVision 2K Supercars", "https://motorvision-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
                   Channel("Trace Sport Stars 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-sport-stars/manifest.m3u8", "2K", ""),
-                  Channel("FightBox 2K MMA & Boxing", "https://fightbox-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("FightBox 2K MMA", "https://fightbox-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
                   Channel("beIN Sports Xtra 2K", "https://bein-xtra-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Tennis Channel 2K Live", "https://tennischannel-intl-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Tennis Channel 2K", "https://tennischannel-intl-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
                   Channel("Billiard TV 2K Pro", "https://billiardtv-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
                   Channel("World Poker Tour 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/world-poker-tour/manifest.m3u8", "2K", ""),
                   Channel("MAVTV Motorsports 2K", "https://mavtv-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel(" Glory Kickboxing 2K", "https://glory-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Glory Kickboxing 2K", "https://glory-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
                   Channel("PFL MMA 2K Ultra", "https://pfl-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel(" Hard Knocks Fighting 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/hard-knocks/manifest.m3u8", "2K", ""),
-                  Channel("CampusLore Sports 2K", "https://campuslore-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Hard Knocks Fighting 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/hard-knocks/manifest.m3u8", "2K", ""),
                   Channel("SurfNow 2K Ocean Sport", "https://surfnow-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Clubbing TV 2K Dance & DJ", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/clubbing-tv/manifest.m3u8", "2K", ""),
-                  Channel("Trace Urban 2K Hip-Hop & R&B", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-urban/manifest.m3u8", "2K", ""),
+                  Channel("Clubbing TV 2K Dance", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/clubbing-tv/manifest.m3u8", "2K", ""),
+                  Channel("Trace Urban 2K Music", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-urban/manifest.m3u8", "2K", ""),
                   Channel("Trace Latina 2K Music", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-latina/manifest.m3u8", "2K", ""),
                   Channel("Deluxe Lounge 2K Chillout", "https://sdn-global-live-streaming-packager-cache.3qsdn.com/13456/13456_264_live.m3u8", "2K", ""),
-                  Channel("Deluxe Music 2K Hits", "https://sdn-global-live-streaming-packager-cache.3qsdn.com/7841/7841_264_live.m3u8", "2K", ""),
-                  Channel("Qello Concerts 2K Live Rock/Pop", "https://qello-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Stingray CMusic 2K Classical", "https://stingray-cmusic-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Stingray DJazz 2K Live", "https://stingray-djazz-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Qello Concerts 2K Live", "https://qello-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Stingray CMusic 2K", "https://stingray-cmusic-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Stingray DJazz 2K", "https://stingray-djazz-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
                   Channel("Stingray Classica 2K", "https://stingray-classica-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Stingray Karaoke 2K", "https://stingray-karaoke-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Stingray Naturescape 2K Ambient", "https://stingray-naturescape-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Vevo Pop 2K Music Videos", "https://vevo-pop-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Stingray Naturescape 2K", "https://stingray-naturescape-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Vevo Pop 2K Music", "https://vevo-pop-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
                   Channel("Vevo Retro Rock 2K", "https://vevo-80s-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Europa Plus TV 2K / FHD", "https://sc.id-tv.kz/Europa_Plus_TV.m3u8", "2K", ""),
-                  Channel("Bridge Deluxe 2K Music", "https://sc.id-tv.kz/Bridge_Deluxe.m3u8", "2K", ""),
-                  Channel("MTV Live 2K / FHD", "https://sc.id-tv.kz/MTV_Live_HD.m3u8", "2K", ""),
-                  Channel("Home 2K QuadHD Nature", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/love-nature-4k/manifest.m3u8", "2K", ""),
                   Channel("NASA TV 2K QHD", "https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8", "2K", ""),
-                  Channel("Louvre & Museum 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/museum-tv/manifest.m3u8", "2K", ""),
                   Channel("Fashion Box 2K QHD", "https://fashionbox-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
                   Channel("Wild Earth 2K HDR", "https://wildearth-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
                   Channel("Travelxp 2K QuadHD", "https://travelxp-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Outdoor Ambient 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/loupe-4k/manifest.m3u8", "2K", ""),
-                  Channel("Мосфильм. Золотая коллекция HD", "https://ott-cdn.ucom.am/s48/index.m3u8", "Кино и сериалы", ""),
-                  Channel("Киносемья FHD", "https://sc.id-tv.kz/Kinosemya.m3u8", "Кино и сериалы", ""),
-                  Channel("Кинохит HD", "https://sc.id-tv.kz/Kinohit.m3u8", "Кино и сериалы", ""),
-                  Channel("Киносвидание HD", "https://sc.id-tv.kz/Kinosvidanie.m3u8", "Кино и сериалы", ""),
-                  Channel("Мужское Кино HD", "https://sc.id-tv.kz/Muzhskoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Наше Новое Кино HD", "https://sc.id-tv.kz/Nashe_novoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Кинокомедия HD", "https://sc.id-tv.kz/Kinokomediya.m3u8", "Кино и сериалы", ""),
-                  Channel("Киномикс HD", "https://sc.id-tv.kz/Kinomiks.m3u8", "Кино и сериалы", ""),
-                  Channel("Дом Кино Премиум HD", "https://sc.id-tv.kz/Dom_kino_premium.m3u8", "Кино и сериалы", ""),
+                  Channel("Мосфильм. Золотая коллекция", "https://ott-cdn.ucom.am/s48/index.m3u8", "Кино и сериалы", ""),
+                  Channel("Киносемья", "https://sc.id-tv.kz/Kinosemya.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинохит", "https://sc.id-tv.kz/Kinohit.m3u8", "Кино и сериалы", ""),
+                  Channel("Киносвидание", "https://sc.id-tv.kz/Kinosvidanie.m3u8", "Кино и сериалы", ""),
+                  Channel("Мужское Кино", "https://sc.id-tv.kz/Muzhskoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Наше Новое Кино", "https://sc.id-tv.kz/Nashe_novoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинокомедия", "https://sc.id-tv.kz/Kinokomediya.m3u8", "Кино и сериалы", ""),
+                  Channel("Киномикс", "https://sc.id-tv.kz/Kinomiks.m3u8", "Кино и сериалы", ""),
+                  Channel("Дом Кино Премиум", "https://sc.id-tv.kz/Dom_kino_premium.m3u8", "Кино и сериалы", ""),
                   Channel("Дом Кино", "https://sc.id-tv.kz/Dom_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Русский Иллюзион HD", "https://sc.id-tv.kz/Russkiy_illyuzion.m3u8", "Кино и сериалы", ""),
-                  Channel("Иллюзион+ HD", "https://sc.id-tv.kz/Illyuzion_plus.m3u8", "Кино и сериалы", ""),
-                  Channel("Еврокино HD", "https://sc.id-tv.kz/Evrokino.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000 Русское Кино HD", "https://sc.id-tv.kz/TV1000_Russkoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000 HD", "https://sc.id-tv.kz/TV1000.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000 Action HD", "https://sc.id-tv.kz/TV1000_Action.m3u8", "Кино и сериалы", ""),
-                  Channel("Остросюжетное HD", "https://sc.id-tv.kz/Ostrosyuzhetnoe_HD.m3u8", "Кино и сериалы", ""),
-                  Channel("Комедийное HD", "https://sc.id-tv.kz/Komediya.m3u8", "Кино и сериалы", ""),
+                  Channel("Русский Иллюзион", "https://sc.id-tv.kz/Russkiy_illyuzion.m3u8", "Кино и сериалы", ""),
+                  Channel("Иллюзион+", "https://sc.id-tv.kz/Illyuzion_plus.m3u8", "Кино и сериалы", ""),
+                  Channel("Еврокино", "https://sc.id-tv.kz/Evrokino.m3u8", "Кино и сериалы", ""),
+                  Channel("TV 1000 Русское Кино", "https://sc.id-tv.kz/TV1000_Russkoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("TV 1000", "https://sc.id-tv.kz/TV1000.m3u8", "Кино и сериалы", ""),
+                  Channel("TV 1000 Action", "https://sc.id-tv.kz/TV1000_Action.m3u8", "Кино и сериалы", ""),
+                  Channel("Остросюжетное", "https://sc.id-tv.kz/Ostrosyuzhetnoe_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Комедийное", "https://sc.id-tv.kz/Komediya.m3u8", "Кино и сериалы", ""),
                   Channel("Индийское Кино", "https://sc.id-tv.kz/Indiyskoe_kino.m3u8", "Кино и сериалы", ""),
                   Channel("Родное Кино", "https://sc.id-tv.kz/Rodnoe_kino.m3u8", "Кино и сериалы", ""),
                   Channel("Любимое Кино", "https://sc.id-tv.kz/Lyubimoe_kino.m3u8", "Кино и сериалы", ""),
@@ -2005,26 +1999,26 @@ jobs:
                   Channel("Русский Детектив", "https://sc.id-tv.kz/Russkiy_detektiv.m3u8", "Кино и сериалы", ""),
                   Channel("Русский Роман", "https://sc.id-tv.kz/Russkiy_roman.m3u8", "Кино и сериалы", ""),
                   Channel("НСТ Страшное Кино", "https://sc.id-tv.kz/NST.m3u8", "Кино и сериалы", ""),
-                  Channel("Hollywood HD", "https://sc.id-tv.kz/Hollywood_HD.m3u8", "Кино и сериалы", ""),
-                  Channel("Киноужас HD", "https://sc.id-tv.kz/Kinouzhas.m3u8", "Кино и сериалы", ""),
-                  Channel("Киносерия HD", "https://sc.id-tv.kz/Kinoseriya.m3u8", "Кино и сериалы", ""),
+                  Channel("Hollywood", "https://sc.id-tv.kz/Hollywood_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Киноужас", "https://sc.id-tv.kz/Kinouzhas.m3u8", "Кино и сериалы", ""),
+                  Channel("Киносерия", "https://sc.id-tv.kz/Kinoseriya.m3u8", "Кино и сериалы", ""),
                   Channel("Феникс+ Кино", "https://sc.id-tv.kz/Feniks_plus_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Discovery Channel HD", "https://sc.id-tv.kz/Discovery_channel.m3u8", "Познавательные", ""),
-                  Channel("National Geographic HD", "https://sc.id-tv.kz/Nat_Geo_HD.m3u8", "Познавательные", ""),
-                  Channel("Nat Geo Wild HD", "https://sc.id-tv.kz/Nat_Geo_Wild_HD.m3u8", "Познавательные", ""),
-                  Channel("Animal Planet HD", "https://sc.id-tv.kz/Animal_Planet_HD.m3u8", "Познавательные", ""),
-                  Channel("Моя Планета HD", "https://sc.id-tv.kz/Moya_planeta.m3u8", "Познавательные", ""),
-                  Channel("Наука 2.0 HD", "https://sc.id-tv.kz/Nauka.m3u8", "Познавательные", ""),
+                  Channel("Discovery Channel", "https://sc.id-tv.kz/Discovery_channel.m3u8", "Познавательные", ""),
+                  Channel("National Geographic", "https://sc.id-tv.kz/Nat_Geo_HD.m3u8", "Познавательные", ""),
+                  Channel("Nat Geo Wild", "https://sc.id-tv.kz/Nat_Geo_Wild_HD.m3u8", "Познавательные", ""),
+                  Channel("Animal Planet", "https://sc.id-tv.kz/Animal_Planet_HD.m3u8", "Познавательные", ""),
+                  Channel("Моя Планета", "https://sc.id-tv.kz/Moya_planeta.m3u8", "Познавательные", ""),
+                  Channel("Наука 2.0", "https://sc.id-tv.kz/Nauka.m3u8", "Познавательные", ""),
                   Channel("История", "https://sc.id-tv.kz/Istoriya.m3u8", "Познавательные", ""),
-                  Channel("Viasat History HD", "https://sc.id-tv.kz/Viasat_History.m3u8", "Познавательные", ""),
-                  Channel("Viasat Explore HD", "https://sc.id-tv.kz/Viasat_Explore.m3u8", "Познавательные", ""),
-                  Channel("Viasat Nature HD", "https://sc.id-tv.kz/Viasat_Nature.m3u8", "Познавательные", ""),
+                  Channel("Viasat History", "https://sc.id-tv.kz/Viasat_History.m3u8", "Познавательные", ""),
+                  Channel("Viasat Explore", "https://sc.id-tv.kz/Viasat_Explore.m3u8", "Познавательные", ""),
+                  Channel("Viasat Nature", "https://sc.id-tv.kz/Viasat_Nature.m3u8", "Познавательные", ""),
                   Channel("Живая Планета", "https://sc.id-tv.kz/Zhivaya_planeta.m3u8", "Познавательные", ""),
                   Channel("Техно 24", "https://sc.id-tv.kz/Tehno_24.m3u8", "Познавательные", ""),
                   Channel("Оружие", "https://sc.id-tv.kz/Oruzhie.m3u8", "Познавательные", ""),
                   Channel("Охота и Рыбалка", "https://sc.id-tv.kz/Ohota_i_rybalka.m3u8", "Познавательные", ""),
-                  Channel("Дикая Охота HD", "https://sc.id-tv.kz/Dikaya_ohota.m3u8", "Познавательные", ""),
-                  Channel("Дикая Рыбалка HD", "https://sc.id-tv.kz/Dikaya_rybalka.m3u8", "Познавательные", ""),
+                  Channel("Дикая Охота", "https://sc.id-tv.kz/Dikaya_ohota.m3u8", "Познавательные", ""),
+                  Channel("Дикая Рыбалка", "https://sc.id-tv.kz/Dikaya_rybalka.m3u8", "Познавательные", ""),
                   Channel("Авто Плюс", "https://sc.id-tv.kz/Avto_plyus.m3u8", "Познавательные", ""),
                   Channel("Драйв ТВ", "https://sc.id-tv.kz/Drayv.m3u8", "Познавательные", ""),
                   Channel("Телепутешествия", "https://sc.id-tv.kz/Teleputeshestviya.m3u8", "Познавательные", ""),
@@ -2033,10 +2027,10 @@ jobs:
                   Channel("Психология 21", "https://sc.id-tv.kz/Psihologiya_21.m3u8", "Познавательные", ""),
                   Channel("Вопросы и Ответы", "https://sc.id-tv.kz/Voprosy_i_otvety.m3u8", "Познавательные", ""),
                   Channel("Карусель", "https://sc.id-tv.kz/Karusel.m3u8", "Детские", ""),
-                  Channel("Мульт HD", "https://sc.id-tv.kz/Mult.m3u8", "Детские", ""),
+                  Channel("Мульт", "https://sc.id-tv.kz/Mult.m3u8", "Детские", ""),
                   Channel("Мультиландия", "https://sc.id-tv.kz/Multimaniya.m3u8", "Детские", ""),
                   Channel("Детский Мир", "https://sc.id-tv.kz/Detskiy_mir.m3u8", "Детские", ""),
-                  Channel("СТС Kids HD", "https://sc.id-tv.kz/STS_Kids.m3u8", "Детские", ""),
+                  Channel("СТС Kids", "https://sc.id-tv.kz/STS_Kids.m3u8", "Детские", ""),
                   Channel("О! Детский", "https://sc.id-tv.kz/O.m3u8", "Детские", ""),
                   Channel("Рыжий", "https://sc.id-tv.kz/Ryzhiy.m3u8", "Детские", ""),
                   Channel("Радость Моя", "https://sc.id-tv.kz/Radost_moya.m3u8", "Детские", ""),
@@ -2047,38 +2041,38 @@ jobs:
                   Channel("Nick Jr.", "https://sc.id-tv.kz/Nick_Jr.m3u8", "Детские", ""),
                   Channel("Cartoon Network", "https://sc.id-tv.kz/Cartoon_Network.m3u8", "Детские", ""),
                   Channel("Ani Мультфильмы", "https://sc.id-tv.kz/Ani.m3u8", "Детские", ""),
-                  Channel("ТНТ HD", "https://sc.id-tv.kz/TNT_HD.m3u8", "Развлечения", ""),
+                  Channel("ТНТ", "https://sc.id-tv.kz/TNT_HD.m3u8", "Развлечения", ""),
                   Channel("ТНТ4", "https://sc.id-tv.kz/TNT4.m3u8", "Развлечения", ""),
-                  Channel("СТС HD", "https://sc.id-tv.kz/STS_HD.m3u8", "Развлечения", ""),
+                  Channel("СТС", "https://sc.id-tv.kz/STS_HD.m3u8", "Развлечения", ""),
                   Channel("СТС Love", "https://sc.id-tv.kz/STS_Love.m3u8", "Развлечения", ""),
-                  Channel("Пятница! HD", "https://sc.id-tv.kz/Pyatnica.m3u8", "Развлечения", ""),
+                  Channel("Пятница!", "https://sc.id-tv.kz/Pyatnica.m3u8", "Развлечения", ""),
                   Channel("Суббота!", "https://sc.id-tv.kz/Subbota.m3u8", "Развлечения", ""),
                   Channel("Че!", "https://sc.id-tv.kz/Che.m3u8", "Развлечения", ""),
                   Channel("Ю ТВ", "https://sc.id-tv.kz/Yu.m3u8", "Развлечения", ""),
-                  Channel("Домашний HD", "https://sc.id-tv.kz/Domashniy.m3u8", "Развлечения", ""),
+                  Channel("Домашний", "https://sc.id-tv.kz/Domashniy.m3u8", "Развлечения", ""),
                   Channel("КВН ТВ", "https://sc.id-tv.kz/KVN_TV.m3u8", "Развлечения", ""),
                   Channel("Сарафан", "https://sc.id-tv.kz/Sarafan.m3u8", "Развлечения", ""),
                   Channel("Кухня ТВ", "https://sc.id-tv.kz/Kuhnya_TV.m3u8", "Развлечения", ""),
-                  Channel("Еда Премиум HD", "https://sc.id-tv.kz/Eda_HD.m3u8", "Развлечения", ""),
-                  Channel("TLC HD", "https://sc.id-tv.kz/TLC.m3u8", "Развлечения", ""),
+                  Channel("Еда Премиум", "https://sc.id-tv.kz/Eda_HD.m3u8", "Развлечения", ""),
+                  Channel("TLC", "https://sc.id-tv.kz/TLC.m3u8", "Развлечения", ""),
                   Channel("Бобёр", "https://sc.id-tv.kz/Bober.m3u8", "Развлечения", ""),
                   Channel("Усадьба", "https://sc.id-tv.kz/Usadba.m3u8", "Развлечения", ""),
-                  Channel("Первый канал HD", "https://sc.id-tv.kz/Perviy_kanal_HD.m3u8", "Новости и общие", ""),
-                  Channel("Россия 1 HD", "https://sc.id-tv.kz/Rossiya_1_HD.m3u8", "Новости и общие", ""),
-                  Channel("НТВ HD", "https://sc.id-tv.kz/NTV_HD.m3u8", "Новости и общие", ""),
-                  Channel("РЕН ТВ HD", "https://sc.id-tv.kz/Ren_TV.m3u8", "Новости и общие", ""),
-                  Channel("ТВ Центр (ТВЦ)", "https://sc.id-tv.kz/TVC.m3u8", "Новости и общие", ""),
+                  Channel("Первый канал", "https://sc.id-tv.kz/Perviy_kanal_HD.m3u8", "Новости и общие", ""),
+                  Channel("Россия 1", "https://sc.id-tv.kz/Rossiya_1_HD.m3u8", "Новости и общие", ""),
+                  Channel("НТВ", "https://sc.id-tv.kz/NTV_HD.m3u8", "Новости и общие", ""),
+                  Channel("РЕН ТВ", "https://sc.id-tv.kz/Ren_TV.m3u8", "Новости и общие", ""),
+                  Channel("ТВ Центр", "https://sc.id-tv.kz/TVC.m3u8", "Новости и общие", ""),
                   Channel("Пятый Канал", "https://sc.id-tv.kz/5_kanal.m3u8", "Новости и общие", ""),
-                  Channel("Звезда HD", "https://sc.id-tv.kz/Zvezda.m3u8", "Новости и общие", ""),
-                  Channel("МИР HD", "https://sc.id-tv.kz/Mir_HD.m3u8", "Новости и общие", ""),
+                  Channel("Звезда", "https://sc.id-tv.kz/Zvezda.m3u8", "Новости и общие", ""),
+                  Channel("МИР", "https://sc.id-tv.kz/Mir_HD.m3u8", "Новости и общие", ""),
                   Channel("МИР 24", "https://sc.id-tv.kz/Mir_24.m3u8", "Новости и общие", ""),
                   Channel("Россия 24", "https://sc.id-tv.kz/Rossiya_24.m3u8", "Новости и общие", ""),
                   Channel("РБК ТВ", "https://sc.id-tv.kz/RBK.m3u8", "Новости и общие", ""),
-                  Channel("360° Подмосковье HD", "https://sc.id-tv.kz/360_Podmoskove.m3u8", "Новости и общие", ""),
+                  Channel("360° Подмосковье", "https://sc.id-tv.kz/360_Podmoskove.m3u8", "Новости и общие", ""),
                   Channel("Москва 24", "https://sc.id-tv.kz/Moskva_24.m3u8", "Новости и общие", ""),
                   Channel("ОТР", "https://sc.id-tv.kz/OTR.m3u8", "Новости и общие", ""),
                   Channel("Спас", "https://sc.id-tv.kz/Spas.m3u8", "Новости и общие", ""),
-                  Channel("Россия К (Культура)", "https://sc.id-tv.kz/Rossiya_K.m3u8", "Новости и общие", ""),'''
+                  Channel("Россия К", "https://sc.id-tv.kz/Rossiya_K.m3u8", "Новости и общие", ""),'''
 
           if "Trace Sport Stars 2K" not in cat:
               cat = cat.replace("val extraOpenStreams = listOf(", "val extraOpenStreams = listOf(\n        " + massive_channels_pack)
@@ -2155,7 +2149,6 @@ jobs:
           with open("app/src/main/res/drawable/ic_banner.xml", "w") as f:
               f.write(realistic_eye_banner)
 
-          # Пункт 7: Новое название приложения TiViLook в AndroidManifest.xml
           with open("app/src/main/AndroidManifest.xml", "w") as f:
               f.write('''<?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -2185,7 +2178,7 @@ jobs:
               </application>
           </manifest>''')
 
-          # Записываем полный код MainActivity.kt (v1.7 TiViLook)
+          # Записываем полный код MainActivity.kt (v1.8 TiViLook)
           with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -2229,6 +2222,7 @@ jobs:
           import androidx.media3.exoplayer.DefaultLoadControl
           import androidx.media3.exoplayer.DefaultRenderersFactory
           import androidx.media3.exoplayer.ExoPlayer
+          import androidx.media3.exoplayer.hls.HlsMediaSource
           import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
           import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
           import androidx.media3.ui.AspectRatioFrameLayout
@@ -2241,6 +2235,7 @@ jobs:
           import java.io.InputStream
           import java.net.HttpURLConnection
           import java.net.URL
+          import java.text.Collator
           import java.text.SimpleDateFormat
           import java.util.Date
           import java.util.Locale
@@ -2278,6 +2273,28 @@ jobs:
               val iconEpg: String,
               val iconAudio: String
           )
+
+          // Пункт 1: Специальный TextView, который гарантированно включает бегущую строку (MARQUEE) внутри ListView
+          class MarqueeRowTextView(context: Context) : TextView(context) {
+              var forceMarqueeActive: Boolean = false
+                  set(value) {
+                      field = value
+                      isSelected = value
+                      if (value) {
+                          ellipsize = TextUtils.TruncateAt.MARQUEE
+                          marqueeRepeatLimit = -1
+                          setSingleLine(true)
+                          setHorizontallyScrolling(true)
+                      } else {
+                          ellipsize = TextUtils.TruncateAt.END
+                          setSingleLine(true)
+                      }
+                  }
+
+              override fun isFocused(): Boolean {
+                  return forceMarqueeActive || super.isFocused()
+              }
+          }
 
           class RealisticEyeSplashView(context: Context) : View(context) {
               var eyeOpenFraction: Float = 0.02f
@@ -2753,11 +2770,10 @@ jobs:
               private var focusedCategoryPos = 1
               private var focusedChannelPos = 0
 
-              // Пункт 4: Флаг обработки долгого нажатия центральной кнопки OK
               private var centerLongPressHandled = false
 
-              // Пункт 5: Состояние ночного режима (-50% яркости для ночного просмотра)
-              private var isNightDimActive = false
+              // Пункт 6: Выбранный уровень яркости экрана (100, 75, 50, 25)
+              private var brightnessPercent = 100
 
               private var controlMode = 0
               private lateinit var gestureDetector: GestureDetector
@@ -2844,6 +2860,11 @@ jobs:
               private var lastBackPressTime = 0L
               private var bufferingStuckSeconds = 0
               private var currentBrowseDir: File = Environment.getExternalStorageDirectory()
+
+              // Алфавитный компаратор с поддержкой русского и английского языков
+              private val ruCollator: Collator = Collator.getInstance(Locale("ru", "RU")).apply {
+                  strength = Collator.PRIMARY
+              }
 
               private val themes = listOf(
                   AppThemeStyle(
@@ -3012,14 +3033,24 @@ jobs:
                   }
               }
 
-              // Пункт 5: Переключение ночного режима (-50% яркости экрана и затемняющий фильтр)
-              private fun applyNightDimMode() {
-                  nightDimOverlay.visibility = if (isNightDimActive) View.VISIBLE else View.GONE
-                  val lp = window.attributes
-                  lp.screenBrightness = if (isNightDimActive) 0.25f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-                  window.attributes = lp
+              // Пункт 6: Установка выбранной яркости (100%, 75%, 50%, 25%)
+              private fun applyBrightnessLevel() {
+                  val pct = brightnessPercent.coerceIn(25, 100)
+                  if (pct >= 100) {
+                      nightDimOverlay.visibility = View.GONE
+                      val lp = window.attributes
+                      lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                      window.attributes = lp
+                  } else {
+                      val alpha = ((100 - pct) * 2.15f).toInt().coerceIn(0, 210)
+                      nightDimOverlay.setBackgroundColor(Color.argb(alpha, 0, 0, 0))
+                      nightDimOverlay.visibility = View.VISIBLE
+                      val lp = window.attributes
+                      lp.screenBrightness = (pct / 100f).coerceIn(0.10f, 1.0f)
+                      window.attributes = lp
+                  }
                   if (::btnOsdNightMode.isInitialized) {
-                      btnOsdNightMode.text = if (isNightDimActive) "☀ Яркость 100%" else "🌙 Ночь -50%"
+                      btnOsdNightMode.text = "🌙 Яркость $pct%"
                   }
               }
 
@@ -3056,7 +3087,7 @@ jobs:
                   btnOsdEpgList.text = "${t.iconEpg} Программа"
                   btnOsdSettings.text = "${t.iconSettings} Настройки"
                   btnOsdAudio.text = "${t.iconAudio} Звук"
-                  btnOsdNightMode.text = if (isNightDimActive) "☀ Яркость 100%" else "🌙 Ночь -50%"
+                  btnOsdNightMode.text = "🌙 Яркость $brightnessPercent%"
                   btnOsdChannelActions.text = "⚙ Канал"
 
                   for (btn in listOf(btnOsdTop, btnOsdFav, btnOsdEpgList, btnOsdSettings, btnOsdAudio, btnOsdNightMode, btnOsdChannelActions)) {
@@ -3247,10 +3278,9 @@ jobs:
                   }
                   root.addView(playerView)
 
-                  // Пункт 5: Вуаль затемнения видео на 50% для ночного режима просмотра
                   nightDimOverlay = View(this).apply {
                       setBackgroundColor(Color.parseColor("#80000000"))
-                      visibility = if (isNightDimActive) View.VISIBLE else View.GONE
+                      visibility = View.GONE
                       isClickable = false
                       isFocusable = false
                       layoutParams = FrameLayout.LayoutParams(
@@ -3325,7 +3355,6 @@ jobs:
                   }
                   root.addView(signalContainer)
 
-                  // Пункт 1: Левое меню сделано шире (760px вместо 640px)
                   sidePanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       background = makeThemedPanelBg()
@@ -3452,7 +3481,6 @@ jobs:
                   infoPanel.addView(infoTextView)
                   root.addView(infoPanel)
 
-                  // Центральное меню по кнопке OK + Пункт 5 (добавлена кнопка "🌙 Ночь -50%")
                   centerOsdPanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       background = makeThemedPanelBg()
@@ -3536,16 +3564,9 @@ jobs:
                   btnOsdAudio = makeModernButton("${t.iconAudio} Звук") {
                       navigateToMenu("AUDIO")
                   }
-                  // Пункт 5: Кнопка снижения яркости на 50% для ночного просмотра
-                  btnOsdNightMode = makeModernButton(if (isNightDimActive) "☀ Яркость 100%" else "🌙 Ночь -50%") {
-                      isNightDimActive = !isNightDimActive
-                      saveState()
-                      applyNightDimMode()
-                      Toast.makeText(
-                          this,
-                          if (isNightDimActive) "🌙 Ночной режим: яркость снижена на 50%" else "☀ Обычная яркость (100%)",
-                          Toast.LENGTH_SHORT
-                      ).show()
+                  // Пункт 6: Кнопка ночной яркости теперь открывает меню выбора: 100% / 75% / 50% / 25%
+                  btnOsdNightMode = makeModernButton("🌙 Яркость $brightnessPercent%") {
+                      navigateToMenu("BRIGHTNESS_MENU")
                   }
                   btnOsdChannelActions = makeModernButton("⚙ Канал") {
                       navigateToMenu("CHANNEL_ACTIONS")
@@ -3659,7 +3680,7 @@ jobs:
                       GridTileSpec("CONTROL_MODE", "#00838F", "#FFD54F", "Управление", "Режим: Сенсор или Пульт ТВ") {
                           showFirstRunControlPicker(forceShow = true)
                       },
-                      GridTileSpec("MORE", "#4A148C", "#FFAB00", "Экран и РФ", "Формат экрана, Обход РФ и EPG") { navigateToMenu("MORE_SETTINGS") }
+                      GridTileSpec("MORE", "#4A148C", "#FFAB00", "Экран и РФ", "Формат экрана, Яркость, Обход РФ и EPG") { navigateToMenu("MORE_SETTINGS") }
                   )
 
                   val gridContainer = LinearLayout(this).apply {
@@ -3858,10 +3879,9 @@ jobs:
                   playSplashEyeAnimation()
                   initPlayer()
                   applyScreenAspectMode()
-                  applyNightDimMode()
+                  applyBrightnessLevel()
                   startClockAndWatchdogUpdater()
 
-                  // Пункт 1: В списке каналов и категорий включена однострочная бегущая строка (singleLineMarquee = true)
                   categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17.5f, true) { pos ->
                       !isSideShowingChannels && pos == focusedCategoryPos
                   }
@@ -3872,7 +3892,6 @@ jobs:
                   }
                   channelListView.adapter = channelAdapter
 
-                  // Пункт 2: При переходе из категории в список каналов курсор и скролл жёстко ставятся на самый верх (0)
                   categoryListView.setOnItemClickListener { _, _, position, _ ->
                       resetMenuInactivityTimer()
                       focusedCategoryPos = position
@@ -3890,25 +3909,57 @@ jobs:
                       override fun onNothingSelected(parent: AdapterView<*>?) {}
                   }
 
+                  // Пункт 3: Зацикливание пролистывания в списке категорий (с 1-й позиции вверх -> в конец, с последней вниз -> в начало)
                   categoryListView.setOnKeyListener { _, keyCode, event ->
-                      if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                      if (event.action == KeyEvent.ACTION_DOWN) {
                           resetMenuInactivityTimer()
-                          selectCategory(focusedCategoryPos.coerceAtLeast(0))
-                          showSideChannelsMode(focusTop = true, focusCurrentChannel = false)
-                          true
-                      } else {
-                          false
+                          val count = categoryAdapter.count
+                          if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                              selectCategory(focusedCategoryPos.coerceAtLeast(0))
+                              showSideChannelsMode(focusTop = true, focusCurrentChannel = false)
+                              return@setOnKeyListener true
+                          } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP && count > 0 && focusedCategoryPos <= 0) {
+                              val lastIdx = count - 1
+                              focusedCategoryPos = lastIdx
+                              selectCategory(lastIdx)
+                              categoryListView.setSelectionFromTop(lastIdx, 0)
+                              categoryAdapter.notifyDataSetChanged()
+                              return@setOnKeyListener true
+                          } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && count > 0 && focusedCategoryPos >= count - 1) {
+                              focusedCategoryPos = 0
+                              selectCategory(0)
+                              categoryListView.setSelectionFromTop(0, 0)
+                              categoryAdapter.notifyDataSetChanged()
+                              return@setOnKeyListener true
+                          }
                       }
+                      false
                   }
 
+                  // Пункт 3: Зацикливание пролистывания в списке каналов (с 1-й позиции вверх -> в самый низ списка, с последней вниз -> на 1-ю позицию)
                   channelListView.setOnKeyListener { _, keyCode, event ->
-                      if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                      if (event.action == KeyEvent.ACTION_DOWN) {
                           resetMenuInactivityTimer()
-                          showSideGroupsMode()
-                          true
-                      } else {
-                          false
+                          val count = displayedChannels.size
+                          if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                              showSideGroupsMode()
+                              return@setOnKeyListener true
+                          } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP && count > 0 && focusedChannelPos <= 0) {
+                              val lastIdx = count - 1
+                              focusedChannelPos = lastIdx
+                              channelListView.setSelectionFromTop(lastIdx, 0)
+                              channelListView.setItemChecked(lastIdx, true)
+                              channelAdapter.notifyDataSetChanged()
+                              return@setOnKeyListener true
+                          } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && count > 0 && focusedChannelPos >= count - 1) {
+                              focusedChannelPos = 0
+                              channelListView.setSelectionFromTop(0, 0)
+                              channelListView.setItemChecked(0, true)
+                              channelAdapter.notifyDataSetChanged()
+                              return@setOnKeyListener true
+                          }
                       }
+                      false
                   }
 
                   channelListView.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -3942,31 +3993,33 @@ jobs:
                   loadEpgOncePerDayInBackground(forceRefresh = false)
               }
 
-              // Пункт 1 и 4: Скруглённый курсор + однострочные названия каналов с бегущей строкой (MARQUEE)
+              // Пункт 1: Адаптер с MarqueeRowTextView — гарантирует работу бегущей строки на длинных названиях каналов
               private fun createRoundedSelectorAdapter(
                   items: MutableList<String>,
                   spSize: Float,
                   singleLineMarquee: Boolean = false,
                   isRowHighlighted: (Int) -> Boolean
               ): ArrayAdapter<String> {
-                  return object : ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_list_item_1, items) {
+                  return object : ArrayAdapter<String>(this@MainActivity, 0, items) {
                       override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                          val tv = (super.getView(position, convertView, parent) as TextView)
+                          val tv = (convertView as? MarqueeRowTextView) ?: MarqueeRowTextView(this@MainActivity).apply {
+                              layoutParams = AbsListView.LayoutParams(
+                                  ViewGroup.LayoutParams.MATCH_PARENT,
+                                  ViewGroup.LayoutParams.WRAP_CONTENT
+                              )
+                          }
                           val t = currentTheme()
                           val highlighted = isRowHighlighted(position)
 
+                          tv.text = getItem(position) ?: ""
                           tv.typeface = if (highlighted) t.boldFont else t.normalFont
                           tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, spSize)
                           tv.setPadding(22, 13, 22, 13)
-                          tv.minHeight = 0
-                          tv.minimumHeight = 0
 
                           if (singleLineMarquee) {
-                              tv.isSingleLine = true
-                              tv.maxLines = 1
-                              tv.ellipsize = if (highlighted) TextUtils.TruncateAt.MARQUEE else TextUtils.TruncateAt.END
-                              tv.marqueeRepeatLimit = -1
-                              tv.isSelected = highlighted
+                              tv.forceMarqueeActive = highlighted
+                          } else {
+                              tv.isSingleLine = false
                           }
 
                           if (highlighted) {
@@ -4148,7 +4201,7 @@ jobs:
                   })
               }
 
-              // Пункт 2: Жёсткий сброс скролла и курсора на 0-ю позицию через post + setSelectionFromTop(0, 0) при смене категории!
+              // Пункт 2: Полная синхронизация видимой области списка с положением курсора (экран всегда показывает именно тот канал, на котором стоит курсор!)
               private fun showSideChannelsMode(focusTop: Boolean, focusCurrentChannel: Boolean = false) {
                   isSideShowingChannels = true
                   val catName = categories.getOrElse(currentCategoryIndex) { "Все каналы" }
@@ -4167,11 +4220,18 @@ jobs:
                       }
                       focusedChannelPos = targetPos
                       refreshChannelAdapter()
+
+                      // Принудительно сбрасываем предыдущую прокрутку на 20-м канале через перепривязку/инвалидацию и скролл к targetPos
+                      channelAdapter.notifyDataSetInvalidated()
+                      channelListView.requestFocusFromTouch()
+                      channelListView.setSelection(targetPos)
                       channelListView.setItemChecked(targetPos, true)
-                      channelListView.setSelectionFromTop(targetPos, 0)
                       channelListView.requestFocus()
+
                       channelListView.post {
+                          channelListView.smoothScrollToPositionFromTop(targetPos, 0, 0)
                           channelListView.setSelectionFromTop(targetPos, 0)
+                          channelListView.setSelection(targetPos)
                           channelListView.setItemChecked(targetPos, true)
                           channelAdapter.notifyDataSetChanged()
                       }
@@ -4189,6 +4249,7 @@ jobs:
                   channelListView.visibility = View.GONE
                   categoryListView.visibility = View.VISIBLE
                   categoryListView.setSelectionFromTop(currentCategoryIndex, 0)
+                  categoryListView.setSelection(currentCategoryIndex)
                   categoryListView.setItemChecked(currentCategoryIndex, true)
                   categoryListView.requestFocus()
               }
@@ -4326,6 +4387,7 @@ jobs:
                           animateMenuAppear(centerOsdPanel, 0f, 40f)
                           btnOsdTop.requestFocus()
                       }
+                      "BRIGHTNESS_MENU" -> openBrightnessSubModal()
                       "CHANNEL_ACTIONS" -> openChannelActionsSubModal()
                       "MOVE_CHANNEL_CATEGORY" -> openMoveChannelCategorySubModal()
                       "FULL_EPG" -> openFullScreenChannelEpg()
@@ -4357,6 +4419,38 @@ jobs:
                       }
                       "ADD_URL" -> openAddUrlSubModal()
                   }
+              }
+
+              // Пункт 6: Меню выбора уровня яркости (100%, 75%, 50%, 25%)
+              private fun openBrightnessSubModal() {
+                  subModalTitle.text = "🌙 Уровень яркости экрана"
+                  subModalInputContainer.visibility = View.GONE
+                  subModalList.visibility = View.VISIBLE
+
+                  val levels = listOf(100, 75, 50, 25)
+                  val descriptions = listOf(
+                      "☀  100% — Полная яркость (Дневной режим)",
+                      "🌤  75% — Мягкое приглушение (Вечерний режим)",
+                      "🌙  50% — Половина яркости (Ночной просмотр)",
+                      "🌑  25% — Минимальная яркость (В полной темноте)"
+                  )
+                  val items = levels.mapIndexed { idx, lvl ->
+                      (if (brightnessPercent == lvl) "●  " else "○  ") + descriptions[idx]
+                  }
+                  updateSubModalListItems(items)
+
+                  subModalList.setOnItemClickListener { _, _, which, _ ->
+                      resetMenuInactivityTimer()
+                      if (which in levels.indices) {
+                          brightnessPercent = levels[which]
+                          applyBrightnessLevel()
+                          saveState()
+                          Toast.makeText(this, "Яркость экрана: $brightnessPercent%", Toast.LENGTH_SHORT).show()
+                          navigateBackInMenu()
+                      }
+                  }
+                  animateMenuAppear(subModalOverlay)
+                  subModalList.requestFocus()
               }
 
               private fun openChannelActionsSubModal() {
@@ -4538,7 +4632,7 @@ jobs:
 
               private fun openMoreSettingsSubModal() {
                   val t = currentTheme()
-                  subModalTitle.text = "⋯ Формат экрана, Сеть РФ и EPG"
+                  subModalTitle.text = "⋯ Формат экрана, Яркость, Сеть РФ и EPG"
                   subModalInputContainer.visibility = View.GONE
                   subModalList.visibility = View.VISIBLE
 
@@ -4552,7 +4646,7 @@ jobs:
 
                   val items = listOf(
                       "🖥  Формат экрана: ${screenAspectModeName()}",
-                      "🌙  Ночной режим (-50% яркости): ${if (isNightDimActive) "Включён" else "Выключен"}",
+                      "🌙  Яркость экрана: $brightnessPercent% (нажмите для выбора)",
                       "🛡  Режим совместимости для РФ: $bypassStatus",
                       "📡  Маскировка потока (User-Agent): $agentName",
                       "${t.iconEpg}  Адрес программы передач (обновление 1 раз в сутки)",
@@ -4569,12 +4663,7 @@ jobs:
                               saveState()
                               openMoreSettingsSubModal()
                           }
-                          1 -> {
-                              isNightDimActive = !isNightDimActive
-                              applyNightDimMode()
-                              saveState()
-                              openMoreSettingsSubModal()
-                          }
+                          1 -> navigateToMenu("BRIGHTNESS_MENU")
                           2 -> {
                               antiBlockEnabled = !antiBlockEnabled
                               saveState()
@@ -4611,7 +4700,7 @@ jobs:
                               if (p != null && currentChannel != null) {
                                   if (p.playbackState == Player.STATE_BUFFERING) {
                                       bufferingStuckSeconds += 2
-                                      if (bufferingStuckSeconds >= 16) {
+                                      if (bufferingStuckSeconds >= 18) {
                                           bufferingStuckSeconds = 0
                                           if (antiBlockEnabled) {
                                               userAgentIndex = (userAgentIndex + 1) % russianSmartTvAgents.size
@@ -4642,14 +4731,21 @@ jobs:
                   } catch (_: Exception) {}
               }
 
+              // Пункт 4: Улучшенный алгоритм буферизации Live-потоков (снято жёсткое 10-секундное ограничение live targetOffset, которое резало буфер до 2 сек!)
               private fun createLiveMediaItem(url: String): MediaItem {
+                  val targetOffset = when (bufferLevel) {
+                      0 -> 12000L
+                      1 -> 22000L
+                      2 -> 35000L
+                      else -> 48000L
+                  }
                   return MediaItem.Builder()
                       .setUri(url)
                       .setLiveConfiguration(
                           MediaItem.LiveConfiguration.Builder()
-                              .setTargetOffsetMs(10000)
-                              .setMinOffsetMs(5000)
-                              .setMaxOffsetMs(35000)
+                              .setTargetOffsetMs(targetOffset)
+                              .setMinOffsetMs(6000L)
+                              .setMaxOffsetMs(120000L)
                               .setMinPlaybackSpeed(1.0f)
                               .setMaxPlaybackSpeed(1.0f)
                               .build()
@@ -4680,25 +4776,25 @@ jobs:
                   }
               }
 
-              // Пункт 3: Принудительный выбор максимального качества видео (1080p / 2K вместо 720p) в мультибитрейтных HLS-потоках
+              // Пункт 4: Повышена стабильность накачки буфера (setPrioritizeTimeOverSizeThresholds + увеличенный стартовый запас сегментов)
               private fun initPlayer() {
                   val currentUrl = currentChannel?.url
                   try { player?.release() } catch (_: Exception) {}
 
                   val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-                      0 -> listOf(12000, 30000, 1200, 2500)
-                      1 -> listOf(25000, 55000, 1500, 3000)
-                      2 -> listOf(45000, 90000, 1800, 3500)
-                      else -> listOf(65000, 130000, 2200, 4500)
+                      0 -> listOf(15000, 35000, 1500, 3000)
+                      1 -> listOf(30000, 65000, 2200, 4000)
+                      2 -> listOf(50000, 100000, 3000, 5000)
+                      else -> listOf(80000, 160000, 4000, 6500)
                   }
 
-                  val targetBytes = if (bufferLevel >= 3) 64 * 1024 * 1024 else 42 * 1024 * 1024
+                  val targetBytes = if (bufferLevel >= 3) 96 * 1024 * 1024 else 56 * 1024 * 1024
 
                   val loadControl = DefaultLoadControl.Builder()
                       .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
                       .setTargetBufferBytes(targetBytes)
                       .setPrioritizeTimeOverSizeThresholds(true)
-                      .setBackBuffer(15000, true)
+                      .setBackBuffer(25000, true)
                       .build()
 
                   val extensionMode = when (decoderMode) {
@@ -4728,11 +4824,11 @@ jobs:
                   val httpDataSourceFactory = DefaultHttpDataSource.Factory()
                       .setUserAgent(activeAgent)
                       .setAllowCrossProtocolRedirects(true)
-                      .setConnectTimeoutMs(15000)
-                      .setReadTimeoutMs(25000)
+                      .setConnectTimeoutMs(18000)
+                      .setReadTimeoutMs(30000)
                       .setDefaultRequestProperties(extraHeaders)
 
-                  val errorPolicy = DefaultLoadErrorHandlingPolicy(8)
+                  val errorPolicy = DefaultLoadErrorHandlingPolicy(10)
 
                   val mediaSourceFactory = DefaultMediaSourceFactory(this)
                       .setDataSourceFactory(httpDataSourceFactory)
@@ -4763,7 +4859,6 @@ jobs:
                           var builder = newPlayer.trackSelectionParameters.buildUpon()
                           var changed = false
 
-                          // 1. Автовыбор аудиодорожки, если ни одна не активна
                           val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
                           if (audioGroups.isNotEmpty() && audioGroups.none { it.isSelected }) {
                               val firstGroup = audioGroups.first()
@@ -4773,7 +4868,6 @@ jobs:
                               }
                           }
 
-                          // 2. Пункт 3: Ищем видеодорожку с максимальным разрешением (1080p / 2K вместо 720p) и принудительно включаем её!
                           val videoGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
                           for (vg in videoGroups) {
                               if (vg.length > 1) {
@@ -4872,7 +4966,7 @@ jobs:
                                           segConn.setRequestProperty("Connection", "keep-alive")
                                           segConn.connectTimeout = 3500
                                           segConn.readTimeout = 3500
-                                          val buf = ByteArray(32 * 1024)
+                                          val buf = ByteArray(64 * 1024)
                                           segConn.inputStream.read(buf)
                                           segConn.disconnect()
                                       }
@@ -4887,24 +4981,25 @@ jobs:
                   }
               }
 
+              // Пункт 1: Очистка названия канала от мусорных цифр, тегов разрешения (1080p, 720p, 50fps) и скобок из M3U
+              private fun cleanChannelDisplayName(raw: String): String {
+                  var s = raw
+                  // Убираем всё внутри квадратных и круглых скобок ([Geo-blocked], (1080p), (576p) и т.д.)
+                  s = s.replace(Regex("\\[[^\\]]*\\]"), " ")
+                  s = s.replace(Regex("\\([^)]*\\)"), " ")
+                  // Убираем технические пометки разрешения и частоты кадров
+                  s = s.replace(Regex("(?i)\\b(1080p|1080i|720p|576p|540p|480p|360p|2160p|1440p|50fps|60fps|25fps|fhd|uhd|qhd|quadhd|fullhd|hd|sd|hevc|h264)\\b"), " ")
+                  // Убираем висящие дефисы, точки и двойные пробелы
+                  s = s.replace(Regex("\\s+"), " ").trim()
+                  s = s.trim('-', '.', '•', '|', '_')
+                  return s.ifEmpty { raw.trim() }
+              }
+
               private fun normalizeName(raw: String): String {
-                  val clean = raw.lowercase()
-                      .replace("1080p", "")
-                      .replace("720p", "")
-                      .replace("2k", "")
-                      .replace("fhd", "")
-                      .replace("uhd", "")
-                      .replace("qhd", "")
-                      .replace("4k", "")
-                      .replace("hd", "")
-                      .replace("50", "")
-                      .replace("orig", "")
+                  val clean = cleanChannelDisplayName(raw).lowercase()
                   val sb = StringBuilder()
-                  var inBrackets = false
                   for (c in clean) {
-                      if (c == '(' || c == '[') inBrackets = true
-                      else if (c == ')' || c == ']') inBrackets = false
-                      else if (!inBrackets && (c in 'a'..'z' || c in 'а'..'я' || c in '0'..'9')) {
+                      if (c in 'a'..'z' || c in 'а'..'я' || c in '0'..'9') {
                           sb.append(c)
                       }
                   }
@@ -5140,10 +5235,10 @@ jobs:
                   val isTop = topUrls.contains(ch.url)
                   btnOsdTop.text = if (isTop) "${t.iconTop} Убрать ТОП" else "${t.iconTop} В ТОП"
                   btnOsdFav.text = if (isFav) "${t.iconFav} В Избранном" else "${t.iconFav} Избранное"
-                  btnOsdNightMode.text = if (isNightDimActive) "☀ Яркость 100%" else "🌙 Ночь -50%"
+                  btnOsdNightMode.text = "🌙 Яркость $brightnessPercent%"
 
                   val badges = (if (isTop) "${t.iconTop} " else "") + (if (isFav) "${t.iconFav} " else "")
-                  osdChannelTitle.text = badges + ch.name + "  •  " + effectiveCategory(ch)
+                  osdChannelTitle.text = badges + ch.name + " " + buildLanguageTag(ch) + "  •  " + effectiveCategory(ch)
 
                   val (curr, next) = getCurrentAndNextEpg(ch)
                   val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -5380,6 +5475,7 @@ jobs:
 
               private fun openChannelEditorItemsModal(catName: String) {
                   val catChannels = allChannels.filter { effectiveCategory(it) == catName }
+                      .sortedWith(Comparator { a, b -> ruCollator.compare(a.name, b.name) })
                   val isCatDisabled = disabledCategories.contains(catName)
 
                   subModalTitle.text = "☑ Группа: $catName (${catChannels.size} кан.)"
@@ -5418,7 +5514,7 @@ jobs:
                           false -> " 🔴"
                           null -> ""
                       }
-                      "$box  ${ch.name}  ${buildChannelSpecsBadge(ch)}$health"
+                      "$box  ${ch.name} ${buildLanguageTag(ch)}$health"
                   }
                   updateSubModalListItems(labels)
 
@@ -5518,7 +5614,8 @@ jobs:
 
               private fun openAnalyzerGroupChannelsModal(catName: String, firstOpen: Boolean = false) {
                   val snapshot = allChannels.toList()
-                  val groupChans = if (catName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == catName }
+                  val groupChans = (if (catName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == catName })
+                      .sortedWith(Comparator { a, b -> ruCollator.compare(a.name, b.name) })
                   val alive = groupChans.count { channelHealthMap[it.url] == true }
                   val dead = groupChans.count { channelHealthMap[it.url] == false }
                   val revived = groupChans.filter { disabledUrls.contains(it.url) && channelHealthMap[it.url] == true }
@@ -5578,7 +5675,7 @@ jobs:
                           disabledUrls.contains(ch.url) -> "  [Отключен]"
                           else -> ""
                       }
-                      "${i + 1}.  $status  —  ${ch.name}  ${buildChannelSpecsBadge(ch)}$stateTag"
+                      "${i + 1}.  $status  —  ${ch.name} ${buildLanguageTag(ch)}$stateTag"
                   }
                   updateSubModalListItems(labels)
 
@@ -5694,10 +5791,10 @@ jobs:
                   subModalList.visibility = View.VISIBLE
 
                   val options = listOf(
-                      "Маленький (быстрый старт)",
-                      "Средний (стандартный)",
-                      "Большой (высокая стабильность)",
-                      "Очень большой (максимум против заиканий)"
+                      "Маленький (15–35 сек, быстрый старт)",
+                      "Средний (30–65 сек, стандартный)",
+                      "Большой (50–100 сек, высокая стабильность)",
+                      "Очень большой (80–160 сек, максимум против заиканий)"
                   ).mapIndexed { i, t ->
                       (if (i == bufferLevel) "●  " else "○  ") + t
                   }
@@ -5854,15 +5951,9 @@ jobs:
                   nameInput.requestFocus()
               }
 
-              private fun buildChannelSpecsBadge(ch: Channel): String {
+              // Пункт 1: Отображение только языка вещания в круглых скобках (без лишних цифр разрешения)
+              private fun buildLanguageTag(ch: Channel): String {
                   val lower = (ch.name + " " + ch.url).lowercase()
-                  val res = when {
-                      effectiveCategory(ch) == "2K" || lower.contains("2k") || lower.contains("qhd") || lower.contains("quadhd") || lower.contains("4k") || lower.contains("uhd") -> "2K"
-                      lower.contains("1080") || lower.contains("fhd") || lower.contains("fullhd") -> "1080p"
-                      lower.contains("720") || lower.contains("hd") -> "720p"
-                      else -> "HD"
-                  }
-
                   val hasCyrillic = ch.name.any { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }
                   val isCisStream = lower.contains(".ru") || lower.contains(".kz") || lower.contains(".by") || lower.contains("ru_") || lower.contains("(ru)")
                   val isBilingualBrand = lower.contains("discovery") || lower.contains("nat geo") || lower.contains("viasat") || lower.contains("tv 1000") || lower.contains("tv1000") || lower.contains("nickelodeon") || lower.contains("cartoon") || lower.contains("hollywood") || lower.contains("paramount") || lower.contains("fox") || lower.contains("tlc") || lower.contains("animal planet") || lower.contains("eurosport")
@@ -5872,13 +5963,14 @@ jobs:
                       hasCyrillic || isCisStream -> "RU"
                       else -> "EN"
                   }
-                  return "[$res • $lang]"
+                  return "($lang)"
               }
 
+              // Пункт 5: В категорию "2K" попадают ТОЛЬКО реальные потоки 2K / QHD / QuadHD / 1440p / 4K / UHD (без 1080p!)
               private fun mapToTenCategories(rawGroup: String, name: String): String {
                   val text = (rawGroup + " " + name).lowercase()
                   return when {
-                      text.contains("2k") || text.contains("qhd") || text.contains("quadhd") || text.contains("1440p") || text.contains("uhd") || text.contains("4k") -> "2K"
+                      text.contains("2k") || text.contains("qhd") || text.contains("quadhd") || text.contains("1440p") || text.contains("2160p") || text.contains("uhd") || text.contains("4k") -> "2K"
                       text.contains("взросл") || text.contains("18+") || text.contains("adult") || text.contains("xxx") || text.contains("erot") -> "Прочее"
                       text.contains("кино") || text.contains("фильм") || text.contains("сериал") || text.contains("movie") || text.contains("cinema") || text.contains("film") || text.contains("bcu") || text.contains("cineman") || text.contains("viju") || text.contains("amedia") || text.contains("tv1000") || text.contains("tv 1000") || text.contains("иллюзион") || text.contains("hollywood") || text.contains("paramount") || text.contains("fox") || text.contains("sony") -> "Кино и сериалы"
                       text.contains("спорт") || text.contains("футбол") || text.contains("матч") || text.contains("sport") || text.contains("khl") || text.contains("ufc") || text.contains("mma") || text.contains("бокс") || text.contains("fight") || text.contains("racing") -> "Спорт"
@@ -5902,7 +5994,7 @@ jobs:
 
               private fun parseM3uLinesDeduplicated(lines: List<String>, filterQuality: Boolean): List<Channel> {
                   val byNormName = LinkedHashMap<String, Channel>()
-                  var currentName = "Канал"
+                  var currentRawName = "Канал"
                   var currentExtInf = ""
                   var currentGroup = ""
                   var currentTvgId = ""
@@ -5912,7 +6004,7 @@ jobs:
                       val trimmed = line.trim()
                       if (trimmed.startsWith("#EXTINF:")) {
                           currentExtInf = trimmed
-                          currentName = trimmed.substringAfterLast(",").trim()
+                          currentRawName = trimmed.substringAfterLast(",").trim()
                           val groupPrefix = "group-title=" + quote
                           currentGroup = if (trimmed.contains(groupPrefix)) {
                               trimmed.substringAfter(groupPrefix).substringBefore(quote)
@@ -5924,19 +6016,19 @@ jobs:
                       } else if (trimmed.startsWith("#EXTGRP:")) {
                           currentGroup = trimmed.substringAfter("#EXTGRP:").trim()
                       } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-                          if (!filterQuality || is1080or720Channel(currentExtInf, currentName)) {
-                              val cat = customCategoryMap[trimmed] ?: mapToTenCategories(currentGroup, currentName)
-                              val ch = Channel(currentName, trimmed, cat, currentTvgId)
-                              val key = normalizeName(currentName).ifEmpty { trimmed }
+                          if (!filterQuality || is1080or720Channel(currentExtInf, currentRawName)) {
+                              val cat = customCategoryMap[trimmed] ?: mapToTenCategories(currentGroup, currentRawName)
+                              val cleanTitle = cleanChannelDisplayName(currentRawName)
+                              val ch = Channel(cleanTitle, trimmed, cat, currentTvgId)
+                              val key = normalizeName(cleanTitle).ifEmpty { trimmed }
                               val existing = byNormName[key]
                               if (existing == null) {
                                   byNormName[key] = ch
                               } else {
-                                  val newIsRu = currentName.any { it in 'а'..'я' || it in 'А'..'Я' }
+                                  val newIsRu = currentRawName.any { it in 'а'..'я' || it in 'А'..'Я' }
                                   val oldIsRu = existing.name.any { it in 'а'..'я' || it in 'А'..'Я' }
-                                  val newIsHigh = currentName.contains("2K", true) || currentName.contains("1080", true) || currentName.contains("FHD", true)
-                                  val oldIsHigh = existing.name.contains("2K", true) || existing.name.contains("1080", true) || existing.name.contains("FHD", true)
-                                  if ((newIsRu && !oldIsRu) || (newIsHigh && !oldIsHigh)) {
+                                  val newIsHigh = currentRawName.contains("1080", true) || currentRawName.contains("FHD", true)
+                                  if (newIsRu && !oldIsRu || newIsHigh) {
                                       byNormName[key] = ch
                                   }
                               }
@@ -5973,9 +6065,10 @@ jobs:
                                   val result = mutableListOf<Channel>()
                                   val existingKeys = HashSet<String>()
                                   for (extra in BuiltinCatalog.extraOpenStreams) {
-                                      if (existingKeys.add(normalizeName(extra.name))) {
+                                      val cleanTitle = cleanChannelDisplayName(extra.name)
+                                      if (existingKeys.add(normalizeName(cleanTitle))) {
                                           val cat = customCategoryMap[extra.url] ?: extra.category
-                                          result.add(Channel(extra.name, extra.url, cat, extra.tvgId))
+                                          result.add(Channel(cleanTitle, extra.url, cat, extra.tvgId))
                                       }
                                   }
 
@@ -5990,17 +6083,6 @@ jobs:
                                   for (ch in parsed) {
                                       if (existingKeys.add(normalizeName(ch.name))) {
                                           result.add(ch)
-                                      }
-                                  }
-                                  // Пункт 6: Вдобавок отбираем лучшие музыкальные и спортивные FullHD/1080p потоки и дублируем их в 2K, если у них высокий профиль
-                                  for (ch in parsed) {
-                                      if ((ch.category == "Спорт" || ch.category == "Музыка") &&
-                                          (ch.name.contains("1080", true) || ch.name.contains("FHD", true) || ch.name.contains("4K", true) || ch.name.contains("UHD", true))
-                                      ) {
-                                          val copyName = if (ch.name.contains("2K", true)) ch.name else "${ch.name} • 2K"
-                                          if (existingKeys.add(normalizeName(copyName) + "_2k")) {
-                                              result.add(Channel(copyName, ch.url, "2K", ch.tvgId))
-                                          }
                                       }
                                   }
                                   result
@@ -6064,6 +6146,7 @@ jobs:
                   categoryAdapter.notifyDataSetChanged()
               }
 
+              // Пункт 1: Строгая алфавитная сортировка каналов внутри каждой группы (ТОП-каналы сверху по алфавиту, остальные следом по алфавиту)
               private fun selectCategory(index: Int) {
                   if (index !in categories.indices) return
                   currentCategoryIndex = index
@@ -6078,8 +6161,12 @@ jobs:
                       else -> activeAll.filter { effectiveCategory(it) == catName }
                   }
 
-                  val topPart = rawFiltered.filter { topUrls.contains(it.url) }
-                  val normalPart = rawFiltered.filter { !topUrls.contains(it.url) }
+                  val alphaComparator = Comparator<Channel> { a, b ->
+                      ruCollator.compare(a.name, b.name)
+                  }
+
+                  val topPart = rawFiltered.filter { topUrls.contains(it.url) }.sortedWith(alphaComparator)
+                  val normalPart = rawFiltered.filter { !topUrls.contains(it.url) }.sortedWith(alphaComparator)
 
                   displayedChannels.clear()
                   displayedChannels.addAll(topPart)
@@ -6089,14 +6176,15 @@ jobs:
                   refreshChannelAdapter()
               }
 
+              // Пункт 1: В списке оставляем только чистое название канала и в скобочках язык вещания: "1. Киносемья (RU)"
               private fun refreshChannelAdapter() {
                   val snapshot = displayedChannels.toList()
                   val t = currentTheme()
                   val formatted = snapshot.mapIndexed { i, ch ->
                       val topBadge = if (topUrls.contains(ch.url)) "${t.iconTop} " else ""
                       val starBadge = if (favoriteUrls.contains(ch.url)) "${t.iconFav} " else ""
-                      val specsBadge = buildChannelSpecsBadge(ch)
-                      (i + 1).toString() + ". " + topBadge + starBadge + ch.name + "   " + specsBadge
+                      val langTag = buildLanguageTag(ch)
+                      "${i + 1}. $topBadge$starBadge${ch.name} $langTag"
                   }
                   channelAdapter.clear()
                   channelAdapter.addAll(formatted)
@@ -6145,7 +6233,7 @@ jobs:
                   val epgLine = if (epg != null) "\n🎬 " + epg.title else ""
 
                   if (menuHistory.isEmpty()) {
-                      showBanner(topBadge + star + channel.name + "  •  " + effectiveCategory(channel) + "  " + buildChannelSpecsBadge(channel) + epgLine)
+                      showBanner(topBadge + star + channel.name + " " + buildLanguageTag(channel) + "  •  " + effectiveCategory(channel) + epgLine)
                   } else {
                       currentChannelBanner.visibility = View.GONE
                   }
@@ -6203,7 +6291,7 @@ jobs:
                       .putInt("theme_index", themeIndex)
                       .putInt("control_mode_v13", controlMode)
                       .putInt("screen_aspect_v15", screenAspectMode)
-                      .putBoolean("night_dim_v17", isNightDimActive)
+                      .putInt("brightness_pct_v18", brightnessPercent)
                       .putBoolean("anti_block_ru", antiBlockEnabled)
                       .putInt("ua_index", userAgentIndex)
                       .putString("epg_url", epgUrl)
@@ -6222,7 +6310,7 @@ jobs:
                   themeIndex = prefs.getInt("theme_index", 0)
                   controlMode = prefs.getInt("control_mode_v13", 0)
                   screenAspectMode = prefs.getInt("screen_aspect_v15", 0)
-                  isNightDimActive = prefs.getBoolean("night_dim_v17", false)
+                  brightnessPercent = prefs.getInt("brightness_pct_v18", 100)
                   antiBlockEnabled = prefs.getBoolean("anti_block_ru", true)
                   userAgentIndex = prefs.getInt("ua_index", 0)
                   activePlaylistIndex = prefs.getInt("active_playlist", 0)
@@ -6288,19 +6376,20 @@ jobs:
                   return super.dispatchTouchEvent(ev)
               }
 
+              // Пункт 3: Строгое зацикливание переключения каналов кнопками Вверх/Вниз внутри текущего списка
               private fun switchChannelByOffset(offset: Int) {
                   val list = displayedChannels.toList()
                   if (list.isEmpty()) return
                   val idx = list.indexOfFirst { it.url == currentChannel?.url }
-                  val targetIdx = if (offset > 0) {
-                      if (idx < 0 || idx + 1 >= list.size) 0 else idx + 1
+                  val targetIdx = if (idx == -1) {
+                      0
                   } else {
-                      if (idx <= 0) list.size - 1 else idx - 1
+                      (idx + offset + list.size) % list.size
                   }
+                  focusedChannelPos = targetIdx
                   playChannelObj(list[targetIdx])
               }
 
-              // Пункт 4: Долгое нажатие на центральную кнопку OK открывает Главное меню настроек (SETTINGS), а короткое — OSD
               override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
                   if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) && menuHistory.isEmpty()) {
                       centerLongPressHandled = true
@@ -6447,10 +6536,10 @@ jobs:
           fi
           cp app/permanent_key.jks ~/.android/debug.keystore || true
           gradle assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk TiViLook-v1.7.${GITHUB_RUN_NUMBER}.apk
+          cp app/build/outputs/apk/release/app-release.apk TiViLook-v1.8.${GITHUB_RUN_NUMBER}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: TiViLook-v1.7.${{ github.run_number }}
-          path: TiViLook-v1.7.${{ github.run_number }}.apk
+          name: TiViLook-v1.8.${{ github.run_number }}
+          path: TiViLook-v1.8.${{ github.run_number }}.apk
