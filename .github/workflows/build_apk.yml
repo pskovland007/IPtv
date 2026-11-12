@@ -1887,7 +1887,7 @@ jobs:
           ''')
           PYEOF
 
-      - name: Step 3.5 - Apply Patches v1.6
+      - name: Step 3.5 - Apply Patches v1.7 (TiViLook)
         run: |
           python3 - << 'PYEOF'
           import os, re
@@ -1896,12 +1896,11 @@ jobs:
               g = f.read()
 
           g = re.sub(r"targetSdk\s+\d+", "targetSdk 33", g)
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "50"))
-          new_ver_code = 7000 + run_num
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "55"))
+          new_ver_code = 8000 + run_num
           g = re.sub(r"versionCode\s+\d+", f"versionCode {new_ver_code}", g)
-          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "1.6.{run_num}"', g)
+          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "1.7.{run_num}"', g)
 
-          # Пункт 2: Отключаем debuggable и тестовые флаги, чтобы браузер на ПК и Play Protect не считали APK вредоносным
           signing_block = '''
               signingConfigs {
                   debug {
@@ -1938,11 +1937,49 @@ jobs:
           with open("app/build.gradle", "w") as f:
               f.write(g)
 
-          # Расширенный каталог каналов во всех категориях
+          # Пункт 6: Масштабное расширение категории 2K (Спорт + Музыка, EN/RU) и остальных рубрик в BuiltinCatalog.kt
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "r") as f:
               cat = f.read()
 
-          massive_channels_pack = '''Channel("Мосфильм. Золотая коллекция HD", "https://ott-cdn.ucom.am/s48/index.m3u8", "Кино и сериалы", ""),
+          massive_channels_pack = '''Channel("Red Bull TV 2K Extreme Sport", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master_3360.m3u8", "2K", ""),
+                  Channel("Fuel TV 2K Action Sports", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/fuel-tv/manifest.m3u8", "2K", ""),
+                  Channel("MotorVision 2K Supercars & Racing", "https://motorvision-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Trace Sport Stars 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-sport-stars/manifest.m3u8", "2K", ""),
+                  Channel("FightBox 2K MMA & Boxing", "https://fightbox-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("beIN Sports Xtra 2K", "https://bein-xtra-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Tennis Channel 2K Live", "https://tennischannel-intl-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Billiard TV 2K Pro", "https://billiardtv-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("World Poker Tour 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/world-poker-tour/manifest.m3u8", "2K", ""),
+                  Channel("MAVTV Motorsports 2K", "https://mavtv-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel(" Glory Kickboxing 2K", "https://glory-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("PFL MMA 2K Ultra", "https://pfl-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel(" Hard Knocks Fighting 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/hard-knocks/manifest.m3u8", "2K", ""),
+                  Channel("CampusLore Sports 2K", "https://campuslore-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("SurfNow 2K Ocean Sport", "https://surfnow-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Clubbing TV 2K Dance & DJ", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/clubbing-tv/manifest.m3u8", "2K", ""),
+                  Channel("Trace Urban 2K Hip-Hop & R&B", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-urban/manifest.m3u8", "2K", ""),
+                  Channel("Trace Latina 2K Music", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-latina/manifest.m3u8", "2K", ""),
+                  Channel("Deluxe Lounge 2K Chillout", "https://sdn-global-live-streaming-packager-cache.3qsdn.com/13456/13456_264_live.m3u8", "2K", ""),
+                  Channel("Deluxe Music 2K Hits", "https://sdn-global-live-streaming-packager-cache.3qsdn.com/7841/7841_264_live.m3u8", "2K", ""),
+                  Channel("Qello Concerts 2K Live Rock/Pop", "https://qello-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Stingray CMusic 2K Classical", "https://stingray-cmusic-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Stingray DJazz 2K Live", "https://stingray-djazz-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Stingray Classica 2K", "https://stingray-classica-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Stingray Karaoke 2K", "https://stingray-karaoke-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Stingray Naturescape 2K Ambient", "https://stingray-naturescape-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Vevo Pop 2K Music Videos", "https://vevo-pop-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Vevo Retro Rock 2K", "https://vevo-80s-samsungus.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Europa Plus TV 2K / FHD", "https://sc.id-tv.kz/Europa_Plus_TV.m3u8", "2K", ""),
+                  Channel("Bridge Deluxe 2K Music", "https://sc.id-tv.kz/Bridge_Deluxe.m3u8", "2K", ""),
+                  Channel("MTV Live 2K / FHD", "https://sc.id-tv.kz/MTV_Live_HD.m3u8", "2K", ""),
+                  Channel("Home 2K QuadHD Nature", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/love-nature-4k/manifest.m3u8", "2K", ""),
+                  Channel("NASA TV 2K QHD", "https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8", "2K", ""),
+                  Channel("Louvre & Museum 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/museum-tv/manifest.m3u8", "2K", ""),
+                  Channel("Fashion Box 2K QHD", "https://fashionbox-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Wild Earth 2K HDR", "https://wildearth-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Travelxp 2K QuadHD", "https://travelxp-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
+                  Channel("Outdoor Ambient 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/loupe-4k/manifest.m3u8", "2K", ""),
+                  Channel("Мосфильм. Золотая коллекция HD", "https://ott-cdn.ucom.am/s48/index.m3u8", "Кино и сериалы", ""),
                   Channel("Киносемья FHD", "https://sc.id-tv.kz/Kinosemya.m3u8", "Кино и сериалы", ""),
                   Channel("Кинохит HD", "https://sc.id-tv.kz/Kinohit.m3u8", "Кино и сериалы", ""),
                   Channel("Киносвидание HD", "https://sc.id-tv.kz/Kinosvidanie.m3u8", "Кино и сериалы", ""),
@@ -2041,21 +2078,9 @@ jobs:
                   Channel("Москва 24", "https://sc.id-tv.kz/Moskva_24.m3u8", "Новости и общие", ""),
                   Channel("ОТР", "https://sc.id-tv.kz/OTR.m3u8", "Новости и общие", ""),
                   Channel("Спас", "https://sc.id-tv.kz/Spas.m3u8", "Новости и общие", ""),
-                  Channel("Россия К (Культура)", "https://sc.id-tv.kz/Rossiya_K.m3u8", "Новости и общие", ""),
-                  Channel("Home 2K QuadHD Nature", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/love-nature-4k/manifest.m3u8", "2K", ""),
-                  Channel("NASA TV 2K QHD", "https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8", "2K", ""),
-                  Channel("Red Bull 2K Extreme", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master_3360.m3u8", "2K", ""),
-                  Channel("Louvre & Museum 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/museum-tv/manifest.m3u8", "2K", ""),
-                  Channel("Fashion Box 2K QHD", "https://fashionbox-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Wild Earth 2K HDR", "https://wildearth-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Travelxp 2K QuadHD", "https://travelxp-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Outdoor Ambient 2K", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/loupe-4k/manifest.m3u8", "2K", ""),
-                  Channel("Stingray Naturescape 2K", "https://stingray-naturescape-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("MotorVision 2K Supercars", "https://motorvision-samsunguk.amagi.tv/playlist.m3u8", "2K", ""),
-                  Channel("Clubbing TV 2K Ultra", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/clubbing-tv/manifest.m3u8", "2K", ""),
-                  Channel("Deluxe Lounge 2K", "https://sdn-global-live-streaming-packager-cache.3qsdn.com/13456/13456_264_live.m3u8", "2K", ""),'''
+                  Channel("Россия К (Культура)", "https://sc.id-tv.kz/Rossiya_K.m3u8", "Новости и общие", ""),'''
 
-          if "Discovery Channel HD" not in cat:
+          if "Trace Sport Stars 2K" not in cat:
               cat = cat.replace("val extraOpenStreams = listOf(", "val extraOpenStreams = listOf(\n        " + massive_channels_pack)
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "w") as f:
               f.write(cat)
@@ -2130,7 +2155,7 @@ jobs:
           with open("app/src/main/res/drawable/ic_banner.xml", "w") as f:
               f.write(realistic_eye_banner)
 
-          # Пункт 2: Чистый манифест без опасных разрешений, триггерящих Play Protect и антивирус браузера
+          # Пункт 7: Новое название приложения TiViLook в AndroidManifest.xml
           with open("app/src/main/AndroidManifest.xml", "w") as f:
               f.write('''<?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -2142,7 +2167,7 @@ jobs:
                   android:allowBackup="true"
                   android:banner="@drawable/ic_banner"
                   android:icon="@drawable/ic_launcher"
-                  android:label="MiBox TV Player"
+                  android:label="TiViLook"
                   android:hardwareAccelerated="true"
                   android:theme="@style/Theme.AppCompat.NoActionBar"
                   android:usesCleartextTraffic="true">
@@ -2160,7 +2185,7 @@ jobs:
               </application>
           </manifest>''')
 
-          # Записываем полный код MainActivity.kt (v1.6)
+          # Записываем полный код MainActivity.kt (v1.7 TiViLook)
           with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -2703,6 +2728,7 @@ jobs:
           class MainActivity : AppCompatActivity() {
               private var player: ExoPlayer? = null
               private lateinit var playerView: PlayerView
+              private lateinit var nightDimOverlay: View
               private lateinit var categoryListView: ListView
               private lateinit var channelListView: ListView
 
@@ -2724,9 +2750,14 @@ jobs:
               private var isSideShowingChannels = true
               private var openChannelsDirectlyWithCurrentFocus = true
 
-              // Пункт 4: Отслеживание текущей выделенной строки для плавного округлого курсора в списках
               private var focusedCategoryPos = 1
               private var focusedChannelPos = 0
+
+              // Пункт 4: Флаг обработки долгого нажатия центральной кнопки OK
+              private var centerLongPressHandled = false
+
+              // Пункт 5: Состояние ночного режима (-50% яркости для ночного просмотра)
+              private var isNightDimActive = false
 
               private var controlMode = 0
               private lateinit var gestureDetector: GestureDetector
@@ -2761,6 +2792,7 @@ jobs:
               private lateinit var btnOsdEpgList: TextView
               private lateinit var btnOsdSettings: TextView
               private lateinit var btnOsdAudio: TextView
+              private lateinit var btnOsdNightMode: TextView
               private lateinit var btnOsdChannelActions: TextView
 
               private lateinit var fullEpgTitle: TextView
@@ -2783,7 +2815,6 @@ jobs:
               private val topUrls = ConcurrentHashMap.newKeySet<String>()
               private val disabledUrls = ConcurrentHashMap.newKeySet<String>()
               private val disabledCategories = ConcurrentHashMap.newKeySet<String>()
-              // Пункт 5: Пользовательские переопределения категорий для перемещённых каналов (URL -> Новая категория)
               private val customCategoryMap = ConcurrentHashMap<String, String>()
               private val playlists = CopyOnWriteArrayList<PlaylistEntry>()
 
@@ -2923,12 +2954,10 @@ jobs:
               )
               private var epgUrl = epgUrls[0]
 
-              // Пункт 1: Пока идёт проверка каналов, таймер автоскрытия НЕ трогает и НЕ закрывает окно анализатора!
               private val autoHideMenuRunnable = Runnable {
                   if (menuHistory.isNotEmpty()) {
                       val currentMenu = menuHistory.last()
                       if ((currentMenu == "ANALYZER_GROUP_VIEW" || currentMenu == "ANALYZER_GROUPS") && isAnalyzerRunning) {
-                          // Не скрываем окно во время теста, чтобы оно не моргало и не пыталось исчезнуть
                           return@Runnable
                       }
                       if (currentMenu != "EPG" && currentMenu != "ADD_URL" && currentMenu != "MANUAL_PATH") {
@@ -2983,6 +3012,17 @@ jobs:
                   }
               }
 
+              // Пункт 5: Переключение ночного режима (-50% яркости экрана и затемняющий фильтр)
+              private fun applyNightDimMode() {
+                  nightDimOverlay.visibility = if (isNightDimActive) View.VISIBLE else View.GONE
+                  val lp = window.attributes
+                  lp.screenBrightness = if (isNightDimActive) 0.25f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                  window.attributes = lp
+                  if (::btnOsdNightMode.isInitialized) {
+                      btnOsdNightMode.text = if (isNightDimActive) "☀ Яркость 100%" else "🌙 Ночь -50%"
+                  }
+              }
+
               private fun applyCurrentThemeToAllPanels() {
                   val t = currentTheme()
                   sidePanel.background = makeThemedPanelBg()
@@ -3016,9 +3056,10 @@ jobs:
                   btnOsdEpgList.text = "${t.iconEpg} Программа"
                   btnOsdSettings.text = "${t.iconSettings} Настройки"
                   btnOsdAudio.text = "${t.iconAudio} Звук"
+                  btnOsdNightMode.text = if (isNightDimActive) "☀ Яркость 100%" else "🌙 Ночь -50%"
                   btnOsdChannelActions.text = "⚙ Канал"
 
-                  for (btn in listOf(btnOsdTop, btnOsdFav, btnOsdEpgList, btnOsdSettings, btnOsdAudio, btnOsdChannelActions)) {
+                  for (btn in listOf(btnOsdTop, btnOsdFav, btnOsdEpgList, btnOsdSettings, btnOsdAudio, btnOsdNightMode, btnOsdChannelActions)) {
                       btn.typeface = t.boldFont
                   }
 
@@ -3063,7 +3104,7 @@ jobs:
                       maxLines = 1
                       ellipsize = TextUtils.TruncateAt.END
                       gravity = Gravity.CENTER
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isIconOnly) 20f else 14f)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isIconOnly) 20f else 13.5f)
                       typeface = themeBoldFont()
                       setTextColor(Color.WHITE)
                       val t = currentTheme()
@@ -3080,13 +3121,13 @@ jobs:
                           minWidth = 54
                           minHeight = 54
                       } else {
-                          setPadding(20, 11, 20, 11)
+                          setPadding(16, 10, 16, 10)
                       }
                       layoutParams = LinearLayout.LayoutParams(
                           ViewGroup.LayoutParams.WRAP_CONTENT,
                           ViewGroup.LayoutParams.WRAP_CONTENT
                       ).apply {
-                          setMargins(5, 4, 5, 4)
+                          setMargins(4, 4, 4, 4)
                       }
                       setOnFocusChangeListener { _, hasFocus ->
                           val curT = currentTheme()
@@ -3164,7 +3205,6 @@ jobs:
                   else -> "Кинозум (увеличение)"
               }
 
-              // Пункт 2: Чистое подключение без подозрительных доменов corsproxy/ghproxy и без отключения SSL-верификации
               private fun openStreamWithRussiaBypass(rawUrl: String, timeoutMs: Int = 7000): InputStream {
                   val conn = URL(rawUrl).openConnection() as HttpURLConnection
                   conn.setRequestProperty("User-Agent", russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size])
@@ -3206,6 +3246,19 @@ jobs:
                       }
                   }
                   root.addView(playerView)
+
+                  // Пункт 5: Вуаль затемнения видео на 50% для ночного режима просмотра
+                  nightDimOverlay = View(this).apply {
+                      setBackgroundColor(Color.parseColor("#80000000"))
+                      visibility = if (isNightDimActive) View.VISIBLE else View.GONE
+                      isClickable = false
+                      isFocusable = false
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.MATCH_PARENT
+                      )
+                  }
+                  root.addView(nightDimOverlay)
 
                   clockTextView = TextView(this).apply {
                       setTextColor(Color.WHITE)
@@ -3272,16 +3325,17 @@ jobs:
                   }
                   root.addView(signalContainer)
 
+                  // Пункт 1: Левое меню сделано шире (760px вместо 640px)
                   sidePanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       background = makeThemedPanelBg()
                       visibility = View.GONE
                       layoutParams = FrameLayout.LayoutParams(
-                          660,
+                          760,
                           FrameLayout.LayoutParams.MATCH_PARENT,
                           Gravity.START
                       ).apply { setMargins(16, 16, 0, 16) }
-                      setPadding(20, 18, 20, 18)
+                      setPadding(22, 18, 22, 18)
                   }
 
                   allGridTiles.clear()
@@ -3335,7 +3389,6 @@ jobs:
                       )
                   }
 
-                  // Пункт 4: Убираем резкий стандартный прямоугольный селектор ListView (selector = TRANSPARENT) и рисуем плавный скруглённый курсор!
                   categoryListView = ListView(this).apply {
                       choiceMode = ListView.CHOICE_MODE_SINGLE
                       dividerHeight = 0
@@ -3399,7 +3452,7 @@ jobs:
                   infoPanel.addView(infoTextView)
                   root.addView(infoPanel)
 
-                  // Центральное меню по кнопке OK + Пункт 5 (последняя кнопка "⚙ Канал" с отключением и перемещением в другую категорию)
+                  // Центральное меню по кнопке OK + Пункт 5 (добавлена кнопка "🌙 Ночь -50%")
                   centerOsdPanel = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       background = makeThemedPanelBg()
@@ -3409,7 +3462,7 @@ jobs:
                           FrameLayout.LayoutParams.MATCH_PARENT,
                           FrameLayout.LayoutParams.WRAP_CONTENT,
                           Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                      ).apply { setMargins(90, 0, 90, 24) }
+                      ).apply { setMargins(70, 0, 70, 24) }
                   }
 
                   osdChannelTitle = TextView(this).apply {
@@ -3483,12 +3536,21 @@ jobs:
                   btnOsdAudio = makeModernButton("${t.iconAudio} Звук") {
                       navigateToMenu("AUDIO")
                   }
-                  // Пункт 5: Последняя кнопка "⚙ Канал" (вызывает меню из 2 пунктов: Отключить канал / Переместить в другую категорию)
+                  // Пункт 5: Кнопка снижения яркости на 50% для ночного просмотра
+                  btnOsdNightMode = makeModernButton(if (isNightDimActive) "☀ Яркость 100%" else "🌙 Ночь -50%") {
+                      isNightDimActive = !isNightDimActive
+                      saveState()
+                      applyNightDimMode()
+                      Toast.makeText(
+                          this,
+                          if (isNightDimActive) "🌙 Ночной режим: яркость снижена на 50%" else "☀ Обычная яркость (100%)",
+                          Toast.LENGTH_SHORT
+                      ).show()
+                  }
                   btnOsdChannelActions = makeModernButton("⚙ Канал") {
                       navigateToMenu("CHANNEL_ACTIONS")
                   }
 
-                  // Пункт 3: Когда открыто центральное меню по кнопке OK, нажатие Влево на первой кнопке сразу открывает список каналов!
                   btnOsdTop.setOnKeyListener { _, keyCode, event ->
                       if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                           closeAllMenus()
@@ -3509,6 +3571,7 @@ jobs:
                   osdButtonsRow.addView(btnOsdEpgList)
                   osdButtonsRow.addView(btnOsdSettings)
                   osdButtonsRow.addView(btnOsdAudio)
+                  osdButtonsRow.addView(btnOsdNightMode)
                   osdButtonsRow.addView(btnOsdChannelActions)
                   centerOsdPanel.addView(osdButtonsRow)
                   root.addView(centerOsdPanel)
@@ -3547,7 +3610,6 @@ jobs:
                   fullEpgOverlay.addView(fullEpgListView)
                   root.addView(fullEpgOverlay)
 
-                  // Пункт 6: Главное меню настроек 4x3 сделано ЗНАЧИТЕЛЬНО КРУПНЕЕ (плитки 172x172px, широкие ячейки 186px)
                   settingsTileOverlay = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       gravity = Gravity.CENTER
@@ -3616,7 +3678,6 @@ jobs:
                           val specIdx = rowIdx * 4 + colIdx
                           val spec = gridSpecs[specIdx]
 
-                          // Пункт 6: Крупные плитки 172x172px
                           val tileIcon = ThemedTileView(this, spec.iconType, spec.baseHex, spec.accentHex).apply {
                               themeStyleId = currentTheme().id
                               isFocusable = false
@@ -3733,7 +3794,7 @@ jobs:
                           430
                       )
                   }
-                  subModalAdapter = createRoundedSelectorAdapter(subModalItems, 15.5f) { pos ->
+                  subModalAdapter = createRoundedSelectorAdapter(subModalItems, 15.5f, false) { pos ->
                       subModalList.selectedItemPosition == pos
                   }
                   subModalList.adapter = subModalAdapter
@@ -3797,24 +3858,26 @@ jobs:
                   playSplashEyeAnimation()
                   initPlayer()
                   applyScreenAspectMode()
+                  applyNightDimMode()
                   startClockAndWatchdogUpdater()
 
-                  // Пункт 4: Плавный округлый курсор в списке категорий и каналов
-                  categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17.5f) { pos ->
+                  // Пункт 1: В списке каналов и категорий включена однострочная бегущая строка (singleLineMarquee = true)
+                  categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17.5f, true) { pos ->
                       !isSideShowingChannels && pos == focusedCategoryPos
                   }
                   categoryListView.adapter = categoryAdapter
 
-                  channelAdapter = createRoundedSelectorAdapter(mutableListOf(), 17.5f) { pos ->
+                  channelAdapter = createRoundedSelectorAdapter(mutableListOf(), 17.5f, true) { pos ->
                       isSideShowingChannels && pos == focusedChannelPos
                   }
                   channelListView.adapter = channelAdapter
 
+                  // Пункт 2: При переходе из категории в список каналов курсор и скролл жёстко ставятся на самый верх (0)
                   categoryListView.setOnItemClickListener { _, _, position, _ ->
                       resetMenuInactivityTimer()
                       focusedCategoryPos = position
                       selectCategory(position)
-                      showSideChannelsMode(focusTop = true)
+                      showSideChannelsMode(focusTop = true, focusCurrentChannel = false)
                   }
 
                   categoryListView.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -3831,7 +3894,7 @@ jobs:
                       if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                           resetMenuInactivityTimer()
                           selectCategory(focusedCategoryPos.coerceAtLeast(0))
-                          showSideChannelsMode(focusTop = true)
+                          showSideChannelsMode(focusTop = true, focusCurrentChannel = false)
                           true
                       } else {
                           false
@@ -3879,10 +3942,11 @@ jobs:
                   loadEpgOncePerDayInBackground(forceRefresh = false)
               }
 
-              // Пункт 4: Кастомный адаптер со скруглённым неоновым/акцентным курсором в едином дизайне приложения
+              // Пункт 1 и 4: Скруглённый курсор + однострочные названия каналов с бегущей строкой (MARQUEE)
               private fun createRoundedSelectorAdapter(
                   items: MutableList<String>,
                   spSize: Float,
+                  singleLineMarquee: Boolean = false,
                   isRowHighlighted: (Int) -> Boolean
               ): ArrayAdapter<String> {
                   return object : ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_list_item_1, items) {
@@ -3896,6 +3960,14 @@ jobs:
                           tv.setPadding(22, 13, 22, 13)
                           tv.minHeight = 0
                           tv.minimumHeight = 0
+
+                          if (singleLineMarquee) {
+                              tv.isSingleLine = true
+                              tv.maxLines = 1
+                              tv.ellipsize = if (highlighted) TextUtils.TruncateAt.MARQUEE else TextUtils.TruncateAt.END
+                              tv.marqueeRepeatLimit = -1
+                              tv.isSelected = highlighted
+                          }
 
                           if (highlighted) {
                               tv.setTextColor(t.textOnAccent)
@@ -3942,7 +4014,7 @@ jobs:
                   }
 
                   val title = TextView(this).apply {
-                      text = "Выберите режим управления"
+                      text = "TiViLook — Выберите режим управления"
                       setTextColor(Color.WHITE)
                       setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
                       typeface = themeBoldFont()
@@ -3984,7 +4056,7 @@ jobs:
                       saveState()
                       enableTrueFullScreenImmersion()
                       firstRunModeOverlay.visibility = View.GONE
-                      Toast.makeText(this, "Включено управление пультом ТВ", Toast.LENGTH_SHORT).show()
+                      Toast.makeText(this, "Включено управление пультом ТВ (долгое OK — Настройки)", Toast.LENGTH_SHORT).show()
                   }.apply {
                       setPadding(34, 28, 34, 28)
                       isSingleLine = false
@@ -4033,6 +4105,11 @@ jobs:
                           return true
                       }
 
+                      override fun onLongPress(e: MotionEvent) {
+                          if (firstRunModeOverlay.visibility == View.VISIBLE) return
+                          navigateToMenu("SETTINGS")
+                      }
+
                       override fun onDoubleTap(e: MotionEvent): Boolean {
                           if (firstRunModeOverlay.visibility == View.VISIBLE) return true
                           navigateToMenu("SETTINGS")
@@ -4071,6 +4148,7 @@ jobs:
                   })
               }
 
+              // Пункт 2: Жёсткий сброс скролла и курсора на 0-ю позицию через post + setSelectionFromTop(0, 0) при смене категории!
               private fun showSideChannelsMode(focusTop: Boolean, focusCurrentChannel: Boolean = false) {
                   isSideShowingChannels = true
                   val catName = categories.getOrElse(currentCategoryIndex) { "Все каналы" }
@@ -4080,19 +4158,25 @@ jobs:
 
                   if (displayedChannels.isNotEmpty()) {
                       val targetPos = when {
+                          focusTop -> 0
                           focusCurrentChannel -> {
                               val idx = displayedChannels.indexOfFirst { it.url == currentChannel?.url }
                               if (idx >= 0) idx else 0
                           }
-                          focusTop -> 0
                           else -> 0
                       }
                       focusedChannelPos = targetPos
                       refreshChannelAdapter()
-                      channelListView.setSelection(targetPos)
                       channelListView.setItemChecked(targetPos, true)
+                      channelListView.setSelectionFromTop(targetPos, 0)
                       channelListView.requestFocus()
+                      channelListView.post {
+                          channelListView.setSelectionFromTop(targetPos, 0)
+                          channelListView.setItemChecked(targetPos, true)
+                          channelAdapter.notifyDataSetChanged()
+                      }
                   } else {
+                      focusedChannelPos = 0
                       refreshChannelAdapter()
                   }
               }
@@ -4104,7 +4188,7 @@ jobs:
                   updateCategoriesList()
                   channelListView.visibility = View.GONE
                   categoryListView.visibility = View.VISIBLE
-                  categoryListView.setSelection(currentCategoryIndex)
+                  categoryListView.setSelectionFromTop(currentCategoryIndex, 0)
                   categoryListView.setItemChecked(currentCategoryIndex, true)
                   categoryListView.requestFocus()
               }
@@ -4275,7 +4359,6 @@ jobs:
                   }
               }
 
-              // Пункт 5: Меню действий над текущим каналом (1. Отключить канал, 2. Переместить в другую категорию)
               private fun openChannelActionsSubModal() {
                   val ch = currentChannel ?: return
                   subModalTitle.text = "⚙ Управление каналом: ${ch.name}"
@@ -4309,10 +4392,9 @@ jobs:
                   subModalList.requestFocus()
               }
 
-              // Пункт 5: Выбор новой категории для перемещения текущего канала
               private fun openMoveChannelCategorySubModal() {
                   val ch = currentChannel ?: return
-                  val targetCats = categories.drop(2) // Все категории кроме "Избранное" и "Все каналы"
+                  val targetCats = categories.drop(2)
                   val curCat = effectiveCategory(ch)
 
                   subModalTitle.text = "📂 Переместить «${ch.name}» в категорию:"
@@ -4437,7 +4519,7 @@ jobs:
                       }
                   }
 
-                  fullEpgListView.adapter = createRoundedSelectorAdapter(items, 15.5f) { pos ->
+                  fullEpgListView.adapter = createRoundedSelectorAdapter(items, 15.5f, false) { pos ->
                       fullEpgListView.selectedItemPosition == pos
                   }
                   animateMenuAppear(fullEpgOverlay)
@@ -4470,6 +4552,7 @@ jobs:
 
                   val items = listOf(
                       "🖥  Формат экрана: ${screenAspectModeName()}",
+                      "🌙  Ночной режим (-50% яркости): ${if (isNightDimActive) "Включён" else "Выключен"}",
                       "🛡  Режим совместимости для РФ: $bypassStatus",
                       "📡  Маскировка потока (User-Agent): $agentName",
                       "${t.iconEpg}  Адрес программы передач (обновление 1 раз в сутки)",
@@ -4487,19 +4570,25 @@ jobs:
                               openMoreSettingsSubModal()
                           }
                           1 -> {
+                              isNightDimActive = !isNightDimActive
+                              applyNightDimMode()
+                              saveState()
+                              openMoreSettingsSubModal()
+                          }
+                          2 -> {
                               antiBlockEnabled = !antiBlockEnabled
                               saveState()
                               initPlayer()
                               openMoreSettingsSubModal()
                           }
-                          2 -> {
+                          3 -> {
                               userAgentIndex = (userAgentIndex + 1) % russianSmartTvAgents.size
                               saveState()
                               initPlayer()
                               openMoreSettingsSubModal()
                           }
-                          3 -> navigateToMenu("EPG")
-                          4 -> {
+                          4 -> navigateToMenu("EPG")
+                          5 -> {
                               Toast.makeText(this, "Запущено принудительное обновление EPG...", Toast.LENGTH_SHORT).show()
                               loadEpgOncePerDayInBackground(forceRefresh = true)
                               navigateBackInMenu()
@@ -4591,6 +4680,7 @@ jobs:
                   }
               }
 
+              // Пункт 3: Принудительный выбор максимального качества видео (1080p / 2K вместо 720p) в мультибитрейтных HLS-потоках
               private fun initPlayer() {
                   val currentUrl = currentChannel?.url
                   try { player?.release() } catch (_: Exception) {}
@@ -4663,21 +4753,60 @@ jobs:
 
                   newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
                       .buildUpon()
-                      .setMaxVideoSize(2560, 1440)
+                      .setMaxVideoSize(3840, 2160)
+                      .setMaxVideoBitrate(Int.MAX_VALUE)
                       .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
                       .build()
 
                   newPlayer.addListener(object : Player.Listener {
                       override fun onTracksChanged(tracks: Tracks) {
+                          var builder = newPlayer.trackSelectionParameters.buildUpon()
+                          var changed = false
+
+                          // 1. Автовыбор аудиодорожки, если ни одна не активна
                           val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
                           if (audioGroups.isNotEmpty() && audioGroups.none { it.isSelected }) {
                               val firstGroup = audioGroups.first()
                               if (firstGroup.length > 0) {
-                                  newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
-                                      .buildUpon()
-                                      .setOverrideForType(TrackSelectionOverride(firstGroup.mediaTrackGroup, 0))
-                                      .build()
+                                  builder = builder.setOverrideForType(TrackSelectionOverride(firstGroup.mediaTrackGroup, 0))
+                                  changed = true
                               }
+                          }
+
+                          // 2. Пункт 3: Ищем видеодорожку с максимальным разрешением (1080p / 2K вместо 720p) и принудительно включаем её!
+                          val videoGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+                          for (vg in videoGroups) {
+                              if (vg.length > 1) {
+                                  var bestTrackIdx = -1
+                                  var bestPixels = 0
+                                  var bestBitrate = 0
+                                  var currentlySelectedIdx = -1
+
+                                  for (i in 0 until vg.length) {
+                                      if (vg.isTrackSelected(i)) currentlySelectedIdx = i
+                                      if (vg.isTrackSupported(i)) {
+                                          val fmt = vg.getTrackFormat(i)
+                                          val pixels = (fmt.width.coerceAtLeast(0)) * (fmt.height.coerceAtLeast(0))
+                                          val br = fmt.bitrate.coerceAtLeast(0)
+                                          if (pixels > bestPixels || (pixels == bestPixels && br > bestBitrate)) {
+                                              bestPixels = pixels
+                                              bestBitrate = br
+                                              bestTrackIdx = i
+                                          }
+                                      }
+                                  }
+
+                                  if (bestTrackIdx != -1 && bestTrackIdx != currentlySelectedIdx) {
+                                      builder = builder.setOverrideForType(
+                                          TrackSelectionOverride(vg.mediaTrackGroup, listOf(bestTrackIdx))
+                                      )
+                                      changed = true
+                                  }
+                              }
+                          }
+
+                          if (changed) {
+                              newPlayer.trackSelectionParameters = builder.build()
                           }
                       }
 
@@ -5011,6 +5140,7 @@ jobs:
                   val isTop = topUrls.contains(ch.url)
                   btnOsdTop.text = if (isTop) "${t.iconTop} Убрать ТОП" else "${t.iconTop} В ТОП"
                   btnOsdFav.text = if (isFav) "${t.iconFav} В Избранном" else "${t.iconFav} Избранное"
+                  btnOsdNightMode.text = if (isNightDimActive) "☀ Яркость 100%" else "🌙 Ночь -50%"
 
                   val badges = (if (isTop) "${t.iconTop} " else "") + (if (isFav) "${t.iconFav} " else "")
                   osdChannelTitle.text = badges + ch.name + "  •  " + effectiveCategory(ch)
@@ -5311,7 +5441,6 @@ jobs:
                   subModalList.requestFocus()
               }
 
-              // Пункт 1: Плавное обновление окна анализатора без пересоздания кнопок и без моргания!
               private fun openAnalyzerGroupsModal(firstOpen: Boolean = false) {
                   val snapshot = allChannels.toList()
                   val aliveTotal = channelHealthMap.values.count { it }
@@ -5485,7 +5614,6 @@ jobs:
                               val ok = checkStreamAliveWithHardTimeout(ch.url)
                               channelHealthMap[ch.url] = ok
                               val done = counter.incrementAndGet()
-                              // Обновляем UI раз в 8 проверенных каналов без пересоздания окна (никакого моргания!)
                               if (done % 8 == 0 || done >= total) {
                                   runOnUiThread {
                                       val aliveCount = snapshot.count { channelHealthMap[it.url] == true }
@@ -5726,7 +5854,6 @@ jobs:
                   nameInput.requestFocus()
               }
 
-              // Пункт 7: Определение разрешения (2K / 1080p / 720p / HD) и языков вещания (RU / EN) для отображения в списке каналов
               private fun buildChannelSpecsBadge(ch: Channel): String {
                   val lower = (ch.name + " " + ch.url).lowercase()
                   val res = when {
@@ -5822,9 +5949,9 @@ jobs:
               private fun ensureDefaultPlaylists() {
                   playlists.removeAll { it.source == "BUILTIN_VIP_PROVIDER" }
                   if (playlists.isEmpty()) {
-                      playlists.add(PlaylistEntry("Основной (Расширенный RU + 2K + Мир)", "BUILTIN_OPEN_RU", false))
+                      playlists.add(PlaylistEntry("Основной (Расширенный RU + 2K Спорт/Музыка)", "BUILTIN_OPEN_RU", false))
                   } else if (playlists.none { it.source == "BUILTIN_OPEN_RU" }) {
-                      playlists.add(0, PlaylistEntry("Основной (Расширенный RU + 2K + Мир)", "BUILTIN_OPEN_RU", false))
+                      playlists.add(0, PlaylistEntry("Основной (Расширенный RU + 2K Спорт/Музыка)", "BUILTIN_OPEN_RU", false))
                   }
                   if (activePlaylistIndex !in playlists.indices) {
                       activePlaylistIndex = 0
@@ -5863,6 +5990,17 @@ jobs:
                                   for (ch in parsed) {
                                       if (existingKeys.add(normalizeName(ch.name))) {
                                           result.add(ch)
+                                      }
+                                  }
+                                  // Пункт 6: Вдобавок отбираем лучшие музыкальные и спортивные FullHD/1080p потоки и дублируем их в 2K, если у них высокий профиль
+                                  for (ch in parsed) {
+                                      if ((ch.category == "Спорт" || ch.category == "Музыка") &&
+                                          (ch.name.contains("1080", true) || ch.name.contains("FHD", true) || ch.name.contains("4K", true) || ch.name.contains("UHD", true))
+                                      ) {
+                                          val copyName = if (ch.name.contains("2K", true)) ch.name else "${ch.name} • 2K"
+                                          if (existingKeys.add(normalizeName(copyName) + "_2k")) {
+                                              result.add(Channel(copyName, ch.url, "2K", ch.tvgId))
+                                          }
                                       }
                                   }
                                   result
@@ -5947,10 +6085,10 @@ jobs:
                   displayedChannels.addAll(topPart)
                   displayedChannels.addAll(normalPart)
 
+                  focusedChannelPos = 0
                   refreshChannelAdapter()
               }
 
-              // Пункт 7: В списке каналов указываем разрешение и языки вещания (без программы передач)
               private fun refreshChannelAdapter() {
                   val snapshot = displayedChannels.toList()
                   val t = currentTheme()
@@ -6065,6 +6203,7 @@ jobs:
                       .putInt("theme_index", themeIndex)
                       .putInt("control_mode_v13", controlMode)
                       .putInt("screen_aspect_v15", screenAspectMode)
+                      .putBoolean("night_dim_v17", isNightDimActive)
                       .putBoolean("anti_block_ru", antiBlockEnabled)
                       .putInt("ua_index", userAgentIndex)
                       .putString("epg_url", epgUrl)
@@ -6083,6 +6222,7 @@ jobs:
                   themeIndex = prefs.getInt("theme_index", 0)
                   controlMode = prefs.getInt("control_mode_v13", 0)
                   screenAspectMode = prefs.getInt("screen_aspect_v15", 0)
+                  isNightDimActive = prefs.getBoolean("night_dim_v17", false)
                   antiBlockEnabled = prefs.getBoolean("anti_block_ru", true)
                   userAgentIndex = prefs.getInt("ua_index", 0)
                   activePlaylistIndex = prefs.getInt("active_playlist", 0)
@@ -6160,6 +6300,27 @@ jobs:
                   playChannelObj(list[targetIdx])
               }
 
+              // Пункт 4: Долгое нажатие на центральную кнопку OK открывает Главное меню настроек (SETTINGS), а короткое — OSD
+              override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
+                  if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) && menuHistory.isEmpty()) {
+                      centerLongPressHandled = true
+                      navigateToMenu("SETTINGS")
+                      return true
+                  }
+                  return super.onKeyLongPress(keyCode, event)
+              }
+
+              override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+                  if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) && menuHistory.isEmpty()) {
+                      if (!centerLongPressHandled) {
+                          navigateToMenu("OSD")
+                      }
+                      centerLongPressHandled = false
+                      return true
+                  }
+                  return super.onKeyUp(keyCode, event)
+              }
+
               override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
                   if (keyCode == KeyEvent.KEYCODE_BACK) {
                       if (navigateBackInMenu()) {
@@ -6170,7 +6331,7 @@ jobs:
                           finish()
                       } else {
                           lastBackPressTime = now
-                          Toast.makeText(this, "Нажмите «Назад» ещё раз для выхода", Toast.LENGTH_SHORT).show()
+                          Toast.makeText(this, "Нажмите «Назад» ещё раз для выхода из TiViLook", Toast.LENGTH_SHORT).show()
                       }
                       return true
                   }
@@ -6219,7 +6380,13 @@ jobs:
                           return true
                       }
                       KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                          navigateToMenu("OSD")
+                          if (event?.repeatCount == 0) {
+                              centerLongPressHandled = false
+                              event.startTracking()
+                          } else if ((event?.repeatCount ?: 0) >= 3 && !centerLongPressHandled) {
+                              centerLongPressHandled = true
+                              navigateToMenu("SETTINGS")
+                          }
                           return true
                       }
                   }
@@ -6266,7 +6433,7 @@ jobs:
           path: app/permanent_key.jks
           key: mibox-iptv-immutable-signing-jks-v1
 
-      - name: Step 4 - Ensure Keystore Exists and Compile Release APK
+      - name: Step 4 - Ensure Keystore Exists and Compile TiViLook APK
         run: |
           mkdir -p ~/.android
           if [ ! -f app/permanent_key.jks ]; then
@@ -6280,10 +6447,10 @@ jobs:
           fi
           cp app/permanent_key.jks ~/.android/debug.keystore || true
           gradle assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk MiBox-IPTV-v1.6.${GITHUB_RUN_NUMBER}.apk
+          cp app/build/outputs/apk/release/app-release.apk TiViLook-v1.7.${GITHUB_RUN_NUMBER}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MiBox-IPTV-v1.6.${{ github.run_number }}
-          path: MiBox-IPTV-v1.6.${{ github.run_number }}.apk
+          name: TiViLook-v1.7.${{ github.run_number }}
+          path: TiViLook-v1.7.${{ github.run_number }}.apk
