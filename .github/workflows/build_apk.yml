@@ -1887,19 +1887,19 @@ jobs:
           ''')
           PYEOF
 
-      - name: Step 3.5 - Apply Patches v2.0 (TiViLook)
+      - name: Step 3.5 - Apply Patches v2.2 (TiViLook)
         run: |
           python3 - << 'PYEOF'
-          import os, re
+          import os, re, shutil, glob
 
           with open("app/build.gradle", "r") as f:
               g = f.read()
 
           g = re.sub(r"targetSdk\s+\d+", "targetSdk 33", g)
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "70"))
-          new_ver_code = 11000 + run_num
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "80"))
+          new_ver_code = 13000 + run_num
           g = re.sub(r"versionCode\s+\d+", f"versionCode {new_ver_code}", g)
-          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "2.0.{run_num}"', g)
+          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "2.2.{run_num}"', g)
 
           signing_block = '''
               signingConfigs {
@@ -1936,6 +1936,83 @@ jobs:
               )
           with open("app/build.gradle", "w") as f:
               f.write(g)
+
+          # Удаляем все старые/дефолтные иконки во всех папках mipmap-* и drawable-*, чтобы гарантированно применялась наша новая иконка глаза!
+          for old_ic in glob.glob("app/src/main/res/mipmap*/*ic_launcher*") + glob.glob("app/src/main/res/drawable*/*ic_launcher*"):
+              try:
+                  os.remove(old_ic)
+              except Exception:
+                  pass
+
+          realistic_eye_icon = '''<?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path android:fillColor="#D83A18" android:pathData="M0,0h108v108h-108z"/>
+              <path android:fillColor="#EA7317" android:pathData="M0,12 C35,8 75,0 108,0 L108,108 L0,108 Z"/>
+              <path android:fillColor="#F4B926" android:pathData="M0,34 C40,22 78,12 108,6 L108,108 L0,108 Z"/>
+              <path android:fillColor="#48A14D" android:pathData="M0,66 C38,48 76,34 108,22 L108,108 L0,108 Z"/>
+              <path android:fillColor="#1692A8" android:pathData="M0,88 C42,72 78,56 108,42 L108,108 L0,108 Z"/>
+              <path android:fillColor="#284596" android:pathData="M18,108 C54,88 84,74 108,62 L108,108 Z"/>
+              <path android:fillColor="#7C1D7A" android:pathData="M48,108 C72,94 92,84 108,78 L108,108 Z"/>
+              <path android:fillColor="#55000000" android:pathData="M7,64 C24,30 84,30 101,64 C84,92 24,92 7,64 Z"/>
+              <path android:fillColor="#19130E" android:pathData="M7,60 C24,26 84,26 101,60 C84,88 24,88 7,60 Z"/>
+              <path android:fillColor="#19130E" android:pathData="M55,33 L62,21 L67,34 L77,24 L77,39 L89,32 L85,46 L96,42 L91,54 L101,53 L95,61 Z"/>
+              <path android:fillColor="#2D1E12" android:pathData="M14,48 C28,31 46,27 57,29 C44,32 28,38 14,48 Z"/>
+              <path android:fillColor="#EFE5CF" android:pathData="M13,60 C28,34 80,34 95,60 C80,82 28,82 13,60 Z"/>
+              <path android:fillColor="#C9B99B" android:pathData="M13,60 C28,34 80,34 95,60 C80,41 28,41 13,60 Z"/>
+              <path android:fillColor="#12181B" android:pathData="M54,36 A24,24 0 1,0 54,84 A24,24 0 1,0 54,36 Z"/>
+              <path android:fillColor="#00838F" android:pathData="M54,38 A22,22 0 1,0 54,82 A22,22 0 1,0 54,38 Z"/>
+              <path android:fillColor="#558B2F" android:pathData="M54,60 L35,49 A22,22 0 0,0 54,82 Z"/>
+              <path android:fillColor="#F9A825" android:pathData="M54,60 L54,82 A22,22 0 0,0 73,71 Z"/>
+              <path android:fillColor="#C62828" android:pathData="M54,60 L73,71 A22,22 0 0,0 73,49 Z"/>
+              <path android:fillColor="#AD1457" android:pathData="M54,60 L73,49 A22,22 0 0,0 54,38 Z"/>
+              <path android:fillColor="#283593" android:pathData="M54,60 L54,38 A22,22 0 0,0 35,49 Z"/>
+              <path android:fillColor="#55FFB300" android:pathData="M54,44 A16,16 0 1,0 54,76 A16,16 0 1,0 54,44 Z"/>
+              <path android:fillColor="#1E140F" android:pathData="M54,46.5 A13.5,13.5 0 1,0 54,73.5 A13.5,13.5 0 1,0 54,46.5 Z"/>
+              <path android:fillColor="#070505" android:pathData="M54,48 A12,12 0 1,0 54,72 A12,12 0 1,0 54,48 Z"/>
+              <path android:fillColor="#FFFFFF" android:pathData="M60.5,50.5 A3.2,3.2 0 1,0 60.5,56.9 A3.2,3.2 0 1,0 60.5,50.5 Z"/>
+              <path android:fillColor="#E6FFFFFF" android:pathData="M65,55.5 A1.4,1.4 0 1,0 65,58.3 A1.4,1.4 0 1,0 65,55.5 Z"/>
+              <path android:fillColor="#99FFFFFF" android:pathData="M46,64.5 A1.9,1.9 0 1,0 46,68.3 A1.9,1.9 0 1,0 46,64.5 Z"/>
+          </vector>'''
+
+          realistic_eye_banner = '''<?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="320dp"
+              android:height="180dp"
+              android:viewportWidth="320"
+              android:viewportHeight="180">
+              <path android:fillColor="#D83A18" android:pathData="M0,0h320v180h-320z"/>
+              <path android:fillColor="#EA7317" android:pathData="M0,25 L320,0 L320,180 L0,180 Z"/>
+              <path android:fillColor="#F4B926" android:pathData="M0,60 L320,18 L320,180 L0,180 Z"/>
+              <path android:fillColor="#48A14D" android:pathData="M0,105 L320,52 L320,180 L0,180 Z"/>
+              <path android:fillColor="#1692A8" android:pathData="M0,145 L320,88 L320,180 L0,180 Z"/>
+              <path android:fillColor="#284596" android:pathData="M0,172 L320,122 L320,180 L0,180 Z"/>
+              <path android:fillColor="#7C1D7A" android:pathData="M90,180 L320,148 L320,180 Z"/>
+              <path android:fillColor="#55000000" android:pathData="M46,101 C94,37 226,37 274,101 C226,159 94,159 46,101 Z"/>
+              <path android:fillColor="#19130E" android:pathData="M46,96 C94,32 226,32 274,96 C226,154 94,154 46,96 Z"/>
+              <path android:fillColor="#19130E" android:pathData="M162,44 L182,18 L192,46 L216,24 L216,54 L244,40 L234,68 L260,62 L246,84 L268,82 L254,98 Z"/>
+              <path android:fillColor="#EFE5CF" android:pathData="M60,96 C104,46 216,46 260,96 C216,142 104,142 60,96 Z"/>
+              <path android:fillColor="#12181B" android:pathData="M160,50 A46,46 0 1,0 160,142 A46,46 0 1,0 160,50 Z"/>
+              <path android:fillColor="#0097A7" android:pathData="M160,53 A43,43 0 1,0 160,139 A43,43 0 1,0 160,53 Z"/>
+              <path android:fillColor="#689F38" android:pathData="M160,96 L122,74 A43,43 0 0,0 160,139 Z"/>
+              <path android:fillColor="#FBC02D" android:pathData="M160,96 L160,139 A43,43 0 0,0 198,118 Z"/>
+              <path android:fillColor="#D32F2F" android:pathData="M160,96 L198,118 A43,43 0 0,0 198,74 Z"/>
+              <path android:fillColor="#303F9F" android:pathData="M160,96 L160,53 A43,43 0 0,0 122,74 Z"/>
+              <path android:fillColor="#55FFB300" android:pathData="M160,66 A30,30 0 1,0 160,126 A30,30 0 1,0 160,66 Z"/>
+              <path android:fillColor="#070505" android:pathData="M160,72 A24,24 0 1,0 160,120 A24,24 0 1,0 160,72 Z"/>
+              <path android:fillColor="#FFFFFF" android:pathData="M172,78 A6,6 0 1,0 172,90 A6,6 0 1,0 172,78 Z"/>
+              <path android:fillColor="#E6FFFFFF" android:pathData="M181,88 A2.6,2.6 0 1,0 181,93.2 A2.6,2.6 0 1,0 181,88 Z"/>
+              <path android:fillColor="#99FFFFFF" android:pathData="M145,105 A3.5,3.5 0 1,0 145,112 A3.5,3.5 0 1,0 145,105 Z"/>
+          </vector>'''
+
+          os.makedirs("app/src/main/res/drawable", exist_ok=True)
+          with open("app/src/main/res/drawable/ic_launcher.xml", "w") as f:
+              f.write(realistic_eye_icon)
+          with open("app/src/main/res/drawable/ic_banner.xml", "w") as f:
+              f.write(realistic_eye_banner)
 
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "r") as f:
               cat = f.read()
@@ -2044,6 +2121,7 @@ jobs:
                   android:allowBackup="true"
                   android:banner="@drawable/ic_banner"
                   android:icon="@drawable/ic_launcher"
+                  android:roundIcon="@drawable/ic_launcher"
                   android:label="TiViLook"
                   android:hardwareAccelerated="true"
                   android:theme="@style/Theme.AppCompat.NoActionBar"
@@ -2067,17 +2145,16 @@ jobs:
 
           import android.Manifest
           import android.content.Context
-          import android.content.Intent
           import android.content.pm.PackageManager
           import android.graphics.*
           import android.graphics.drawable.ColorDrawable
           import android.graphics.drawable.GradientDrawable
+          import android.graphics.drawable.LayerDrawable
           import android.os.Build
           import android.os.Bundle
           import android.os.Environment
           import android.os.Handler
           import android.os.Looper
-          import android.speech.RecognizerIntent
           import android.text.TextUtils
           import android.util.TypedValue
           import android.view.GestureDetector
@@ -2134,6 +2211,7 @@ jobs:
           import kotlin.concurrent.thread
           import kotlin.math.abs
           import kotlin.math.min
+          import kotlin.math.sin
 
           data class Channel(val name: String, val url: String, val category: String, val tvgId: String)
           data class PlaylistEntry(val title: String, val source: String, val isLocal: Boolean)
@@ -2149,7 +2227,41 @@ jobs:
               val isCarouselMenu: Boolean = false
           )
 
-          // Строка канала в списке: 3D-Монограмма логотипа + Бегущая строка + Живой эквалайзер активного канала + Мини-прогрессбар EPG внизу
+          class LiveEqualizerView(context: Context) : View(context) {
+              var barColor: Int = Color.parseColor("#00E676")
+                  set(value) { field = value; invalidate() }
+
+              private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+              private val rect = RectF()
+              private val phases = floatArrayOf(0.0f, 1.3f, 2.7f, 4.1f)
+
+              override fun onDraw(canvas: Canvas) {
+                  super.onDraw(canvas)
+                  if (visibility != VISIBLE) return
+                  val w = width.toFloat()
+                  val h = height.toFloat()
+                  if (w <= 0f || h <= 0f) return
+
+                  val t = System.currentTimeMillis() / 130.0
+                  val barCount = 4
+                  val gap = 3.5f
+                  val totalGaps = gap * (barCount - 1)
+                  val barW = ((w - totalGaps) / barCount).coerceAtLeast(3f)
+
+                  paint.color = barColor
+                  for (i in 0 until barCount) {
+                      val wave = (sin(t + phases[i]).toFloat() + 1f) / 2f
+                      val barH = (h * (0.22f + 0.75f * wave)).coerceIn(4f, h)
+                      val left = i * (barW + gap)
+                      val top = h - barH
+                      rect.set(left, top, left + barW, h)
+                      canvas.drawRoundRect(rect, 3f, 3f, paint)
+                  }
+                  postInvalidateDelayed(75L)
+              }
+          }
+
+          // Строка канала без полос прогресса внизу — идеально чистый список
           class ChannelRowView(context: Context) : FrameLayout(context) {
               val badgeView = TextView(context).apply {
                   gravity = Gravity.CENTER
@@ -2161,43 +2273,19 @@ jobs:
               val titleView = MarqueeRowTextView(context).apply {
                   layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL).apply {
                       leftMargin = 68
-                      rightMargin = 48
+                      rightMargin = 54
                   }
               }
-              val eqView = TextView(context).apply {
-                  gravity = Gravity.CENTER
-                  setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+              val eqView = LiveEqualizerView(context).apply {
                   visibility = View.GONE
-                  layoutParams = LayoutParams(38, LayoutParams.WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = 10 }
+                  layoutParams = LayoutParams(34, 24, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = 14 }
               }
-              private var epgProgressFraction: Float = -1f
-              private var progressColor: Int = Color.CYAN
-              private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
               init {
-                  setWillNotDraw(false)
-                  setPadding(4, 10, 4, 12)
+                  setPadding(4, 11, 4, 11)
                   addView(badgeView)
                   addView(titleView)
                   addView(eqView)
-              }
-
-              fun bindProgress(fraction: Float, color: Int) {
-                  epgProgressFraction = fraction
-                  progressColor = color
-                  invalidate()
-              }
-
-              override fun onDraw(canvas: Canvas) {
-                  super.onDraw(canvas)
-                  if (epgProgressFraction in 0.01f..1.0f) {
-                      val w = width.toFloat() - 36f
-                      val h = height.toFloat()
-                      barPaint.color = Color.parseColor("#30FFFFFF")
-                      canvas.drawRoundRect(18f, h - 4f, 18f + w, h - 1.5f, 2f, 2f, barPaint)
-                      barPaint.color = progressColor
-                      canvas.drawRoundRect(18f, h - 4f, 18f + w * epgProgressFraction, h - 1.5f, 2f, 2f, barPaint)
-                  }
               }
           }
 
@@ -2343,7 +2431,7 @@ jobs:
                   val w = width.toFloat()
                   val h = height.toFloat()
                   val minDim = min(w, h)
-                  val pad = if (isTileFocused) minDim * 0.035f else minDim * 0.075f
+                  val pad = if (isTileFocused) minDim * 0.04f else minDim * 0.08f
 
                   val mainColor = when (themeStyleId) {
                       5 -> Color.parseColor(if (isTileFocused) "#52525B" else "#27272A")
@@ -2365,8 +2453,8 @@ jobs:
                   val depth = if (themeStyleId in listOf(3, 4, 10)) minDim * 0.08f else 0f
                   val cy = (h - depth) / 2f
                   val cx = w / 2f
-                  val r = (minDim - pad * 2) * 0.31f
-                  val corner = minDim * 0.22f
+                  val r = (minDim - pad * 2) * 0.32f
+                  val corner = minDim * 0.24f
 
                   paint.style = Paint.Style.FILL
                   if (depth > 0f) {
@@ -2379,7 +2467,7 @@ jobs:
                   canvas.drawRoundRect(rect, corner, corner, paint)
 
                   paint.style = Paint.Style.STROKE
-                  paint.strokeWidth = if (isTileFocused) 4f else 1.8f
+                  paint.strokeWidth = if (isTileFocused) 4.5f else 2f
                   paint.color = if (isTileFocused) Color.WHITE else badgeColor
                   canvas.drawRoundRect(rect, corner, corner, paint)
 
@@ -2388,32 +2476,38 @@ jobs:
 
                   when (iconType) {
                       "PLAYLISTS" -> {
+                          // Квадратный значок карточек плейлистов для вертикального меню
                           for (i in -1..1) {
-                              val ly = cy + i * (r * 0.52f)
-                              paint.color = fgColor
-                              rect.set(cx - r * 0.72f, ly - r * 0.12f, cx + r * 0.72f, ly + r * 0.12f)
-                              canvas.drawRoundRect(rect, 5f, 5f, paint)
+                              val ly = cy + i * (r * 0.54f)
+                              paint.color = if (i == 0) badgeColor else fgColor
+                              canvas.drawCircle(cx - r * 0.58f, ly, r * 0.14f, paint)
+                              rect.set(cx - r * 0.28f, ly - r * 0.12f, cx + r * 0.72f, ly + r * 0.12f)
+                              canvas.drawRoundRect(rect, 6f, 6f, paint)
                           }
-                      }
-                      "SEARCH" -> {
-                          paint.style = Paint.Style.STROKE
-                          paint.strokeWidth = (r * 0.22f).coerceAtLeast(4f)
-                          paint.color = fgColor
-                          canvas.drawCircle(cx - r * 0.15f, cy - r * 0.15f, r * 0.48f, paint)
-                          canvas.drawLine(cx + r * 0.22f, cy + r * 0.22f, cx + r * 0.68f, cy + r * 0.68f, paint)
                       }
                       "SETTINGS_GEAR" -> {
                           paint.color = fgColor
-                          canvas.drawCircle(cx, cy, r * 0.68f, paint)
+                          for (deg in 0 until 360 step 45) {
+                              val rad = Math.toRadians(deg.toDouble())
+                              val tx = cx + (r * 0.72f * Math.cos(rad)).toFloat()
+                              val ty = cy + (r * 0.72f * Math.sin(rad)).toFloat()
+                              canvas.drawCircle(tx, ty, r * 0.20f, paint)
+                          }
+                          canvas.drawCircle(cx, cy, r * 0.66f, paint)
                           paint.color = mainColor
-                          canvas.drawCircle(cx, cy, r * 0.32f, paint)
+                          canvas.drawCircle(cx, cy, r * 0.30f, paint)
                       }
                       "SWAP_GROUPS" -> {
+                          // Двунаправленные стрелки переключения Группы <-> Каналы
                           paint.style = Paint.Style.STROKE
-                          paint.strokeWidth = (r * 0.20f).coerceAtLeast(3.5f)
+                          paint.strokeWidth = (r * 0.22f).coerceAtLeast(4f)
+                          paint.strokeCap = Paint.Cap.ROUND
                           paint.color = fgColor
-                          canvas.drawLine(cx - r * 0.65f, cy - r * 0.25f, cx + r * 0.65f, cy - r * 0.25f, paint)
-                          canvas.drawLine(cx - r * 0.65f, cy + r * 0.25f, cx + r * 0.65f, cy + r * 0.25f, paint)
+                          canvas.drawLine(cx - r * 0.62f, cy - r * 0.28f, cx + r * 0.62f, cy - r * 0.28f, paint)
+                          canvas.drawLine(cx + r * 0.25f, cy - r * 0.58f, cx + r * 0.62f, cy - r * 0.28f, paint)
+                          paint.color = badgeColor
+                          canvas.drawLine(cx - r * 0.62f, cy + r * 0.28f, cx + r * 0.62f, cy + r * 0.28f, paint)
+                          canvas.drawLine(cx - r * 0.25f, cy + r * 0.58f, cx - r * 0.62f, cy + r * 0.28f, paint)
                       }
                       "EDITOR" -> {
                           paint.style = Paint.Style.STROKE
@@ -2424,6 +2518,7 @@ jobs:
                       }
                       "ANALYZER" -> {
                           paint.style = Paint.Style.STROKE
+                          paint.strokeCap = Paint.Cap.ROUND
                           for (ring in 1..3) {
                               val rad = r * (0.34f * ring)
                               paint.strokeWidth = 4f
@@ -2431,6 +2526,9 @@ jobs:
                               rect.set(cx - rad, cy - rad + r * 0.2f, cx + rad, cy + rad + r * 0.2f)
                               canvas.drawArc(rect, 215f, 110f, false, paint)
                           }
+                          paint.style = Paint.Style.FILL
+                          paint.color = badgeColor
+                          canvas.drawCircle(cx, cy + r * 0.32f, r * 0.16f, paint)
                       }
                       "THEMES" -> {
                           paint.color = badgeColor
@@ -2487,15 +2585,15 @@ jobs:
           @OptIn(UnstableApi::class)
           class MainActivity : AppCompatActivity() {
               private var player: ExoPlayer? = null
+              private lateinit var playerContainerFrame: FrameLayout
               private lateinit var playerView: PlayerView
               private lateinit var morphTransitionOverlay: FrameLayout
-              private lateinit var morphTitleText: TextView
               private lateinit var nightDimOverlay: View
               private lateinit var categoryListView: ListView
               private lateinit var channelListView: ListView
 
               private lateinit var sidePanel: LinearLayout
-              private lateinit var sideModeTitle: TextView
+              private lateinit var leftIconRail: LinearLayout
               private lateinit var infoPanel: LinearLayout
               private lateinit var centerOsdPanel: LinearLayout
               private lateinit var zappingRowContainer: LinearLayout
@@ -2515,24 +2613,23 @@ jobs:
               private val menuHistory = mutableListOf<String>()
 
               private var isSideShowingChannels = true
+              private var isLeftRailVisible = false
               private var openChannelsDirectlyWithCurrentFocus = true
               private var focusedCategoryPos = 1
               private var focusedChannelPos = 0
               private var centerLongPressHandled = false
 
-              // Замечание: Яркость с поддержкой плазменных панелей (100, 75, 50, 25) и Таймер сна
               private var brightnessPercent = 100
               private var sleepTimerMinutesLeft = 0
               private var sleepTimerRunnable: Runnable? = null
 
-              // Замечание: Прыжок на предыдущий канал по двойному нажатию кнопки Назад
               private var previousChannel: Channel? = null
               private var lastBackTapMs = 0L
               private val singleBackTapRunnable = Runnable {
-                  Toast.makeText(this, "Нажмите «Назад» дважды для возврата на прошлый канал (выход — кнопка ⏻ в меню OK)", Toast.LENGTH_SHORT).show()
+                  Toast.makeText(this, "Нажмите «Назад» дважды для возврата на прошлый канал (выход — ⏻ в меню OK)", Toast.LENGTH_SHORT).show()
               }
 
-              private var eqTick = 0
+              private var ambilightPulsePhase = 0
               private var controlMode = 0
               private lateinit var gestureDetector: GestureDetector
 
@@ -2552,11 +2649,10 @@ jobs:
               private lateinit var reloadIconIndicator: TextView
               private val signalBars = mutableListOf<View>()
 
-              private lateinit var headerTilePlaylists: ThemedTileView
-              private lateinit var headerTileSearch: ThemedTileView
-              private lateinit var headerTileSettings: ThemedTileView
-              private lateinit var headerTileAnalyzer: ThemedTileView
-              private lateinit var headerTileSwapGroups: ThemedTileView
+              private lateinit var railTilePlaylists: ThemedTileView
+              private lateinit var railTileSettings: ThemedTileView
+              private lateinit var railTileAnalyzer: ThemedTileView
+              private lateinit var railTileSwapGroups: ThemedTileView
 
               private lateinit var osdChannelTitle: TextView
               private lateinit var osdEpgCurrentTitle: TextView
@@ -2569,9 +2665,8 @@ jobs:
               private lateinit var btnOsdSettings: TextView
               private lateinit var btnOsdAudio: TextView
               private lateinit var btnOsdNightMode: TextView
-              private lateinit var btnOsdSleepTimer: TextView
               private lateinit var btnOsdChannelActions: TextView
-              private lateinit var btnOsdPowerExit: TextView
+              private lateinit var btnOsdPowerAndSleep: TextView
 
               private lateinit var fullEpgTitle: TextView
               private lateinit var fullEpgListView: ListView
@@ -2621,7 +2716,6 @@ jobs:
               private var themeIndex = 0
               private var screenAspectMode = 0
 
-              // Замечание: Увеличенный таймаут перезагрузки соединения канала (14 секунд) + иконка релоада вместо тоста
               private var lowSignalStuckSeconds = 0
               private var lastRenderedFramePositionMs = -1L
 
@@ -2671,7 +2765,6 @@ jobs:
                   "https://iptv-org.github.io/iptv/categories/music.m3u"
               )
 
-              // Мульти-источники EPG для максимального охвата каналов
               private val epgUrls = listOf(
                   "https://iptvx.one/epg/epg.xml.gz",
                   "https://iptvx.one/epg/epg_lite.xml.gz",
@@ -2685,7 +2778,7 @@ jobs:
                       val currentMenu = menuHistory.last()
                       if ((currentMenu == "ANALYZER_GROUP_VIEW" || currentMenu == "ANALYZER_GROUPS") && isAnalyzerRunning) {
                           collapseAnalyzerToTopBar()
-                      } else if (currentMenu !in listOf("EPG", "ADD_URL", "MANUAL_PATH", "SEARCH_MODAL")) {
+                      } else if (currentMenu !in listOf("EPG", "ADD_URL", "MANUAL_PATH")) {
                           closeAllMenus()
                       }
                   }
@@ -2702,33 +2795,78 @@ jobs:
                       }.start()
               }
 
-              // Видео-превью в правом верхнем углу при открытии полноэкранного Телегида
               private fun setPlayerMiniPreviewMode(mini: Boolean) {
+                  val dm = resources.displayMetrics
                   if (mini) {
-                      val w = resources.displayMetrics.widthPixels.toFloat()
-                      val h = resources.displayMetrics.heightPixels.toFloat()
-                      playerView.animate()
-                          .scaleX(0.28f).scaleY(0.28f)
-                          .translationX(w * 0.33f).translationY(-h * 0.33f)
-                          .setDuration(260L).start()
+                      val pipW = (dm.widthPixels * 0.34f).toInt().coerceAtLeast(420)
+                      val pipH = (pipW * 9f / 16f).toInt()
+                      playerContainerFrame.layoutParams = FrameLayout.LayoutParams(pipW, pipH, Gravity.TOP or Gravity.END).apply {
+                          setMargins(0, 56, 26, 0)
+                      }
+                      playerContainerFrame.setPadding(4, 4, 4, 4)
+                      playerContainerFrame.background = GradientDrawable().apply {
+                          setColor(Color.BLACK)
+                          cornerRadius = 18f
+                          setStroke(3, ambilightGlowColor(255))
+                      }
                   } else {
-                      playerView.animate()
-                          .scaleX(1f).scaleY(1f)
-                          .translationX(0f).translationY(0f)
-                          .setDuration(220L).start()
+                      playerContainerFrame.layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          Gravity.CENTER
+                      )
+                      playerContainerFrame.setPadding(0, 0, 0, 0)
+                      playerContainerFrame.background = null
                   }
               }
 
-              // Динамическая подсветка Ambilight вокруг открытых меню под жанр текущего канала
-              private fun ambilightStrokeColor(): Int {
+              private fun ambilightGlowColor(alpha: Int): Int {
                   val cat = currentChannel?.let { effectiveCategory(it) } ?: ""
-                  return when (cat) {
-                      "Спорт" -> Color.parseColor("#AA00E676")
-                      "Кино и сериалы" -> Color.parseColor("#AA38BDF8")
-                      "Музыка" -> Color.parseColor("#AAEC4899")
-                      "2K" -> Color.parseColor("#AAFFB300")
-                      "Детские" -> Color.parseColor("#AAFB923C")
-                      else -> currentTheme().strokeColor
+                  val (r, g, b) = when (cat) {
+                      "Спорт" -> Triple(0, 230, 118)
+                      "Кино и сериалы" -> Triple(0, 190, 255)
+                      "Музыка" -> Triple(255, 42, 133)
+                      "2K" -> Triple(255, 185, 0)
+                      "Детские" -> Triple(255, 120, 30)
+                      "Познавательные" -> Triple(40, 210, 190)
+                      else -> {
+                          val ac = currentTheme().accentColor
+                          Triple(Color.red(ac), Color.green(ac), Color.blue(ac))
+                      }
+                  }
+                  return Color.argb(alpha.coerceIn(0, 255), r, g, b)
+              }
+
+              private fun makeThemedPanelBg(): LayerDrawable {
+                  val t = currentTheme()
+                  val pulseBoost = if (ambilightPulsePhase % 2 == 0) 115 else 70
+                  val outerGlow = GradientDrawable().apply {
+                      setColor(Color.TRANSPARENT)
+                      cornerRadius = t.cornerRadiusDp + 10f
+                      setStroke(12, ambilightGlowColor(pulseBoost))
+                  }
+                  val midGlow = GradientDrawable().apply {
+                      setColor(Color.TRANSPARENT)
+                      cornerRadius = t.cornerRadiusDp + 4f
+                      setStroke(6, ambilightGlowColor(175))
+                  }
+                  val mainCard = GradientDrawable().apply {
+                      setColor(t.panelBgColor)
+                      cornerRadius = t.cornerRadiusDp
+                      setStroke(3, ambilightGlowColor(245))
+                  }
+                  return LayerDrawable(arrayOf(outerGlow, midGlow, mainCard)).apply {
+                      setLayerInset(0, 0, 0, 0, 0)
+                      setLayerInset(1, 5, 5, 5, 5)
+                      setLayerInset(2, 10, 10, 10, 10)
+                  }
+              }
+
+              private fun makeThemedSubBg(): GradientDrawable {
+                  val t = currentTheme()
+                  return GradientDrawable().apply {
+                      setColor(t.cardBgColor)
+                      cornerRadius = (t.cornerRadiusDp - 6f).coerceAtLeast(12f)
                   }
               }
 
@@ -2751,25 +2889,6 @@ jobs:
                   }
               }
 
-              private fun makeThemedPanelBg(): GradientDrawable {
-                  val t = currentTheme()
-                  return GradientDrawable().apply {
-                      setColor(t.panelBgColor)
-                      cornerRadius = t.cornerRadiusDp
-                      setStroke(3, ambilightStrokeColor())
-                  }
-              }
-
-              private fun makeThemedSubBg(): GradientDrawable {
-                  val t = currentTheme()
-                  return GradientDrawable().apply {
-                      setColor(t.cardBgColor)
-                      cornerRadius = (t.cornerRadiusDp - 6f).coerceAtLeast(12f)
-                      setStroke(1, Color.parseColor("#35888888"))
-                  }
-              }
-
-              // Замечание: Корректная кривая яркости для плазменного ТВ (с защитой теней от выгорания в черноту) + затемнение всех меню!
               private fun applyBrightnessLevel() {
                   val pct = brightnessPercent.coerceIn(25, 100)
                   if (pct >= 100) {
@@ -2778,8 +2897,6 @@ jobs:
                       lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
                       window.attributes = lp
                   } else {
-                      // Используем мягкий графитово-синий оттенок (#12151C) вместо #000000, чтобы плазма не гасила тёмные сцены в ноль!
-                      // Чёткая разница между 75% (alpha=55), 50% (alpha=105) и 25% (alpha=152)
                       val alpha = when (pct) {
                           75 -> 55
                           50 -> 105
@@ -2804,6 +2921,7 @@ jobs:
               private fun applyCurrentThemeToAllPanels() {
                   val t = currentTheme()
                   sidePanel.background = makeThemedPanelBg()
+                  leftIconRail.background = makeThemedSubBg()
                   infoPanel.background = makeThemedPanelBg()
                   centerOsdPanel.background = makeThemedPanelBg()
                   settingsTileOverlay.background = makeThemedPanelBg()
@@ -2821,7 +2939,6 @@ jobs:
 
                   subModalTitle.setTextColor(t.accentColor); subModalTitle.typeface = t.boldFont
                   fullEpgTitle.setTextColor(t.accentColor); fullEpgTitle.typeface = t.boldFont
-                  sideModeTitle.setTextColor(t.accentColor); sideModeTitle.typeface = t.boldFont
                   clockTextView.typeface = t.boldFont
                   settingsSelectedLabel.setTextColor(t.textPrimaryColor); settingsSelectedLabel.typeface = t.boldFont
                   infoTextView.setTextColor(t.textPrimaryColor); infoTextView.typeface = t.normalFont
@@ -2831,11 +2948,10 @@ jobs:
                   btnOsdSettings.text = "${t.iconSettings} Меню"
                   btnOsdAudio.text = "${t.iconAudio} Звук"
                   btnOsdNightMode.text = "🌙 $brightnessPercent%"
-                  btnOsdSleepTimer.text = if (sleepTimerMinutesLeft > 0) "⏲ ${sleepTimerMinutesLeft}м" else "⏲ Сон"
                   btnOsdChannelActions.text = "⚙ Канал"
-                  btnOsdPowerExit.text = "⏻ Выход"
+                  btnOsdPowerAndSleep.text = if (sleepTimerMinutesLeft > 0) "⏻ ${sleepTimerMinutesLeft}м" else "⏻ Выход / Сон"
 
-                  for (btn in listOf(btnOsdTop, btnOsdFav, btnOsdEpgList, btnOsdSettings, btnOsdAudio, btnOsdNightMode, btnOsdSleepTimer, btnOsdChannelActions, btnOsdPowerExit)) {
+                  for (btn in listOf(btnOsdTop, btnOsdFav, btnOsdEpgList, btnOsdSettings, btnOsdAudio, btnOsdNightMode, btnOsdChannelActions, btnOsdPowerAndSleep)) {
                       btn.typeface = t.boldFont
                       btn.setTextColor(t.textPrimaryColor)
                   }
@@ -2848,16 +2964,25 @@ jobs:
                   updateCenterOsdContent()
               }
 
-              private fun makeHeader3DIconButton(iconType: String, baseHex: String, accentHex: String, onClick: () -> Unit): ThemedTileView {
+              // Вертикальная квадратная 3D-кнопка (86x86px) специально для левого выдвижного дока!
+              private fun makeVerticalRail3DIconButton(iconType: String, baseHex: String, accentHex: String, onClick: () -> Unit): ThemedTileView {
                   val tile = ThemedTileView(this, iconType, baseHex, accentHex).apply {
                       themeStyleId = currentTheme().id
                       isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-                      layoutParams = LinearLayout.LayoutParams(0, 72, 1f).apply { setMargins(6, 2, 6, 2) }
-                      setOnFocusChangeListener { _, hasFocus ->
+                      layoutParams = LinearLayout.LayoutParams(86, 86).apply { setMargins(6, 10, 6, 10) }
+                      setOnFocusChangeListener { v, hasFocus ->
                           isTileFocused = hasFocus
+                          v.animate().scaleX(if (hasFocus) 1.12f else 1.0f).scaleY(if (hasFocus) 1.12f else 1.0f).setDuration(140L).start()
                           if (hasFocus) resetMenuInactivityTimer()
                       }
                       setOnClickListener { resetMenuInactivityTimer(); onClick() }
+                      setOnKeyListener { _, keyCode, event ->
+                          if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                              resetMenuInactivityTimer()
+                              hideLeftIconRailToGroups()
+                              true
+                          } else false
+                      }
                   }
                   allGridTiles.add(tile)
                   return tile
@@ -2868,25 +2993,25 @@ jobs:
                       text = label
                       isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                       gravity = Gravity.CENTER
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isIconOnly) 18f else 13f)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isIconOnly) 18f else 13.5f)
                       typeface = themeBoldFont()
                       val t = currentTheme()
                       setTextColor(t.textPrimaryColor)
                       background = GradientDrawable().apply {
                           setColor(t.cardBgColor)
-                          cornerRadius = if (isIconOnly) 22f else 15f
+                          cornerRadius = if (isIconOnly) 22f else 16f
                           setStroke(1, t.strokeColor)
                       }
                       isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-                      setPadding(14, 9, 14, 9)
+                      setPadding(16, 10, 16, 10)
                       layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                          setMargins(3, 3, 3, 3)
+                          setMargins(4, 4, 4, 4)
                       }
                       setOnFocusChangeListener { _, hasFocus ->
                           val curT = currentTheme()
                           background = GradientDrawable().apply {
                               setColor(if (hasFocus) curT.accentColor else curT.cardBgColor)
-                              cornerRadius = if (isIconOnly) 22f else 15f
+                              cornerRadius = if (isIconOnly) 22f else 16f
                               setStroke(if (hasFocus) 2 else 1, if (hasFocus) Color.WHITE else curT.strokeColor)
                           }
                           setTextColor(if (hasFocus) curT.textOnAccent else curT.textPrimaryColor)
@@ -2963,30 +3088,31 @@ jobs:
 
                   val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
 
+                  playerContainerFrame = FrameLayout(this).apply {
+                      layoutParams = FrameLayout.LayoutParams(
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          FrameLayout.LayoutParams.MATCH_PARENT,
+                          Gravity.CENTER
+                      )
+                  }
+
                   playerView = PlayerView(this).apply {
                       useController = false
                       resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                       layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
                       setOnTouchListener { _, event -> gestureDetector.onTouchEvent(event); true }
                   }
-                  root.addView(playerView)
+                  playerContainerFrame.addView(playerView)
+                  root.addView(playerContainerFrame)
 
-                  // Плавный морфинг при переключении каналов (исчезает при появлении первого видеокадра)
+                  // Чистая мягкая вуаль морфинга БЕЗ дублирующей текстовой надписи названия канала по центру экрана!
                   morphTransitionOverlay = FrameLayout(this).apply {
-                      setBackgroundColor(Color.parseColor("#B80A0D14"))
+                      setBackgroundColor(Color.parseColor("#88080A10"))
                       alpha = 0f
                       visibility = View.GONE
                       isClickable = false; isFocusable = false
                       layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
                   }
-                  morphTitleText = TextView(this).apply {
-                      setTextColor(Color.WHITE)
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
-                      typeface = Typeface.DEFAULT_BOLD
-                      gravity = Gravity.CENTER
-                      layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
-                  }
-                  morphTransitionOverlay.addView(morphTitleText)
                   root.addView(morphTransitionOverlay)
 
                   clockTextView = TextView(this).apply {
@@ -3018,7 +3144,6 @@ jobs:
                   }
                   root.addView(analyzerStatusBanner)
 
-                  // Замечание: Рядом с палочками антенны добавлен компактный значок релоада (↻), который загорается при перезагрузке потока без нижних тостов!
                   signalContainer = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER_VERTICAL
@@ -3055,56 +3180,58 @@ jobs:
                   signalContainer.addView(barsBox)
                   root.addView(signalContainer)
 
+                  // Горизонтальный контейнер левой панели: Слева выдвижной вертикальный док иконок (leftIconRail), справа — список Групп / Каналов!
                   sidePanel = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
+                      orientation = LinearLayout.HORIZONTAL
                       background = makeThemedPanelBg()
                       visibility = View.GONE
-                      layoutParams = FrameLayout.LayoutParams(780, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START).apply { setMargins(16, 16, 0, 16) }
-                      setPadding(22, 18, 22, 18)
+                      layoutParams = FrameLayout.LayoutParams(820, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START).apply { setMargins(16, 16, 0, 16) }
+                      setPadding(22, 22, 22, 22)
                   }
 
                   allGridTiles.clear()
                   allGridCaptions.clear()
 
-                  val topBar = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
+                  // Выдвижной левый вертикальный док с переработанными квадратными 3D-иконками (появляется по нажатию Влево из Групп)
+                  leftIconRail = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
                       gravity = Gravity.CENTER
-                      layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                      setPadding(0, 0, 0, 10)
+                      background = makeThemedSubBg()
+                      visibility = View.GONE
+                      setPadding(10, 16, 10, 16)
+                      layoutParams = LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.WRAP_CONTENT,
+                          LinearLayout.LayoutParams.MATCH_PARENT
+                      ).apply { rightMargin = 14 }
                   }
 
-                  headerTilePlaylists = makeHeader3DIconButton("PLAYLISTS", "#1B8A6B", "#FFB300") { navigateToMenu("PLAYLISTS") }
-                  headerTileSearch = makeHeader3DIconButton("SEARCH", "#0277BD", "#00E5FF") { navigateToMenu("SEARCH_MODAL") }
-                  headerTileSettings = makeHeader3DIconButton("SETTINGS_GEAR", "#1E4E79", "#00E5FF") { navigateToMenu("SETTINGS") }
-                  headerTileAnalyzer = makeHeader3DIconButton("ANALYZER", "#5E35B1", "#00E676") { navigateToMenu("ANALYZER_GROUPS") }
-                  headerTileSwapGroups = makeHeader3DIconButton("SWAP_GROUPS", "#D84315", "#FFD54F") {
-                      if (isSideShowingChannels) showSideGroupsMode() else showSideChannelsMode(focusTop = true)
-                  }
+                  railTilePlaylists = makeVerticalRail3DIconButton("PLAYLISTS", "#1B8A6B", "#FFB300") { navigateToMenu("PLAYLISTS") }.apply { id = 7101 }
+                  railTileSettings = makeVerticalRail3DIconButton("SETTINGS_GEAR", "#1E4E79", "#00E5FF") { navigateToMenu("SETTINGS") }.apply { id = 7102 }
+                  railTileAnalyzer = makeVerticalRail3DIconButton("ANALYZER", "#5E35B1", "#00E676") { navigateToMenu("ANALYZER_GROUPS") }.apply { id = 7103 }
+                  railTileSwapGroups = makeVerticalRail3DIconButton("SWAP_GROUPS", "#D84315", "#FFD54F") {
+                      hideLeftIconRailToGroups()
+                      showSideChannelsMode(focusTop = true)
+                  }.apply { id = 7104 }
 
-                  topBar.addView(headerTilePlaylists)
-                  topBar.addView(headerTileSearch)
-                  topBar.addView(headerTileSettings)
-                  topBar.addView(headerTileAnalyzer)
-                  topBar.addView(headerTileSwapGroups)
-                  sidePanel.addView(topBar)
-
-                  sideModeTitle = TextView(this).apply {
-                      text = "Каналы"
-                      setTextColor(currentTheme().accentColor)
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-                      typeface = themeBoldFont()
-                      setPadding(6, 2, 6, 10)
-                      setOnClickListener { if (isSideShowingChannels) showSideGroupsMode() else showSideChannelsMode(focusTop = true) }
+                  val railButtons = listOf(railTilePlaylists, railTileSettings, railTileAnalyzer, railTileSwapGroups)
+                  for (i in railButtons.indices) {
+                      val cur = railButtons[i]
+                      cur.nextFocusUpId = railButtons[(i - 1 + railButtons.size) % railButtons.size].id
+                      cur.nextFocusDownId = railButtons[(i + 1) % railButtons.size].id
+                      leftIconRail.addView(cur)
                   }
-                  sidePanel.addView(sideModeTitle)
+                  sidePanel.addView(leftIconRail)
 
                   val singleColumnFrame = FrameLayout(this).apply {
-                      layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
+                      layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
                   }
 
                   categoryListView = ListView(this).apply {
                       choiceMode = ListView.CHOICE_MODE_SINGLE
+                      divider = null
                       dividerHeight = 0
+                      overScrollMode = View.OVER_SCROLL_NEVER
+                      isScrollingCacheEnabled = false
                       selector = ColorDrawable(Color.TRANSPARENT)
                       isSmoothScrollbarEnabled = true
                       background = makeThemedSubBg()
@@ -3115,7 +3242,10 @@ jobs:
 
                   channelListView = ListView(this).apply {
                       choiceMode = ListView.CHOICE_MODE_SINGLE
+                      divider = null
                       dividerHeight = 0
+                      overScrollMode = View.OVER_SCROLL_NEVER
+                      isScrollingCacheEnabled = false
                       selector = ColorDrawable(Color.TRANSPARENT)
                       isSmoothScrollbarEnabled = true
                       background = makeThemedSubBg()
@@ -3134,7 +3264,7 @@ jobs:
                       background = makeThemedPanelBg()
                       visibility = View.GONE
                       layoutParams = FrameLayout.LayoutParams(540, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, 68, 22, 0) }
-                      setPadding(24, 20, 24, 20)
+                      setPadding(26, 22, 26, 22)
                   }
 
                   val infoTitle = TextView(this).apply {
@@ -3159,8 +3289,8 @@ jobs:
                       orientation = LinearLayout.VERTICAL
                       background = makeThemedPanelBg()
                       visibility = View.GONE
-                      setPadding(22, 16, 22, 16)
-                      layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { setMargins(50, 0, 50, 22) }
+                      setPadding(26, 20, 26, 20)
+                      layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { setMargins(60, 0, 60, 22) }
                   }
 
                   osdChannelTitle = TextView(this).apply {
@@ -3216,30 +3346,17 @@ jobs:
                   btnOsdSettings = makeModernButton("${t.iconSettings} Меню") { navigateToMenu("SETTINGS") }
                   btnOsdAudio = makeModernButton("${t.iconAudio} Звук") { navigateToMenu("AUDIO") }
                   btnOsdNightMode = makeModernButton("🌙 $brightnessPercent%") { navigateToMenu("BRIGHTNESS_MENU") }
-                  // Замечание: Кнопка Таймера сна и отдельная кнопка Выключения в меню по центральной кнопке
-                  btnOsdSleepTimer = makeModernButton("⏲ Сон") { navigateToMenu("SLEEP_TIMER_MENU") }
                   btnOsdChannelActions = makeModernButton("⚙ Канал") { navigateToMenu("CHANNEL_ACTIONS") }
-                  btnOsdPowerExit = makeModernButton("⏻ Выход") { finish() }
+                  btnOsdPowerAndSleep = makeModernButton("⏻ Выход / Сон") { navigateToMenu("POWER_AND_SLEEP_MENU") }
 
-                  btnOsdTop.setOnKeyListener { _, keyCode, event ->
-                      if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                          closeAllMenus(); navigateToMenu("SIDE"); true
-                      } else false
-                  }
-                  btnOsdPowerExit.setOnKeyListener { _, keyCode, event ->
-                      if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                          closeAllMenus(); navigateToMenu("INFO"); true
-                      } else false
-                  }
-
-                  for (b in listOf(btnOsdTop, btnOsdFav, btnOsdEpgList, btnOsdSettings, btnOsdAudio, btnOsdNightMode, btnOsdSleepTimer, btnOsdChannelActions, btnOsdPowerExit)) {
+                  for (b in listOf(btnOsdTop, btnOsdFav, btnOsdEpgList, btnOsdSettings, btnOsdAudio, btnOsdNightMode, btnOsdChannelActions, btnOsdPowerAndSleep)) {
                       b.setOnKeyListener { v, keyCode, event ->
                           if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                               buildAndShowZappingBar()
                               true
                           } else if (v == btnOsdTop && event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                               closeAllMenus(); navigateToMenu("SIDE"); true
-                          } else if (v == btnOsdPowerExit && event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                          } else if (v == btnOsdPowerAndSleep && event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                               closeAllMenus(); navigateToMenu("INFO"); true
                           } else false
                       }
@@ -3247,7 +3364,6 @@ jobs:
                   }
                   centerOsdPanel.addView(osdButtonsRow)
 
-                  // Живой предпросмотр соседних каналов (Zapping-бар по нажатию Вниз в центральном меню)
                   zappingRowContainer = LinearLayout(this).apply {
                       orientation = LinearLayout.HORIZONTAL
                       gravity = Gravity.CENTER
@@ -3263,7 +3379,7 @@ jobs:
                       visibility = View.GONE
                       setPadding(28, 22, 28, 22)
                       layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START or Gravity.BOTTOM).apply {
-                          setMargins(40, 180, 420, 26)
+                          setMargins(28, 40, 560, 28)
                       }
                   }
 
@@ -3276,7 +3392,9 @@ jobs:
                   fullEpgOverlay.addView(fullEpgTitle)
 
                   fullEpgListView = ListView(this).apply {
+                      divider = null
                       dividerHeight = 0
+                      overScrollMode = View.OVER_SCROLL_NEVER
                       selector = ColorDrawable(Color.TRANSPARENT)
                       background = makeThemedSubBg()
                       layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
@@ -3311,14 +3429,14 @@ jobs:
                       GridTileSpec("THEMES", "#1E4E79", "#FF8F00", "Темы", "Темы оформления и 3D-Карусель") { navigateToMenu("THEMES") },
                       GridTileSpec("BUFFER", "#D84315", "#FFD600", "Буфер", "Размер буфера подкачки") { navigateToMenu("BUFFER") },
                       GridTileSpec("DECODER", "#37474F", "#00B0FF", "Декодер", "Выбор декодера видео и звука") { navigateToMenu("DECODER") },
-                      GridTileSpec("EPG_GRID", "#00695C", "#FF4081", "Телегид", "Полная программа передач с превью") { navigateToMenu("FULL_EPG") },
-                      GridTileSpec("SEARCH", "#283593", "#FFC107", "Поиск", "Быстрый поиск каналов и Голос") { navigateToMenu("SEARCH_MODAL") },
+                      GridTileSpec("EPG_GRID", "#00695C", "#FF4081", "Телегид", "Полная программа передач с видео-превью") { navigateToMenu("FULL_EPG") },
+                      GridTileSpec("TOP_CHANNELS", "#283593", "#FFC107", "ТОП каналы", "Каналы, закреплённые в ТОПе") { navigateToMenu("TOP_MANAGER") },
                       GridTileSpec("FAVORITES", "#AD1457", "#FFD54F", "Избранное", "★ Избранные каналы") {
                           selectCategory(0); isSideShowingChannels = true; navigateToMenu("SIDE")
                       },
                       GridTileSpec("AUDIO", "#0277BD", "#69F0AE", "Звук", "Выбор аудиодорожки") { navigateToMenu("AUDIO") },
                       GridTileSpec("CONTROL_MODE", "#00838F", "#FFD54F", "Управление", "Режим: Сенсор или Пульт ТВ") { showFirstRunControlPicker(forceShow = true) },
-                      GridTileSpec("MORE", "#4A148C", "#FFAB00", "Экран и Сон", "Формат экрана, Яркость, Таймер сна и EPG") { navigateToMenu("MORE_SETTINGS") }
+                      GridTileSpec("MORE", "#4A148C", "#FFAB00", "Экран и Сон", "Формат экрана, Яркость, Выход и Таймер сна") { navigateToMenu("MORE_SETTINGS") }
                   )
 
                   gridContainerLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
@@ -3434,7 +3552,7 @@ jobs:
                       orientation = LinearLayout.VERTICAL
                       background = makeThemedPanelBg()
                       visibility = View.GONE
-                      setPadding(26, 22, 26, 22)
+                      setPadding(28, 24, 28, 24)
                       layoutParams = FrameLayout.LayoutParams(860, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
                   }
                   subModalTitle = TextView(this).apply {
@@ -3453,7 +3571,10 @@ jobs:
                   subModalOverlay.addView(subModalInputContainer)
 
                   subModalList = ListView(this).apply {
-                      dividerHeight = 0; selector = ColorDrawable(Color.TRANSPARENT)
+                      divider = null
+                      dividerHeight = 0
+                      overScrollMode = View.OVER_SCROLL_NEVER
+                      selector = ColorDrawable(Color.TRANSPARENT)
                       background = makeThemedSubBg(); setPadding(8, 8, 8, 8)
                       layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 430)
                   }
@@ -3494,8 +3615,6 @@ jobs:
                   splashOverlay.addView(splashEyeView)
                   root.addView(splashOverlay)
 
-                  // Замечание: Слой ночного затемнения (nightDimOverlay) добавлен САМЫМ ПОСЛЕДНИМ поверх всех меню,
-                  // чтобы в режимах 75% / 50% / 25% затемнялось не только видео, но и само меню на плазменном ТВ!
                   nightDimOverlay = View(this).apply {
                       setBackgroundColor(Color.argb(95, 18, 21, 28))
                       visibility = View.GONE
@@ -3512,7 +3631,7 @@ jobs:
                   applyBrightnessLevel()
                   startClockAndWatchdogUpdater()
 
-                  categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17.5f, true) { pos -> !isSideShowingChannels && pos == focusedCategoryPos }
+                  categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17.5f, true) { pos -> !isSideShowingChannels && !isLeftRailVisible && pos == focusedCategoryPos }
                   categoryListView.adapter = categoryAdapter
 
                   channelAdapter = createRichChannelAdapter(mutableListOf())
@@ -3529,27 +3648,37 @@ jobs:
                       }
                       override fun onNothingSelected(parent: AdapterView<*>?) {}
                   }
+                  // Находясь в Группах: нажатие Влево открывает выдвижную вертикальную панель 3D-кнопок слева! Нажатие Вправо переходит к списку каналов!
                   categoryListView.setOnKeyListener { _, keyCode, event ->
                       if (event.action == KeyEvent.ACTION_DOWN) {
                           resetMenuInactivityTimer()
                           val count = categoryAdapter.count
-                          if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                              selectCategory(focusedCategoryPos.coerceAtLeast(0))
-                              showSideChannelsMode(focusTop = true, focusCurrentChannel = false)
-                              return@setOnKeyListener true
-                          } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP && count > 0 && focusedCategoryPos <= 0) {
-                              val lastIdx = count - 1; focusedCategoryPos = lastIdx; selectCategory(lastIdx)
-                              categoryListView.setSelectionFromTop(lastIdx, 0); refreshSimpleListHighlightInPlace(categoryListView, lastIdx)
-                              return@setOnKeyListener true
-                          } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && count > 0 && focusedCategoryPos >= count - 1) {
-                              focusedCategoryPos = 0; selectCategory(0)
-                              categoryListView.setSelectionFromTop(0, 0); refreshSimpleListHighlightInPlace(categoryListView, 0)
-                              return@setOnKeyListener true
+                          when (keyCode) {
+                              KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                  showLeftIconRailFromGroups()
+                                  return@setOnKeyListener true
+                              }
+                              KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                  selectCategory(focusedCategoryPos.coerceAtLeast(0))
+                                  showSideChannelsMode(focusTop = true, focusCurrentChannel = false)
+                                  return@setOnKeyListener true
+                              }
+                              KeyEvent.KEYCODE_DPAD_UP -> if (count > 0 && focusedCategoryPos <= 0) {
+                                  val lastIdx = count - 1; focusedCategoryPos = lastIdx; selectCategory(lastIdx)
+                                  categoryListView.setSelectionFromTop(lastIdx, 0); refreshSimpleListHighlightInPlace(categoryListView, lastIdx)
+                                  return@setOnKeyListener true
+                              }
+                              KeyEvent.KEYCODE_DPAD_DOWN -> if (count > 0 && focusedCategoryPos >= count - 1) {
+                                  focusedCategoryPos = 0; selectCategory(0)
+                                  categoryListView.setSelectionFromTop(0, 0); refreshSimpleListHighlightInPlace(categoryListView, 0)
+                                  return@setOnKeyListener true
+                              }
                           }
                       }
                       false
                   }
 
+                  // Находясь в Списке каналов: нажатие Влево возвращает в Группы!
                   channelListView.setOnKeyListener { _, keyCode, event ->
                       if (event.action == KeyEvent.ACTION_DOWN) {
                           resetMenuInactivityTimer()
@@ -3592,12 +3721,28 @@ jobs:
                   loadEpgOncePerDayInBackground(forceRefresh = false)
               }
 
-              // Генерация 2-буквенной монограммы для логотипа канала
+              // Выдвижение вертикального дока иконок слева от списка групп
+              private fun showLeftIconRailFromGroups() {
+                  isLeftRailVisible = true
+                  leftIconRail.visibility = View.VISIBLE
+                  leftIconRail.alpha = 0f
+                  leftIconRail.translationX = -36f
+                  leftIconRail.animate().alpha(1f).translationX(0f).setDuration(180L).start()
+                  refreshSimpleListHighlightInPlace(categoryListView, -1)
+                  railTilePlaylists.requestFocus()
+              }
+
+              // Скрытие вертикального дока иконок по нажатию Вправо -> возврат фокуса на Группы
+              private fun hideLeftIconRailToGroups() {
+                  isLeftRailVisible = false
+                  leftIconRail.visibility = View.GONE
+                  categoryListView.requestFocus()
+                  refreshSimpleListHighlightInPlace(categoryListView, focusedCategoryPos)
+              }
+
               private fun extractMonogram(name: String): String {
                   val words = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-                  if (words.size >= 2) {
-                      return (words[0].take(1) + words[1].take(1)).uppercase()
-                  }
+                  if (words.size >= 2) return (words[0].take(1) + words[1].take(1)).uppercase()
                   return name.take(2).uppercase()
               }
 
@@ -3606,7 +3751,6 @@ jobs:
                   return Color.parseColor(palette[abs(name.hashCode()) % palette.size])
               }
 
-              // Кастомный адаптер каналов v2.0 (Монограмма + Бегущая строка + Анимированный эквалайзер + Мини-прогрессбар EPG)
               private fun createRichChannelAdapter(items: MutableList<String>): ArrayAdapter<String> {
                   return object : ArrayAdapter<String>(this@MainActivity, 0, items) {
                       override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
@@ -3630,20 +3774,11 @@ jobs:
                               }
                               val isPlayingNow = (currentChannel?.url == ch.url)
                               if (isPlayingNow) {
-                                  val eqFrames = listOf("ılı", "lIl", "Ilı", "llI")
-                                  row.eqView.text = eqFrames[eqTick % eqFrames.size]
-                                  row.eqView.setTextColor(if (highlighted) t.textOnAccent else t.accentColor)
+                                  row.eqView.barColor = if (highlighted) t.textOnAccent else Color.parseColor("#00E676")
                                   row.eqView.visibility = View.VISIBLE
+                                  row.eqView.invalidate()
                               } else {
                                   row.eqView.visibility = View.GONE
-                              }
-                              val (currEpg, _) = getCurrentAndNextEpg(ch)
-                              if (currEpg != null) {
-                                  val now = System.currentTimeMillis()
-                                  val frac = ((now - currEpg.startMs).toFloat() / (currEpg.stopMs - currEpg.startMs).coerceAtLeast(1L)).coerceIn(0.02f, 1.0f)
-                                  row.bindProgress(frac, if (highlighted) t.textOnAccent else t.accentColor)
-                              } else {
-                                  row.bindProgress(-1f, Color.TRANSPARENT)
                               }
                           }
 
@@ -3666,7 +3801,6 @@ jobs:
               private fun refreshChannelListHighlightInPlace(activeAdapterPos: Int) {
                   val t = currentTheme()
                   val firstVis = channelListView.firstVisiblePosition
-                  val eqFrames = listOf("ılı", "lIl", "Ilı", "llI")
                   for (i in 0 until channelListView.childCount) {
                       val row = channelListView.getChildAt(i) as? ChannelRowView ?: continue
                       val itemPos = firstVis + i
@@ -3675,9 +3809,9 @@ jobs:
                       row.titleView.typeface = if (isHighlighted) t.boldFont else t.normalFont
                       row.titleView.forceMarqueeActive = isHighlighted
                       if (ch != null && currentChannel?.url == ch.url) {
-                          row.eqView.text = eqFrames[eqTick % eqFrames.size]
-                          row.eqView.setTextColor(if (isHighlighted) t.textOnAccent else t.accentColor)
+                          row.eqView.barColor = if (isHighlighted) t.textOnAccent else Color.parseColor("#00E676")
                           row.eqView.visibility = View.VISIBLE
+                          row.eqView.invalidate()
                       } else {
                           row.eqView.visibility = View.GONE
                       }
@@ -3739,7 +3873,6 @@ jobs:
                   }
               }
 
-              // Горизонтальная лента предпросмотра соседних каналов (Zapping-бар)
               private fun buildAndShowZappingBar() {
                   val list = displayedChannels.toList()
                   if (list.isEmpty()) return
@@ -3754,7 +3887,7 @@ jobs:
                       val idx = (curIdx + off + list.size) % list.size
                       val ch = list[idx]
                       val (epg, _) = getCurrentAndNextEpg(ch)
-                      val epgTxt = epg?.title ?: "Прямой эфир"
+                      val epgTxt = epg?.title ?: effectiveCategory(ch)
                       val prefix = if (off == 0) "▶ " else ""
                       val cardBtn = makeModernButton("$prefix${ch.name}\n🎬 ${epgTxt.take(22)}") {
                           playChannelObj(ch)
@@ -3785,7 +3918,7 @@ jobs:
                       layoutParams = FrameLayout.LayoutParams(880, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
                   }
                   val title = TextView(this).apply {
-                      text = "TiViLook 2.0 — Выберите режим управления"
+                      text = "TiViLook 2.2 — Выберите режим управления"
                       setTextColor(currentTheme().textPrimaryColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
                       typeface = themeBoldFont(); gravity = Gravity.CENTER
                   }
@@ -3864,8 +3997,8 @@ jobs:
 
               private fun showSideChannelsMode(focusTop: Boolean, focusCurrentChannel: Boolean = false) {
                   isSideShowingChannels = true
-                  val catName = categories.getOrElse(currentCategoryIndex) { "Все каналы" }
-                  sideModeTitle.text = "◀ Группы   •   $catName (${displayedChannels.size})"
+                  isLeftRailVisible = false
+                  leftIconRail.visibility = View.GONE
                   categoryListView.visibility = View.GONE
                   channelListView.visibility = View.VISIBLE
 
@@ -3897,7 +4030,8 @@ jobs:
 
               private fun showSideGroupsMode() {
                   isSideShowingChannels = false
-                  sideModeTitle.text = "Группы каналов   •   ▶ Каналы"
+                  isLeftRailVisible = false
+                  leftIconRail.visibility = View.GONE
                   focusedCategoryPos = currentCategoryIndex
                   updateCategoriesList()
                   channelListView.visibility = View.GONE
@@ -3958,6 +4092,8 @@ jobs:
               private fun hideAllMenuViews() {
                   setPlayerMiniPreviewMode(false)
                   sidePanel.visibility = View.GONE
+                  leftIconRail.visibility = View.GONE
+                  isLeftRailVisible = false
                   infoPanel.visibility = View.GONE
                   centerOsdPanel.visibility = View.GONE
                   zappingRowContainer.visibility = View.GONE
@@ -4004,10 +4140,11 @@ jobs:
 
               private fun renderMenuById(menuId: String) {
                   hideAllMenuViews()
-                  // Обновляем Ambilight-рамку при каждом открытии меню
                   sidePanel.background = makeThemedPanelBg()
                   centerOsdPanel.background = makeThemedPanelBg()
                   subModalOverlay.background = makeThemedPanelBg()
+                  settingsTileOverlay.background = makeThemedPanelBg()
+                  fullEpgOverlay.background = makeThemedPanelBg()
 
                   currentChannelBanner.visibility = View.GONE
                   subModalTopButtons.visibility = View.GONE
@@ -4029,9 +4166,8 @@ jobs:
                       }
                       "INFO" -> { updateStreamInfoText(); animateMenuAppear(infoPanel, 50f, 0f) }
                       "OSD" -> { updateCenterOsdContent(); animateMenuAppear(centerOsdPanel, 0f, 40f); btnOsdTop.requestFocus() }
-                      "SEARCH_MODAL" -> openSmartSearchModal()
                       "BRIGHTNESS_MENU" -> openBrightnessSubModal()
-                      "SLEEP_TIMER_MENU" -> openSleepTimerSubModal()
+                      "POWER_AND_SLEEP_MENU" -> openPowerAndSleepSubModal()
                       "CHANNEL_ACTIONS" -> openChannelActionsSubModal()
                       "MOVE_CHANNEL_CATEGORY" -> openMoveChannelCategorySubModal()
                       "FULL_EPG" -> openFullScreenChannelEpg()
@@ -4066,97 +4202,28 @@ jobs:
                   }
               }
 
-              // Умный поиск с экранной мини-клавиатурой для пульта и кнопкой Голоса
-              private var currentSearchQuery = ""
-              private fun openSmartSearchModal() {
-                  subModalTitle.text = "🔍 Поиск канала: «$currentSearchQuery»"
-                  subModalInputContainer.removeAllViews()
-                  subModalInputContainer.visibility = View.VISIBLE
-                  subModalList.visibility = View.VISIBLE
-                  subModalTopButtons.visibility = View.VISIBLE
-                  subModalTopButtons.removeAllViews()
-
-                  subModalTopButtons.addView(makeModernButton("🎙 Голос") {
-                      try {
-                          val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                              putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                              putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-                          }
-                          startActivityForResult(intent, 3003)
-                      } catch (_: Exception) {
-                          Toast.makeText(this, "Голосовой ввод не поддерживается на этом устройстве", Toast.LENGTH_SHORT).show()
-                      }
-                  })
-                  subModalTopButtons.addView(makeModernButton("⌫ Стереть") {
-                      if (currentSearchQuery.isNotEmpty()) currentSearchQuery = currentSearchQuery.dropLast(1)
-                      openSmartSearchModal()
-                  })
-                  subModalTopButtons.addView(makeModernButton("✖ Очистить") {
-                      currentSearchQuery = ""
-                      openSmartSearchModal()
-                  })
-
-                  val rows = listOf(
-                      "АБВГДЕЖЗИЙКЛМ",
-                      "НОПРСТУФХЦЧШЩ",
-                      "ЭЮЯ 1234567890",
-                      "ABCDEFGHJKLMNPRSTUVWXYZ"
-                  )
-                  for (rStr in rows) {
-                      val rLayout = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-                      for (ch in rStr) {
-                          val label = if (ch == ' ') "␣" else ch.toString()
-                          val keyBtn = makeModernButton(label) {
-                              currentSearchQuery += ch
-                              openSmartSearchModal()
-                          }.apply { setPadding(10, 6, 10, 6) }
-                          rLayout.addView(keyBtn)
-                      }
-                      subModalInputContainer.addView(rLayout)
-                  }
-
-                  val q = currentSearchQuery.trim().lowercase()
-                  val matches = allChannels.filter { isChannelActive(it) && (q.isEmpty() || it.name.lowercase().contains(q)) }
-                      .sortedWith(Comparator { a, b -> ruCollator.compare(a.name, b.name) })
-                      .take(60)
-
-                  updateSubModalListItems(matches.mapIndexed { i, c -> "${i + 1}. ${c.name} ${buildLanguageTag(c)}  •  ${effectiveCategory(c)}" })
-                  subModalList.setOnItemClickListener { _, _, idx, _ ->
-                      if (idx in matches.indices) { playChannelObj(matches[idx]); closeAllMenus() }
-                  }
-                  animateMenuAppear(subModalOverlay)
-                  subModalList.requestFocus()
-              }
-
-              @Deprecated("Deprecated in Java")
-              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-                  super.onActivityResult(requestCode, resultCode, data)
-                  if (requestCode == 3003 && resultCode == RESULT_OK && data != null) {
-                      val spoken = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: ""
-                      if (spoken.isNotEmpty()) {
-                          currentSearchQuery = spoken
-                          openSmartSearchModal()
-                      }
-                  }
-              }
-
-              // Замечание: Меню Таймера сна (Выкл / 30 / 60 / 90 / 120 мин)
-              private fun openSleepTimerSubModal() {
-                  subModalTitle.text = "⏲ Таймер сна (автовыключение)"
+              private fun openPowerAndSleepSubModal() {
+                  subModalTitle.text = "⏻ Выключение и Таймер сна"
                   subModalInputContainer.visibility = View.GONE
                   subModalList.visibility = View.VISIBLE
 
-                  val opts = listOf(0, 30, 60, 90, 120)
-                  val labels = opts.map { m ->
+                  val sleepOpts = listOf(0, 30, 60, 90, 120)
+                  val items = mutableListOf("🔴  Закрыть приложение TiViLook прямо сейчас")
+                  for (m in sleepOpts) {
                       val sel = if (sleepTimerMinutesLeft == m) "●  " else "○  "
-                      if (m == 0) "${sel}Выключен" else "${sel}Через $m минут"
+                      if (m == 0) items.add("${sel}⏲ Таймер сна: Выключен")
+                      else items.add("${sel}⏲ Выключить автоматически через $m минут")
                   }
-                  updateSubModalListItems(labels)
+                  updateSubModalListItems(items)
 
                   subModalList.setOnItemClickListener { _, _, which, _ ->
-                      val mins = opts.getOrElse(which) { 0 }
-                      setSleepTimer(mins)
-                      navigateBackInMenu()
+                      if (which == 0) {
+                          finish()
+                      } else {
+                          val mins = sleepOpts.getOrElse(which - 1) { 0 }
+                          setSleepTimer(mins)
+                          navigateBackInMenu()
+                      }
                   }
                   animateMenuAppear(subModalOverlay)
                   subModalList.requestFocus()
@@ -4179,7 +4246,7 @@ jobs:
                               finish()
                           } else {
                               if (sleepTimerMinutesLeft == 1) player?.volume = 0.35f
-                              if (::btnOsdSleepTimer.isInitialized) btnOsdSleepTimer.text = "⏲ ${sleepTimerMinutesLeft}м"
+                              if (::btnOsdPowerAndSleep.isInitialized) btnOsdPowerAndSleep.text = "⏻ ${sleepTimerMinutesLeft}м"
                               uiHandler.postDelayed(this, 60_000L)
                           }
                       }
@@ -4347,7 +4414,7 @@ jobs:
                   val items = listOf(
                       "🖥  Формат экрана: ${screenAspectModeName()}",
                       "🌙  Яркость экрана и меню: $brightnessPercent%",
-                      "⏲  Таймер сна: ${if (sleepTimerMinutesLeft > 0) "$sleepTimerMinutesLeft мин" else "Выключен"}",
+                      "⏻  Выход и Таймер сна: ${if (sleepTimerMinutesLeft > 0) "$sleepTimerMinutesLeft мин" else "Выключен"}",
                       "🛡  Режим совместимости для РФ: ${if (antiBlockEnabled) "Включён" else "Выключен"}",
                       "${t.iconEpg}  Адрес программы передач",
                       "🔄  Обновить все 4 источника EPG сейчас"
@@ -4358,7 +4425,7 @@ jobs:
                       when (which) {
                           0 -> { screenAspectMode = (screenAspectMode + 1) % 3; applyScreenAspectMode(); saveState(); openMoreSettingsSubModal() }
                           1 -> navigateToMenu("BRIGHTNESS_MENU")
-                          2 -> navigateToMenu("SLEEP_TIMER_MENU")
+                          2 -> navigateToMenu("POWER_AND_SLEEP_MENU")
                           3 -> { antiBlockEnabled = !antiBlockEnabled; saveState(); initPlayer(); openMoreSettingsSubModal() }
                           4 -> navigateToMenu("EPG")
                           5 -> { loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu() }
@@ -4367,18 +4434,24 @@ jobs:
                   animateMenuAppear(subModalOverlay); subModalList.requestFocus()
               }
 
-              // Замечание: Увеличен таймаут перезагрузки соединения канала до 14 секунд + индикация значком ↻ рядом с антенной без нижних тостов!
               private fun startClockAndWatchdogUpdater() {
                   val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
                   val ticker = object : Runnable {
                       override fun run() {
                           try {
-                              eqTick++
+                              ambilightPulsePhase++
                               clockTextView.text = timeFmt.format(Date())
                               val activeBars = updateSignalIndicator()
 
-                              if (sidePanel.visibility == View.VISIBLE && isSideShowingChannels) {
-                                  refreshChannelListHighlightInPlace(focusedChannelPos)
+                              if (menuHistory.isNotEmpty()) {
+                                  when (menuHistory.last()) {
+                                      "SIDE" -> sidePanel.background = makeThemedPanelBg()
+                                      "OSD" -> centerOsdPanel.background = makeThemedPanelBg()
+                                      "SETTINGS" -> settingsTileOverlay.background = makeThemedPanelBg()
+                                      "FULL_EPG" -> fullEpgOverlay.background = makeThemedPanelBg()
+                                      "INFO" -> infoPanel.background = makeThemedPanelBg()
+                                      else -> subModalOverlay.background = makeThemedPanelBg()
+                                  }
                               }
 
                               val p = player
@@ -4530,7 +4603,7 @@ jobs:
 
                   newPlayer.addListener(object : Player.Listener {
                       override fun onRenderedFirstFrame() {
-                          morphTransitionOverlay.animate().alpha(0f).setDuration(260L).withEndAction {
+                          morphTransitionOverlay.animate().alpha(0f).setDuration(220L).withEndAction {
                               morphTransitionOverlay.visibility = View.GONE
                           }.start()
                       }
@@ -4625,7 +4698,6 @@ jobs:
                   return s.trim('-', '.', '•', '|', '_').ifEmpty { raw.trim() }
               }
 
-              // Фонетический транслитератор RU <-> EN для точного сопоставления каналов с базой телепрограммы EPG
               private fun normalizeName(raw: String): String {
                   val clean = cleanChannelDisplayName(raw).lowercase()
                       .replace("setanta", "сетанта")
@@ -4676,7 +4748,6 @@ jobs:
                   return Pair(list[idx], if (idx + 1 < list.size) list[idx + 1] else null)
               }
 
-              // Мульти-источник EPG: объединяем программы передач из нескольких источников XMLTV без остановки на первом!
               private fun loadEpgOncePerDayInBackground(forceRefresh: Boolean) {
                   thread {
                       val cacheFile = File(filesDir, "epg_cache_v20.json")
@@ -4851,7 +4922,7 @@ jobs:
                   btnOsdTop.text = if (isTop) "${t.iconTop} Убрать ТОП" else "${t.iconTop} В ТОП"
                   btnOsdFav.text = if (isFav) "${t.iconFav} В Избранном" else "${t.iconFav} Избранное"
                   btnOsdNightMode.text = "🌙 $brightnessPercent%"
-                  btnOsdSleepTimer.text = if (sleepTimerMinutesLeft > 0) "⏲ ${sleepTimerMinutesLeft}м" else "⏲ Сон"
+                  btnOsdPowerAndSleep.text = if (sleepTimerMinutesLeft > 0) "⏻ ${sleepTimerMinutesLeft}м" else "⏻ Выход / Сон"
 
                   val badges = (if (isTop) "${t.iconTop} " else "") + (if (isFav) "${t.iconFav} " else "")
                   osdChannelTitle.text = badges + ch.name + " " + buildLanguageTag(ch) + "  •  " + effectiveCategory(ch)
@@ -4882,7 +4953,6 @@ jobs:
                   }
               }
 
-              // Замечание: В окне информации о канале "Поток" и "Буфер" разнесены на разные строки, а строка "Звук" убрана!
               private fun updateStreamInfoText() {
                   val p = player ?: return
                   val ch = currentChannel
@@ -5412,6 +5482,12 @@ jobs:
                   saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
               }
 
+              private val hideMorphFallbackRunnable = Runnable {
+                  morphTransitionOverlay.animate().alpha(0f).setDuration(200L).withEndAction {
+                      morphTransitionOverlay.visibility = View.GONE
+                  }.start()
+              }
+
               private fun playChannelObj(channel: Channel) {
                   if (currentChannel != null && currentChannel?.url != channel.url) {
                       previousChannel = currentChannel
@@ -5421,10 +5497,11 @@ jobs:
                   lowSignalStuckSeconds = 0
                   saveState()
 
-                  // Плавный морфинг при переключении канала
-                  morphTitleText.text = "${extractMonogram(channel.name)}   •   ${channel.name}"
+                  // Лёгкое бесшовное затухание без текста по центру экрана и с автоснятием через 450 мс
+                  uiHandler.removeCallbacks(hideMorphFallbackRunnable)
                   morphTransitionOverlay.visibility = View.VISIBLE
-                  morphTransitionOverlay.alpha = 0.88f
+                  morphTransitionOverlay.alpha = 0.55f
+                  uiHandler.postDelayed(hideMorphFallbackRunnable, 450L)
 
                   try {
                       player?.setMediaItem(createLiveMediaItem(channel.url))
@@ -5458,6 +5535,7 @@ jobs:
               private fun showBanner(text: String) {
                   if (menuHistory.isNotEmpty()) { currentChannelBanner.visibility = View.GONE; return }
                   currentChannelBanner.text = text
+                  currentChannelBanner.background = makeThemedPanelBg()
                   animateMenuAppear(currentChannelBanner, 0f, 18f)
                   currentChannelBanner.removeCallbacks(hideBannerRunnable)
                   currentChannelBanner.postDelayed(hideBannerRunnable, 4000)
@@ -5574,7 +5652,6 @@ jobs:
                   return super.onKeyUp(keyCode, event)
               }
 
-              // Замечание: Двойное нажатие кнопки Назад на пульте переключает на предыдущий канал!
               override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
                   if (keyCode == KeyEvent.KEYCODE_BACK) {
                       if (navigateBackInMenu()) return true
@@ -5657,7 +5734,7 @@ jobs:
           path: app/permanent_key.jks
           key: mibox-iptv-immutable-signing-jks-v1
 
-      - name: Step 4 - Ensure Keystore Exists and Compile TiViLook v2.0 APK
+      - name: Step 4 - Ensure Keystore Exists and Compile TiViLook v2.2 APK
         run: |
           mkdir -p ~/.android
           if [ ! -f app/permanent_key.jks ]; then
@@ -5671,10 +5748,10 @@ jobs:
           fi
           cp app/permanent_key.jks ~/.android/debug.keystore || true
           gradle assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk TiViLook-v2.0.${GITHUB_RUN_NUMBER}.apk
+          cp app/build/outputs/apk/release/app-release.apk TiViLook-v2.2.${GITHUB_RUN_NUMBER}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: TiViLook-v2.0.${{ github.run_number }}
-          path: TiViLook-v2.0.${{ github.run_number }}.apk
+          name: TiViLook-v2.2.${{ github.run_number }}
+          path: TiViLook-v2.2.${{ github.run_number }}.apk
