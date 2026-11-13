@@ -32,7 +32,7 @@ jobs:
         with:
           gradle-version: '8.5'
 
-      - name: Ensure gradle.properties has AndroidX enabled
+      - name: Ensure gradle.properties and base files exist
         run: |
           cat << 'PROPS' > gradle.properties
           org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
@@ -40,6 +40,105 @@ jobs:
           android.enableJetifier=true
           android.nonTransitiveRClass=false
           PROPS
+
+          if [ ! -f settings.gradle ]; then
+            cat << 'SETTINGS' > settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "MiBoxIPTV"
+          include ':app'
+          SETTINGS
+          fi
+
+          if [ ! -f build.gradle ]; then
+            cat << 'ROOTGRADLE' > build.gradle
+          plugins {
+              id 'com.android.application' version '8.1.2' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.10' apply false
+          }
+          ROOTGRADLE
+          fi
+
+          mkdir -p app/src/main/java/com/example/miboxiptv
+          if [ ! -f app/build.gradle ]; then
+            cat << 'APPGRADLE' > app/build.gradle
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+          android {
+              namespace 'com.example.miboxiptv'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.example.miboxiptv"
+                  minSdk 21
+                  targetSdk 33
+                  versionCode 17100
+                  versionName "2.6.0"
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+          }
+          dependencies {
+              implementation "androidx.core:core-ktx:1.12.0"
+              implementation "androidx.appcompat:appcompat:1.6.1"
+              implementation "androidx.recyclerview:recyclerview:1.3.2"
+              implementation "androidx.media3:media3-common:1.2.1"
+              implementation "androidx.media3:media3-datasource:1.2.1"
+              implementation "androidx.media3:media3-extractor:1.2.1"
+              implementation "androidx.media3:media3-exoplayer:1.2.1"
+              implementation "androidx.media3:media3-exoplayer-hls:1.2.1"
+              implementation "androidx.media3:media3-ui:1.2.1"
+          }
+          APPGRADLE
+          fi
+
+          if [ ! -f app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt ]; then
+            cat << 'CATALOG' > app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt
+          package com.example.miboxiptv
+          object BuiltinCatalog {
+              val extraOpenStreams = listOf(
+                  Channel("Первый канал", "https://edge1.1internet.tv/dash-live11/streams/1tv/1tvdash.mpd", "Новости и общие", ""),
+                  Channel("Россия 1", "https://vgtrkregion-reg.cdnvideo.ru/vgtrk/0/russia1-hd/index.m3u8", "Новости и общие", ""),
+                  Channel("Матч! Премьер", "https://sc.id-tv.kz/Match_Premier_HD.m3u8", "Спорт", ""),
+                  Channel("ТНТ", "https://sc.id-tv.kz/TNT_HD.m3u8", "Развлечения", ""),
+                  Channel("СТС", "https://sc.id-tv.kz/STS_HD.m3u8", "Развлечения", ""),
+                  Channel("Пятница!", "https://sc.id-tv.kz/Pyatnica.m3u8", "Развлечения", ""),
+                  Channel("Суббота!", "https://sc.id-tv.kz/Subbota.m3u8", "Развлечения", ""),
+                  Channel("Ю ТВ", "https://sc.id-tv.kz/Yu.m3u8", "Развлечения", ""),
+                  Channel("Че!", "https://sc.id-tv.kz/Che.m3u8", "Развлечения", ""),
+                  Channel("2x2", "https://sc.id-tv.kz/2x2.m3u8", "Развлечения", ""),
+                  Channel("КВН ТВ", "https://sc.id-tv.kz/KVN_TV.m3u8", "Развлечения", ""),
+                  Channel("Мосфильм. Золотая коллекция", "https://ott-cdn.ucom.am/s48/index.m3u8", "Кино и сериалы", ""),
+                  Channel("Киносемья", "https://sc.id-tv.kz/Kinosemya.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинохит", "https://sc.id-tv.kz/Kinohit.m3u8", "Кино и сериалы", ""),
+                  Channel("Киномикс", "https://sc.id-tv.kz/Kinomiks.m3u8", "Кино и сериалы", ""),
+                  Channel("Дом Кино Премиум", "https://sc.id-tv.kz/Dom_kino_premium.m3u8", "Кино и сериалы", ""),
+                  Channel("Дом Кино", "https://sc.id-tv.kz/Dom_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("TV 1000 Русское Кино", "https://sc.id-tv.kz/TV1000_Russkoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("TV 1000", "https://sc.id-tv.kz/TV1000.m3u8", "Кино и сериалы", ""),
+                  Channel("TV 1000 Action", "https://sc.id-tv.kz/TV1000_Action.m3u8", "Кино и сериалы", "")
+              )
+          }
+          CATALOG
+          fi
 
       - name: Step 3.5 - Generate Clean Kotlin Modules & RecyclerView v2.6
         run: |
