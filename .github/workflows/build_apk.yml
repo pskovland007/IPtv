@@ -1887,7 +1887,7 @@ jobs:
           ''')
           PYEOF
 
-      - name: Step 3.5 - Apply Patches v2.4 (TiViLook)
+      - name: Step 3.5 - Apply Patches v2.5 Architecture & Fixes (TiViLook)
         run: |
           python3 - << 'PYEOF'
           import os, re, glob
@@ -1896,10 +1896,10 @@ jobs:
               g = f.read()
 
           g = re.sub(r"targetSdk\s+\d+", "targetSdk 33", g)
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "90"))
-          new_ver_code = 15000 + run_num
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "95"))
+          new_ver_code = 16000 + run_num
           g = re.sub(r"versionCode\s+\d+", f"versionCode {new_ver_code}", g)
-          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "2.4.{run_num}"', g)
+          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "2.5.{run_num}"', g)
 
           signing_block = '''
               signingConfigs {
@@ -1937,22 +1937,13 @@ jobs:
           with open("app/build.gradle", "w") as f:
               f.write(g)
 
+          # Очищаем все старые иконки во всех папках
           for old_ic in glob.glob("app/src/main/res/mipmap*/*ic_launcher*") + glob.glob("app/src/main/res/drawable*/*ic_launcher*"):
               try: os.remove(old_ic)
               except Exception: pass
 
-          os.makedirs("app/src/main/res/layout", exist_ok=True)
-          with open("app/src/main/res/layout/player_texture_view.xml", "w") as f:
-              f.write('''<?xml version="1.0" encoding="utf-8"?>
-          <androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
-              xmlns:app="http://schemas.android.com/apk/res-auto"
-              android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              app:use_controller="false"
-              app:surface_type="texture_view" />
-          ''')
-
-          realistic_eye_icon = '''<?xml version="1.0" encoding="utf-8"?>
+          # Крупная полноразмерная иконка (глаз увеличен в 1.3 раза, чтобы в Adaptive Icon и на рабочем столе он был крупным и выразительным!)
+          large_eye_icon = '''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="108dp" android:height="108dp"
               android:viewportWidth="108" android:viewportHeight="108">
@@ -1963,21 +1954,82 @@ jobs:
               <path android:fillColor="#1692A8" android:pathData="M0,88 C42,72 78,56 108,42 L108,108 L0,108 Z"/>
               <path android:fillColor="#284596" android:pathData="M18,108 C54,88 84,74 108,62 L108,108 Z"/>
               <path android:fillColor="#7C1D7A" android:pathData="M48,108 C72,94 92,84 108,78 L108,108 Z"/>
-              <path android:fillColor="#19130E" android:pathData="M7,60 C24,26 84,26 101,60 C84,88 24,88 7,60 Z"/>
-              <path android:fillColor="#EFE5CF" android:pathData="M13,60 C28,34 80,34 95,60 C80,82 28,82 13,60 Z"/>
-              <path android:fillColor="#00838F" android:pathData="M54,38 A22,22 0 1,0 54,82 A22,22 0 1,0 54,38 Z"/>
-              <path android:fillColor="#558B2F" android:pathData="M54,60 L35,49 A22,22 0 0,0 54,82 Z"/>
-              <path android:fillColor="#F9A825" android:pathData="M54,60 L54,82 A22,22 0 0,0 73,71 Z"/>
-              <path android:fillColor="#C62828" android:pathData="M54,60 L73,71 A22,22 0 0,0 73,49 Z"/>
-              <path android:fillColor="#070505" android:pathData="M54,48 A12,12 0 1,0 54,72 A12,12 0 1,0 54,48 Z"/>
-              <path android:fillColor="#FFFFFF" android:pathData="M60.5,50.5 A3.2,3.2 0 1,0 60.5,56.9 A3.2,3.2 0 1,0 60.5,50.5 Z"/>
+              <group android:pivotX="54" android:pivotY="56" android:scaleX="1.24" android:scaleY="1.28">
+                  <path android:fillColor="#19130E" android:pathData="M7,56 C24,22 84,22 101,56 C84,86 24,86 7,56 Z"/>
+                  <path android:fillColor="#19130E" android:pathData="M54,28 L61,16 L66,29 L76,19 L76,34 L88,27 L84,41 L95,37 L90,49 Z"/>
+                  <path android:fillColor="#EFE5CF" android:pathData="M12,56 C28,29 80,29 96,56 C80,80 28,80 12,56 Z"/>
+                  <path android:fillColor="#12181B" android:pathData="M54,31 A25,25 0 1,0 54,81 A25,25 0 1,0 54,31 Z"/>
+                  <path android:fillColor="#00838F" android:pathData="M54,33 A23,23 0 1,0 54,79 A23,23 0 1,0 54,33 Z"/>
+                  <path android:fillColor="#558B2F" android:pathData="M54,56 L34,44 A23,23 0 0,0 54,79 Z"/>
+                  <path android:fillColor="#F9A825" android:pathData="M54,56 L54,79 A23,23 0 0,0 74,68 Z"/>
+                  <path android:fillColor="#C62828" android:pathData="M54,56 L74,68 A23,23 0 0,0 74,44 Z"/>
+                  <path android:fillColor="#283593" android:pathData="M54,56 L54,33 A23,23 0 0,0 34,44 Z"/>
+                  <path android:fillColor="#070505" android:pathData="M54,43 A13,13 0 1,0 54,69 A13,13 0 1,0 54,43 Z"/>
+                  <path android:fillColor="#FFFFFF" android:pathData="M61,46 A3.8,3.8 0 1,0 61,53.6 A3.8,3.8 0 1,0 61,46 Z"/>
+              </group>
+          </vector>'''
+
+          # Широкий полноразмерный баннер 320x180dp специально для рабочего стола Android TV
+          wide_tv_banner = '''<?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="320dp" android:height="180dp"
+              android:viewportWidth="320" android:viewportHeight="180">
+              <path android:fillColor="#D83A18" android:pathData="M0,0h320v180h-320z"/>
+              <path android:fillColor="#EA7317" android:pathData="M0,25 L320,0 L320,180 L0,180 Z"/>
+              <path android:fillColor="#F4B926" android:pathData="M0,60 L320,18 L320,180 L0,180 Z"/>
+              <path android:fillColor="#48A14D" android:pathData="M0,105 L320,52 L320,180 L0,180 Z"/>
+              <path android:fillColor="#1692A8" android:pathData="M0,145 L320,88 L320,180 L0,180 Z"/>
+              <path android:fillColor="#284596" android:pathData="M0,172 L320,122 L320,180 L0,180 Z"/>
+              <path android:fillColor="#7C1D7A" android:pathData="M90,180 L320,148 L320,180 Z"/>
+              <path android:fillColor="#19130E" android:pathData="M34,92 C88,18 232,18 286,92 C232,162 88,162 34,92 Z"/>
+              <path android:fillColor="#19130E" android:pathData="M160,36 L182,10 L194,40 L220,16 L220,50 L250,34 L238,66 L266,58 L250,84 Z"/>
+              <path android:fillColor="#EFE5CF" android:pathData="M48,92 C98,34 222,34 272,92 C222,148 98,148 48,92 Z"/>
+              <path android:fillColor="#12181B" android:pathData="M160,38 A54,54 0 1,0 160,146 A54,54 0 1,0 160,38 Z"/>
+              <path android:fillColor="#0097A7" android:pathData="M160,42 A50,50 0 1,0 160,142 A50,50 0 1,0 160,42 Z"/>
+              <path android:fillColor="#689F38" android:pathData="M160,92 L116,66 A50,50 0 0,0 160,142 Z"/>
+              <path android:fillColor="#FBC02D" android:pathData="M160,92 L160,142 A50,50 0 0,0 204,117 Z"/>
+              <path android:fillColor="#D32F2F" android:pathData="M160,92 L204,117 A50,50 0 0,0 204,66 Z"/>
+              <path android:fillColor="#303F9F" android:pathData="M160,92 L160,42 A50,50 0 0,0 116,66 Z"/>
+              <path android:fillColor="#070505" android:pathData="M160,64 A28,28 0 1,0 160,120 A28,28 0 1,0 160,64 Z"/>
+              <path android:fillColor="#FFFFFF" android:pathData="M174,72 A7.5,7.5 0 1,0 174,87 A7.5,7.5 0 1,0 174,72 Z"/>
           </vector>'''
 
           os.makedirs("app/src/main/res/drawable", exist_ok=True)
-          with open("app/src/main/res/drawable/ic_launcher.xml", "w") as f: f.write(realistic_eye_icon)
-          with open("app/src/main/res/drawable/ic_banner.xml", "w") as f: f.write(realistic_eye_icon)
+          with open("app/src/main/res/drawable/ic_launcher_fg.xml", "w") as f: f.write(large_eye_icon)
+          with open("app/src/main/res/drawable/ic_launcher.xml", "w") as f: f.write(large_eye_icon)
+          with open("app/src/main/res/drawable/ic_banner.xml", "w") as f: f.write(wide_tv_banner)
 
-          # Пополняем каталог русскими киноканалами и каналами группы "Развлечения"
+          # Нативная Adaptive Icon для Android 8+ — чтобы иконка на рабочем столе смартфона и ТВ была крупной на 100% без полей!
+          os.makedirs("app/src/main/res/mipmap-anydpi-v26", exist_ok=True)
+          adaptive_xml = '''<?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@drawable/ic_launcher_fg"/>
+              <foreground android:drawable="@drawable/ic_launcher_fg"/>
+          </adaptive-icon>'''
+          with open("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml", "w") as f: f.write(adaptive_xml)
+          with open("app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml", "w") as f: f.write(adaptive_xml)
+
+          # Аппаратный SurfaceView для основного плеера (плавные 50fps и 2K без нагрева GPU) и TextureView для лёгкого PiP
+          os.makedirs("app/src/main/res/layout", exist_ok=True)
+          with open("app/src/main/res/layout/player_surface_view.xml", "w") as f:
+              f.write('''<?xml version="1.0" encoding="utf-8"?>
+          <androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:app="http://schemas.android.com/apk/res-auto"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              app:use_controller="false"
+              app:surface_type="surface_view" />
+          ''')
+          with open("app/src/main/res/layout/player_texture_view.xml", "w") as f:
+              f.write('''<?xml version="1.0" encoding="utf-8"?>
+          <androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:app="http://schemas.android.com/apk/res-auto"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              app:use_controller="false"
+              app:surface_type="texture_view" />
+          ''')
+
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "r") as f:
               cat = f.read()
 
@@ -2033,8 +2085,8 @@ jobs:
               <application
                   android:allowBackup="true"
                   android:banner="@drawable/ic_banner"
-                  android:icon="@drawable/ic_launcher"
-                  android:roundIcon="@drawable/ic_launcher"
+                  android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher_round"
                   android:label="TiViLook"
                   android:hardwareAccelerated="true"
                   android:theme="@style/Theme.AppCompat.NoActionBar"
@@ -2053,12 +2105,12 @@ jobs:
               </application>
           </manifest>''')
 
+          # МОДУЛЬ 1: CustomViews.kt — Графика, 11 тем, уникальные стилизованные иконки и векторные сферы GraphicOrbSpan
           with open("app/src/main/java/com/example/miboxiptv/CustomViews.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
           import android.content.Context
           import android.graphics.*
-          import android.graphics.drawable.GradientDrawable
           import android.text.SpannableString
           import android.text.Spanned
           import android.text.TextUtils
@@ -2084,7 +2136,6 @@ jobs:
               val isCarouselMenu: Boolean = false
           )
 
-          // Пункт 9: Вместо текстовых [+] и [-] рисуем на Canvas объёмные светящиеся сферы (зелёная с галочкой, красная с крестиком, золотая активная)
           class GraphicOrbSpan(private val orbType: Int) : ReplacementSpan() {
               private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
               override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int = 34
@@ -2095,25 +2146,21 @@ jobs:
                   val r = 10.5f
 
                   val mainColor = when (orbType) {
-                      1 -> Color.parseColor("#00E676") // Изумрудный (Работает / Включено)
-                      2 -> Color.parseColor("#FF5252") // Рубиновый (Не отвечает / Выключено)
-                      else -> Color.parseColor("#FFD740") // Золотой (В очереди)
+                      1 -> Color.parseColor("#00E676")
+                      2 -> Color.parseColor("#FF5252")
+                      else -> Color.parseColor("#FFD740")
                   }
 
-                  // Внешнее мягкое свечение сферы
                   paint.style = Paint.Style.FILL
                   paint.color = Color.argb(65, Color.red(mainColor), Color.green(mainColor), Color.blue(mainColor))
                   canvas.drawCircle(cx, cy, r * 1.32f, paint)
 
-                  // Основное тело сферы
                   paint.color = mainColor
                   canvas.drawCircle(cx, cy, r, paint)
 
-                  // Блик сверху
                   paint.color = Color.argb(130, 255, 255, 255)
                   canvas.drawCircle(cx - r * 0.3f, cy - r * 0.3f, r * 0.32f, paint)
 
-                  // Внутренний символ (галочка или крестик)
                   paint.style = Paint.Style.STROKE
                   paint.strokeWidth = 2.4f
                   paint.strokeCap = Paint.Cap.ROUND
@@ -2129,38 +2176,27 @@ jobs:
           }
 
           fun colorizeStatusText(raw: String): CharSequence {
+              if (!raw.contains("[")) return raw
               val ss = SpannableString(raw)
               var i = 0
               while (i <= raw.length - 3) {
                   when {
-                      raw.startsWith("[+]", i) -> {
-                          ss.setSpan(GraphicOrbSpan(1), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                          i += 3
-                      }
-                      raw.startsWith("[-]", i) -> {
-                          ss.setSpan(GraphicOrbSpan(2), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                          i += 3
-                      }
-                      raw.startsWith("[?]", i) -> {
-                          ss.setSpan(GraphicOrbSpan(3), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                          i += 3
-                      }
+                      raw.startsWith("[+]", i) -> { ss.setSpan(GraphicOrbSpan(1), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 3 }
+                      raw.startsWith("[-]", i) -> { ss.setSpan(GraphicOrbSpan(2), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 3 }
+                      raw.startsWith("[?]", i) -> { ss.setSpan(GraphicOrbSpan(3), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 3 }
                       else -> i++
                   }
               }
               return ss
           }
 
-          // Пункт 4: Красная круглая кнопка Выключения без текстовой подписи (с векторным значком питания на Canvas)
           class RedPowerIconButton(context: Context, onClickAction: () -> Unit) : View(context) {
               private var isBtnFocused = false
               private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
               private val arcRect = RectF()
 
               init {
-                  isFocusable = true
-                  isFocusableInTouchMode = false
-                  isClickable = true
+                  isFocusable = true; isFocusableInTouchMode = false; isClickable = true
                   setOnFocusChangeListener { v, hasFocus ->
                       isBtnFocused = hasFocus
                       v.animate().scaleX(if (hasFocus) 1.15f else 1.0f).scaleY(if (hasFocus) 1.15f else 1.0f).setDuration(140L).start()
@@ -2171,10 +2207,7 @@ jobs:
 
               override fun onDraw(canvas: Canvas) {
                   super.onDraw(canvas)
-                  val cx = width / 2f
-                  val cy = height / 2f
-                  val r = min(cx, cy) - 4f
-
+                  val cx = width / 2f; val cy = height / 2f; val r = min(cx, cy) - 4f
                   paint.style = Paint.Style.FILL
                   paint.color = if (isBtnFocused) Color.parseColor("#FF1744") else Color.parseColor("#C62828")
                   canvas.drawCircle(cx, cy, r, paint)
@@ -2184,11 +2217,8 @@ jobs:
                   paint.color = if (isBtnFocused) Color.WHITE else Color.parseColor("#FF8A80")
                   canvas.drawCircle(cx, cy, r, paint)
 
-                  // Классический символ Power (разомкнутое кольцо + вертикальная черта)
                   val ir = r * 0.48f
-                  paint.strokeWidth = 3.5f
-                  paint.strokeCap = Paint.Cap.ROUND
-                  paint.color = Color.WHITE
+                  paint.strokeWidth = 3.5f; paint.strokeCap = Paint.Cap.ROUND; paint.color = Color.WHITE
                   arcRect.set(cx - ir, cy - ir + 1.5f, cx + ir, cy + ir + 1.5f)
                   canvas.drawArc(arcRect, -55f, 290f, false, paint)
                   canvas.drawLine(cx, cy - ir - 2.5f, cx, cy - 1f, paint)
@@ -2217,13 +2247,14 @@ jobs:
                       rect.set(left, h - barH, left + barW, h)
                       canvas.drawRoundRect(rect, 3f, 3f, paint)
                   }
-                  postInvalidateDelayed(75L)
+                  postInvalidateDelayed(85L)
               }
           }
 
           class MarqueeRowTextView(context: Context) : TextView(context) {
               var forceMarqueeActive: Boolean = false
                   set(value) {
+                      if (field == value) return
                       field = value; isSelected = value
                       if (value) {
                           ellipsize = TextUtils.TruncateAt.MARQUEE; marqueeRepeatLimit = -1
@@ -2306,7 +2337,6 @@ jobs:
               }
           }
 
-          // Пункт 8: Каждая тема теперь меняет САМ РИСУНОК ВНУТРИ ИКОНКИ (стилизованная под конкретную тему иконка!)
           class ThemedTileView(
               context: Context, private val iconType: String,
               private val baseColorHex: String, private val accentColorHex: String
@@ -2367,39 +2397,37 @@ jobs:
                   rect.set(pad, pad, w - pad, h - pad)
                   canvas.drawRoundRect(rect, corner, corner, paint)
 
-                  // Стилизованный тематический фон и декор внутри самой плитки для каждой темы
                   paint.style = Paint.Style.STROKE
                   when (themeStyleId) {
-                      1 -> { // Cyber Neon: печатная плата с контактными точками
+                      1 -> {
                           paint.strokeWidth = 1.6f; paint.color = Color.parseColor("#4400E5FF")
                           canvas.drawLine(pad + 8f, pad + 18f, pad + 26f, pad + 18f, paint)
                           canvas.drawCircle(pad + 28f, pad + 18f, 3f, paint)
                           canvas.drawLine(w - pad - 8f, h - pad - 18f, w - pad - 26f, h - pad - 18f, paint)
                       }
-                      3 -> { // Nordic Frost: снежная кристаллическая грань
+                      3 -> {
                           paint.strokeWidth = 1.5f; paint.color = Color.parseColor("#4488C0D0")
                           canvas.drawLine(cx - r * 0.9f, pad + 10f, cx + r * 0.9f, pad + 10f, paint)
                       }
-                      4 -> { // Sunset Retro: тёплые винтажные полосы заката
-                          paint.style = Paint.Style.FILL
-                          paint.color = Color.parseColor("#28FF6F00")
+                      4 -> {
+                          paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#28FF6F00")
                           rect.set(pad + 4f, cy + r * 0.45f, w - pad - 4f, cy + r * 0.75f)
                           canvas.drawRoundRect(rect, 4f, 4f, paint)
                       }
-                      7 -> { // Retrowave 80s: перспективная неоновая сетка горизонта + закатное солнце
+                      7 -> {
                           paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#38FF2A85")
                           canvas.drawCircle(cx, cy - r * 0.2f, r * 0.75f, paint)
                           paint.style = Paint.Style.STROKE; paint.strokeWidth = 1.4f; paint.color = Color.parseColor("#6600F0FF")
                           canvas.drawLine(pad + 6f, cy + r * 0.55f, w - pad - 6f, cy + r * 0.55f, paint)
                           canvas.drawLine(pad + 12f, cy + r * 0.82f, w - pad - 12f, cy + r * 0.82f, paint)
                       }
-                      8 -> { // Matrix Terminal: квадратные скобки терминала [ ] и цифровой дождь
+                      8 -> {
                           paint.strokeWidth = 2.2f; paint.color = Color.parseColor("#6600FF66")
                           val bOff = pad + 10f
                           canvas.drawLine(bOff, bOff, bOff + 14f, bOff, paint); canvas.drawLine(bOff, bOff, bOff, bOff + 14f, paint)
                           canvas.drawLine(w - bOff, h - bOff, w - bOff - 14f, h - bOff, paint); canvas.drawLine(w - bOff, h - bOff, w - bOff, h - bOff - 14f, paint)
                       }
-                      9 -> { // Royal Gold: королевский ромб и золотая филигрань по углам
+                      9 -> {
                           paint.strokeWidth = 1.8f; paint.color = Color.parseColor("#77FFD700")
                           path.reset()
                           path.moveTo(cx, pad + 8f); path.lineTo(w - pad - 8f, cy); path.lineTo(cx, h - pad - 8f); path.lineTo(pad + 8f, cy); path.close()
@@ -2421,11 +2449,8 @@ jobs:
                       else -> Color.WHITE
                   }
 
-                  // В зависимости от темы меняем саму технику рисования внутренней иконки:
-                  // В Matrix (8) и Cyber (1) — контурный технический чертеж (Wireframe), в Royal Gold (9) — гранёный стиль, в Material (0) — заливка
                   val isWireframeTheme = themeStyleId in listOf(1, 2, 8)
-                  paint.strokeCap = Paint.Cap.ROUND
-                  paint.strokeJoin = Paint.Join.ROUND
+                  paint.strokeCap = Paint.Cap.ROUND; paint.strokeJoin = Paint.Join.ROUND
 
                   when (iconType) {
                       "PLAYLISTS" -> {
@@ -2433,12 +2458,10 @@ jobs:
                               val ly = cy + i * (r * 0.52f)
                               paint.color = if (i == 0) badgeColor else fgColor
                               if (themeStyleId == 8) {
-                                  // В Matrix вместо точек — стрелки командной строки >
                                   paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f
                                   canvas.drawLine(cx - r * 0.65f, ly - 5f, cx - r * 0.45f, ly, paint)
                                   canvas.drawLine(cx - r * 0.65f, ly + 5f, cx - r * 0.45f, ly, paint)
                               } else if (themeStyleId == 9) {
-                                  // В Royal Gold — ромбы
                                   paint.style = Paint.Style.FILL
                                   canvas.drawRect(cx - r * 0.64f, ly - 5f, cx - r * 0.46f, ly + 5f, paint)
                               } else {
@@ -2452,31 +2475,21 @@ jobs:
                           }
                       }
                       "EDITOR" -> {
-                          paint.style = Paint.Style.STROKE
-                          paint.strokeWidth = (r * 0.18f).coerceAtLeast(3.5f)
-                          paint.color = fgColor
+                          paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f; paint.color = fgColor
                           canvas.drawLine(cx - r * 0.62f, cy - r * 0.42f, cx + r * 0.10f, cy - r * 0.42f, paint)
                           canvas.drawLine(cx - r * 0.62f, cy, cx - r * 0.08f, cy, paint)
                           canvas.drawLine(cx - r * 0.62f, cy + r * 0.42f, cx - r * 0.22f, cy + r * 0.42f, paint)
                           paint.color = badgeColor
                           canvas.drawLine(cx + r * 0.05f, cy + r * 0.45f, cx + r * 0.62f, cy - r * 0.35f, paint)
-                          if (themeStyleId in listOf(7, 9)) {
-                              canvas.drawCircle(cx + r * 0.62f, cy - r * 0.35f, r * 0.12f, paint)
-                          }
                       }
                       "ANALYZER" -> {
-                          paint.style = Paint.Style.STROKE
-                          paint.strokeWidth = (r * 0.16f).coerceAtLeast(3.2f)
+                          paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.2f
                           if (themeStyleId in listOf(1, 8)) {
-                              // Осциллограф / Пульс кардиограммы для Кибер и Матрицы
                               paint.color = badgeColor
                               path.reset()
-                              path.moveTo(cx - r * 0.78f, cy)
-                              path.lineTo(cx - r * 0.35f, cy)
-                              path.lineTo(cx - r * 0.15f, cy - r * 0.65f)
-                              path.lineTo(cx + r * 0.15f, cy + r * 0.65f)
-                              path.lineTo(cx + r * 0.35f, cy - r * 0.25f)
-                              path.lineTo(cx + r * 0.78f, cy - r * 0.25f)
+                              path.moveTo(cx - r * 0.78f, cy); path.lineTo(cx - r * 0.35f, cy)
+                              path.lineTo(cx - r * 0.15f, cy - r * 0.65f); path.lineTo(cx + r * 0.15f, cy + r * 0.65f)
+                              path.lineTo(cx + r * 0.35f, cy - r * 0.25f); path.lineTo(cx + r * 0.78f, cy - r * 0.25f)
                               canvas.drawPath(path, paint)
                           } else {
                               for (ring in 1..3) {
@@ -2491,7 +2504,6 @@ jobs:
                       }
                       "THEMES" -> {
                           if (themeStyleId == 9) {
-                              // Королевский бриллиант для Royal Gold
                               paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.2f; paint.color = badgeColor
                               path.reset()
                               path.moveTo(cx - r * 0.45f, cy - r * 0.55f); path.lineTo(cx + r * 0.45f, cy - r * 0.55f)
@@ -2511,8 +2523,7 @@ jobs:
                           paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f; paint.color = fgColor
                           rect.set(cx - r * 0.78f, cy - r * 0.78f, cx + r * 0.78f, cy + r * 0.78f)
                           canvas.drawArc(rect, 150f, 240f, false, paint)
-                          paint.style = if (isWireframeTheme) Paint.Style.STROKE else Paint.Style.FILL
-                          paint.color = badgeColor
+                          paint.style = if (isWireframeTheme) Paint.Style.STROKE else Paint.Style.FILL; paint.color = badgeColor
                           path.reset()
                           path.moveTo(cx + r * 0.10f, cy - r * 0.56f); path.lineTo(cx - r * 0.34f, cy + r * 0.04f)
                           path.lineTo(cx + r * 0.02f, cy + r * 0.04f); path.lineTo(cx - r * 0.12f, cy + r * 0.56f)
@@ -2566,8 +2577,7 @@ jobs:
                           path.close(); canvas.drawPath(path, paint)
                       }
                       "AUDIO" -> {
-                          val pos = listOf(-0.52f, 0f, 0.52f)
-                          val hts = listOf(0.45f, 0.76f, 0.58f)
+                          val pos = listOf(-0.52f, 0f, 0.52f); val hts = listOf(0.45f, 0.76f, 0.58f)
                           paint.style = Paint.Style.FILL
                           for (i in pos.indices) {
                               paint.color = if (i == 1) badgeColor else fgColor
@@ -2612,6 +2622,278 @@ jobs:
               }
           }
           ''')
+
+          # МОДУЛЬ 2: CoreEngines.kt — Настоящий DoH-резолвер Cloudflare 1.1.1.1, потоковый парсер M3U и компактный потоковый кэш EPG без переполнения ОЗУ!
+          with open("app/src/main/java/com/example/miboxiptv/CoreEngines.kt", "w") as f:
+              f.write(r'''package com.example.miboxiptv
+
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import java.io.BufferedReader
+          import java.io.BufferedWriter
+          import java.io.File
+          import java.io.FileReader
+          import java.io.FileWriter
+          import java.io.InputStream
+          import java.net.HttpURLConnection
+          import java.net.InetAddress
+          import java.net.URL
+          import java.text.SimpleDateFormat
+          import java.util.Locale
+          import java.util.TimeZone
+          import java.util.concurrent.ConcurrentHashMap
+
+          object CoreEngines {
+              private val dohCache = ConcurrentHashMap<String, String>()
+
+              val russianSmartTvAgents = listOf(
+                  "Wink/1.38.2 (Linux; Android 11; MiBox) ExoPlayerLib/2.19.1",
+                  "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36",
+                  "VLC/3.0.20 LibVLC/3.0.20",
+                  "Lavf/60.3.100"
+              )
+
+              // Настоящий DNS-over-HTTPS резолвер через Cloudflare (1.1.1.1) при сбое провайдерского DNS
+              fun resolveHostViaCloudflareDoH(host: String): String? {
+                  dohCache[host]?.let { return it }
+                  return try {
+                      InetAddress.getByName(host).hostAddress?.also { dohCache[host] = it }
+                  } catch (_: Exception) {
+                      try {
+                          val conn = URL("https://1.1.1.1/dns-query?name=$host&type=A").openConnection() as HttpURLConnection
+                          conn.setRequestProperty("Accept", "application/dns-json")
+                          conn.connectTimeout = 3000; conn.readTimeout = 3000
+                          if (conn.responseCode == 200) {
+                              val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                              val ans = json.optJSONArray("Answer")
+                              if (ans != null) {
+                                  for (i in 0 until ans.length()) {
+                                      val item = ans.getJSONObject(i)
+                                      if (item.optInt("type") == 1) {
+                                          val ip = item.optString("data")
+                                          if (ip.isNotEmpty()) {
+                                              dohCache[host] = ip
+                                              return ip
+                                          }
+                                      }
+                                  }
+                              }
+                          }
+                          null
+                      } catch (_: Exception) { null }
+                  }
+              }
+
+              fun openStreamWithBypass(rawUrl: String, uaIndex: Int, dohEnabled: Boolean, timeoutMs: Int = 7500): InputStream {
+                  var currentUrl = rawUrl
+                  for (redirectAttempt in 0..3) {
+                      val parsed = URL(currentUrl)
+                      val conn = try {
+                          (parsed.openConnection() as HttpURLConnection).apply {
+                              setRequestProperty("User-Agent", russianSmartTvAgents[uaIndex % russianSmartTvAgents.size])
+                              setRequestProperty("Accept", "*/*")
+                              setRequestProperty("Connection", "keep-alive")
+                              instanceFollowRedirects = true
+                              connectTimeout = timeoutMs
+                              readTimeout = timeoutMs
+                          }
+                      } catch (e: Exception) {
+                          if (dohEnabled) {
+                              val ip = resolveHostViaCloudflareDoH(parsed.host)
+                              if (ip != null) {
+                                  val fallbackUrl = URL(currentUrl.replaceFirst(parsed.host, ip))
+                                  (fallbackUrl.openConnection() as HttpURLConnection).apply {
+                                      setRequestProperty("Host", parsed.host)
+                                      setRequestProperty("User-Agent", russianSmartTvAgents[uaIndex % russianSmartTvAgents.size])
+                                      connectTimeout = timeoutMs; readTimeout = timeoutMs
+                                  }
+                              } else throw e
+                          } else throw e
+                      }
+
+                      val code = try { conn.responseCode } catch (e: Exception) {
+                          if (dohEnabled) {
+                              val ip = resolveHostViaCloudflareDoH(parsed.host)
+                              if (ip != null && !currentUrl.contains(ip)) {
+                                  currentUrl = currentUrl.replaceFirst(parsed.host, ip)
+                                  continue
+                              }
+                          }
+                          throw e
+                      }
+
+                      if (code in 300..308) {
+                          val loc = conn.getHeaderField("Location")
+                          if (!loc.isNullOrEmpty()) {
+                              currentUrl = loc
+                              continue
+                          }
+                      }
+                      if (code in 200..299) return conn.inputStream
+                      throw Exception("HTTP $code")
+                  }
+                  throw Exception("Too many redirects")
+              }
+
+              fun cleanChannelDisplayName(raw: String): String {
+                  var s = raw
+                  s = s.replace(Regex("\\[[^\\]]*\\]"), " ")
+                  s = s.replace(Regex("\\([^)]*\\)"), " ")
+                  s = s.replace(Regex("(?i)\\b(1080p|1080i|720p|576p|540p|480p|360p|2160p|1440p|50fps|60fps|25fps|fhd|uhd|qhd|quadhd|fullhd|hd|sd|hevc|h264)\\b"), " ")
+                  s = s.replace(Regex("\\s+"), " ").trim()
+                  return s.trim('-', '.', '•', '|', '_').ifEmpty { raw.trim() }
+              }
+
+              fun normalizeName(raw: String): String {
+                  val clean = cleanChannelDisplayName(raw).lowercase()
+                      .replace("ё", "е")
+                      .replace("setanta", "сетанта").replace("sport", "спорт").replace("match", "матч")
+                      .replace("futbol", "футбол").replace("football", "футбол").replace("kino", "кино")
+                      .replace("discovery", "дискавери").replace("national geographic", "нэшнлгеографик")
+                      .replace("nat geo", "натгео").replace("eurosport", "евроспорт").replace("viasat", "виасат")
+                      .replace("history", "хистори").replace("nickelodeon", "никелодеон").replace("cartoon", "картун")
+                      .replace("tv1000", "тв1000").replace("tv 1000", "тв1000").replace("action", "экшн")
+                      .replace("первый канал", "первый")
+                      .replace(Regex("\\b(телеканал|канал|тв|tv|ru|rus|original|international|int)\\b"), "")
+                  val sb = StringBuilder()
+                  for (c in clean) if (c in 'a'..'z' || c in 'а'..'я' || c in '0'..'9') sb.append(c)
+                  return sb.toString()
+              }
+
+              fun isArabicChannel(rawName: String, rawGroup: String, url: String): Boolean {
+                  if (rawName.any { it.code in 0x0600..0x06FF || it.code in 0x0750..0x077F }) return true
+                  val lower = "$rawName $rawGroup $url".lowercase()
+                  val arabKeywords = listOf(
+                      "arab", "al jazeera", "aljazeera", "rotana", "mbc", "osn", "shahid", "alarabiya", "al arabiya",
+                      "beinsport", "bein ", "alkass", "al kass", "dubai", "abu dhabi", "sharjah", "kuwait", "qatar",
+                      "saudi", "egypt", "nilesat", "badr", "koora", "quran", "sunnah", "iqraa", "majd", "spacetoon arab"
+                  )
+                  return arabKeywords.any { lower.contains(it) }
+              }
+
+              fun isRussianOrCisChannel(name: String, url: String): Boolean {
+                  if (name.any { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }) return true
+                  val l = "$name $url".lowercase()
+                  return l.contains(".ru") || l.contains(".kz") || l.contains(".by") || l.contains(".am") ||
+                      l.contains("kino") || l.contains("film") || l.contains("tv1000") || l.contains("tv 1000") ||
+                      l.contains("viasat") || l.contains("amedia") || l.contains("setanta") || l.contains("match")
+              }
+
+              fun mapToTenCategories(rawGroup: String, name: String): String {
+                  val text = (rawGroup + " " + name).lowercase()
+                  return when {
+                      text.contains("2k") || text.contains("qhd") || text.contains("quadhd") || text.contains("1440p") || text.contains("2160p") || text.contains("uhd") || text.contains("4k") -> "2K"
+                      text.contains("взросл") || text.contains("18+") || text.contains("adult") || text.contains("xxx") -> "Прочее"
+                      text.contains("спорт") || text.contains("футбол") || text.contains("матч") || text.contains("сетанта") || text.contains("setanta") || text.contains("sport") || text.contains("khl") || text.contains("кхл") || text.contains("ufc") || text.contains("бокс") -> "Спорт"
+                      text.contains("кино") || text.contains("фильм") || text.contains("сериал") || text.contains("movie") || text.contains("cinema") || text.contains("film") || text.contains("tv1000") || text.contains("tv 1000") || text.contains("иллюзион") || text.contains("комедия") || text.contains("детектив") -> "Кино и сериалы"
+                      text.contains("детск") || text.contains("мульт") || text.contains("kids") || text.contains("карусель") || text.contains("nickelodeon") || text.contains("cartoon") || text.contains("disney") -> "Детские"
+                      text.contains("наук") || text.contains("док") || text.contains("познав") || text.contains("science") || text.contains("discovery") || text.contains("nat geo") || text.contains("animal") || text.contains("планет") || text.contains("viasat") || text.contains("история") -> "Познавательные"
+                      text.contains("муз") || text.contains("music") || text.contains("mtv") || text.contains("bridge") || text.contains("stingray") || text.contains("муз-тв") || text.contains("ru.tv") || text.contains("шансон") -> "Музыка"
+                      text.contains("развлеч") || text.contains("шоу") || text.contains("тнт") || text.contains("стс") || text.contains("пятница") || text.contains("суббота") || text.contains("ю тв") || text.contains("че!") || text.contains("2x2") || text.contains("2х2") || text.contains("квн") || text.contains("сарафан") || text.contains("юмор") || text.contains("entertainment") || text.contains("comedy") || text.contains("fashion") || text.contains("lifestyle") || text.contains("еда") || text.contains("кухня") -> "Развлечения"
+                      text.contains("новост") || text.contains("общ") || text.contains("news") || text.contains("россия") || text.contains("первый") || text.contains("нтв") || text.contains("рбк") || text.contains("рен") || text.contains("твц") || text.contains("пятый") || text.contains("домашний") || text.contains("звезда") || text.contains("мир") -> "Новости и общие"
+                      else -> "Прочее"
+                  }
+              }
+
+              // Потоковый парсинг M3U без загрузки всего файла в память (защита от OOM)
+              fun parseM3uReaderIntoMap(
+                  reader: BufferedReader,
+                  targetMap: LinkedHashMap<String, Channel>,
+                  customCategoryMap: Map<String, String>,
+                  filterQuality: Boolean
+              ) {
+                  var currentRawName = "Канал"; var currentGroup = ""; var currentTvgId = ""
+                  val quote = 34.toChar().toString()
+                  reader.useLines { lines ->
+                      for (line in lines) {
+                          val trimmed = line.trim()
+                          if (trimmed.startsWith("#EXTINF:")) {
+                              currentRawName = trimmed.substringAfterLast(",").trim()
+                              currentGroup = if (trimmed.contains("group-title=$quote")) trimmed.substringAfter("group-title=$quote").substringBefore(quote) else ""
+                              currentTvgId = if (trimmed.contains("tvg-id=$quote")) trimmed.substringAfter("tvg-id=$quote").substringBefore(quote) else ""
+                          } else if (trimmed.startsWith("#EXTGRP:")) {
+                              currentGroup = trimmed.substringAfter("#EXTGRP:").trim()
+                          } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                              if (isArabicChannel(currentRawName, currentGroup, trimmed)) continue
+                              val cat = customCategoryMap[trimmed] ?: mapToTenCategories(currentGroup, currentRawName)
+                              if (filterQuality && cat == "Кино и сериалы" && !isRussianOrCisChannel(currentRawName, trimmed)) continue
+
+                              val cleanTitle = cleanChannelDisplayName(currentRawName)
+                              val ch = Channel(cleanTitle, trimmed, cat, currentTvgId)
+                              val key = normalizeName(cleanTitle).ifEmpty { trimmed }
+                              val existing = targetMap[key]
+                              if (existing == null || currentRawName.contains("50fps", true) || currentRawName.contains("1080", true)) {
+                                  targetMap[key] = ch
+                              }
+                          }
+                      }
+                  }
+              }
+
+              // Построчное сохранение кэша EPG (JSON Lines) — 0 нагрузки на RAM!
+              fun saveEpgToStreamCache(file: File, byName: Map<String, List<EpgProgram>>) {
+                  try {
+                      BufferedWriter(FileWriter(file)).use { writer ->
+                          for ((k, list) in byName) {
+                              val arr = JSONArray()
+                              for (p in list) {
+                                  arr.put(JSONObject().apply {
+                                      put("t", p.title); put("d", p.desc); put("s", p.startMs); put("e", p.stopMs)
+                                  })
+                              }
+                              val lineObj = JSONObject().apply { put("k", k); put("p", arr) }
+                              writer.write(lineObj.toString())
+                              writer.newLine()
+                          }
+                      }
+                  } catch (_: Exception) {}
+              }
+
+              fun restoreEpgFromStreamCache(file: File, outMap: ConcurrentHashMap<String, MutableList<EpgProgram>>): Int {
+                  return try {
+                      val now = System.currentTimeMillis()
+                      var total = 0
+                      val temp = HashMap<String, MutableList<EpgProgram>>()
+                      BufferedReader(FileReader(file)).useLines { lines ->
+                          for (line in lines) {
+                              if (line.isBlank()) continue
+                              val lineObj = JSONObject(line)
+                              val k = lineObj.optString("k")
+                              val arr = lineObj.optJSONArray("p") ?: continue
+                              val list = mutableListOf<EpgProgram>()
+                              for (i in 0 until arr.length()) {
+                                  val o = arr.getJSONObject(i)
+                                  val stop = o.getLong("e")
+                                  if (stop >= now - 2 * 3600_000L) {
+                                      list.add(EpgProgram(o.getString("t"), o.optString("d", ""), o.getLong("s"), stop))
+                                      total++
+                                  }
+                              }
+                              if (k.isNotEmpty() && list.isNotEmpty()) temp[k] = list
+                          }
+                      }
+                      if (total > 0) {
+                          outMap.clear()
+                          outMap.putAll(temp)
+                      }
+                      total
+                  } catch (_: Exception) { 0 }
+              }
+
+              fun parseXmltvDate(raw: String): Long {
+                  if (raw.length < 14) return 0L
+                  return try {
+                      val clean = raw.trim()
+                      val sdf = if (clean.length >= 19 && (clean.contains("+") || clean.contains("-"))) {
+                          SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US)
+                      } else {
+                          SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply { timeZone = TimeZone.getTimeZone("GMT+3") }
+                      }
+                      sdf.parse(clean)?.time ?: 0L
+                  } catch (_: Exception) { 0L }
+              }
+          }
+          ''')
           with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -2635,7 +2917,8 @@ jobs:
           import android.view.KeyEvent
           import android.view.LayoutInflater
           import android.view.MotionEvent
-          import android.view.TextureView
+          import android.view.PixelCopy
+          import android.view.SurfaceView
           import android.view.View
           import android.view.ViewGroup
           import android.view.WindowInsets
@@ -2668,7 +2951,9 @@ jobs:
           import org.json.JSONObject
           import org.xmlpull.v1.XmlPullParser
           import org.xmlpull.v1.XmlPullParserFactory
+          import java.io.BufferedReader
           import java.io.File
+          import java.io.FileReader
           import java.io.InputStream
           import java.net.HttpURLConnection
           import java.net.URL
@@ -2676,7 +2961,6 @@ jobs:
           import java.text.SimpleDateFormat
           import java.util.Date
           import java.util.Locale
-          import java.util.TimeZone
           import java.util.concurrent.ConcurrentHashMap
           import java.util.concurrent.CopyOnWriteArrayList
           import java.util.concurrent.Executors
@@ -2753,7 +3037,9 @@ jobs:
               private var previousChannel: Channel? = null
               private var lastBackTapMs = 0L
               private val singleBackTapRunnable = Runnable {
-                  Toast.makeText(this, "Нажмите «Назад» дважды для возврата / обмена экранов", Toast.LENGTH_SHORT).show()
+                  if (!isDualStreamActive) {
+                      Toast.makeText(this, "Нажмите «Назад» дважды для возврата на прошлый канал", Toast.LENGTH_SHORT).show()
+                  }
               }
 
               private var controlMode = 0
@@ -2761,12 +3047,6 @@ jobs:
 
               private var antiBlockEnabled = true
               private var userAgentIndex = 0
-              private val russianSmartTvAgents = listOf(
-                  "Wink/1.38.2 (Linux; Android 11; MiBox) ExoPlayerLib/2.19.1",
-                  "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36",
-                  "VLC/3.0.20 LibVLC/3.0.20",
-                  "Lavf/60.3.100"
-              )
 
               private lateinit var infoTextView: TextView
               private lateinit var clockTextView: TextView
@@ -2820,7 +3100,10 @@ jobs:
               private val playlists = CopyOnWriteArrayList<PlaylistEntry>()
 
               private val channelHealthMap = ConcurrentHashMap<String, Boolean>()
+              private val aliveChannelsAtomic = AtomicInteger(0)
+              private val deadChannelsAtomic = AtomicInteger(0)
               @Volatile private var isAnalyzerRunning = false
+              @Volatile private var playlistLoadGeneration = 0
               private var selectedAnalyzerCategory = "Все каналы"
 
               private val preloadedLock = Any()
@@ -2836,6 +3119,7 @@ jobs:
 
               private var currentCategoryIndex = 1
               private var currentChannel: Channel? = null
+              private var pendingDebouncedChannel: Channel? = null
               private var lastSavedChannelUrl: String = ""
               private var activePlaylistIndex = 0
               private var bufferLevel = 2
@@ -2891,7 +3175,6 @@ jobs:
                   "https://iptv-org.github.io/iptv/categories/music.m3u"
               )
 
-              // Пункт 12: Надёжные зеркала XMLTV с поддержкой HTTPS для охвата 95% русскоязычных и СНГ каналов
               private val epgUrls = listOf(
                   "https://iptvx.one/epg/epg.xml.gz",
                   "https://iptvx.one/epg/epg_lite.xml.gz",
@@ -2922,7 +3205,6 @@ jobs:
                       }.start()
               }
 
-              // Пункт 3: При открытии списка каналов окно видео занимает ВСЮ свободную ширину от правого края меню до правого края экрана!
               private fun setPlayerMiniPreviewMode(mini: Boolean) {
                   val dm = resources.displayMetrics
                   if (mini) {
@@ -2957,7 +3239,6 @@ jobs:
                   }
               }
 
-              // Пункт 5: Если включено окно в окне (Двойной эфир), маленькое окошко висит в правом верхнем углу, а окно информации смещается ниже него!
               private fun adjustInfoPanelMarginForDualStream() {
                   val topMarginPx = if (isDualStreamActive) 320 else 68
                   infoPanel.layoutParams = FrameLayout.LayoutParams(540, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
@@ -2965,23 +3246,29 @@ jobs:
                   }
               }
 
+              // Захват кадра с аппаратного SurfaceView через системный PixelCopy (API 24+) без нагрузки на GPU и отключением во время теста каналов!
               private fun sampleVideoFrameColorIfPossible() {
-                  if (ambilightMode != 3) return
+                  if (ambilightMode != 3 || isAnalyzerRunning || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
                   try {
-                      val tv = playerView.videoSurfaceView as? TextureView ?: return
-                      val bmp = tv.getBitmap(16, 16) ?: return
-                      var rSum = 0; var gSum = 0; var bSum = 0; var count = 0
-                      for (x in 2..13 step 3) {
-                          for (y in 2..13 step 3) {
-                              val px = bmp.getPixel(x, y)
-                              rSum += Color.red(px); gSum += Color.green(px); bSum += Color.blue(px)
-                              count++
+                      val sv = playerView.videoSurfaceView as? SurfaceView ?: return
+                      if (!sv.holder.surface.isValid) return
+                      val bmp = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+                      PixelCopy.request(sv, bmp, { copyResult ->
+                          if (copyResult == PixelCopy.SUCCESS) {
+                              var rSum = 0; var gSum = 0; var bSum = 0; var count = 0
+                              for (x in 2..13 step 3) {
+                                  for (y in 2..13 step 3) {
+                                      val px = bmp.getPixel(x, y)
+                                      rSum += Color.red(px); gSum += Color.green(px); bSum += Color.blue(px)
+                                      count++
+                                  }
+                              }
+                              if (count > 0) {
+                                  capturedFrameColor = Color.rgb((rSum / count).coerceAtLeast(35), (gSum / count).coerceAtLeast(35), (bSum / count).coerceAtLeast(35))
+                              }
                           }
-                      }
-                      bmp.recycle()
-                      if (count > 0) {
-                          capturedFrameColor = Color.rgb((rSum / count).coerceAtLeast(35), (gSum / count).coerceAtLeast(35), (bSum / count).coerceAtLeast(35))
-                      }
+                          bmp.recycle()
+                      }, uiHandler)
                   } catch (_: Exception) {}
               }
 
@@ -3266,31 +3553,6 @@ jobs:
                   else -> "Кинозум"
               }
 
-              private fun openStreamWithRussiaBypass(rawUrl: String, timeoutMs: Int = 7000): InputStream {
-                  var currentUrl = rawUrl
-                  for (redirectAttempt in 0..3) {
-                      val conn = URL(currentUrl).openConnection() as HttpURLConnection
-                      conn.setRequestProperty("User-Agent", russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size])
-                      conn.setRequestProperty("Accept", "*/*")
-                      conn.setRequestProperty("Connection", "keep-alive")
-                      if (dohEnabled) conn.setRequestProperty("X-DNS-Prefetch-Control", "on")
-                      conn.instanceFollowRedirects = true
-                      conn.connectTimeout = timeoutMs
-                      conn.readTimeout = timeoutMs
-                      val code = conn.responseCode
-                      if (code in 300..308) {
-                          val loc = conn.getHeaderField("Location")
-                          if (!loc.isNullOrEmpty()) {
-                              currentUrl = loc
-                              continue
-                          }
-                      }
-                      if (code in 200..299) return conn.inputStream
-                      throw Exception("HTTP $code")
-                  }
-                  throw Exception("Too many redirects")
-              }
-
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -3307,35 +3569,44 @@ jobs:
                       layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
                   }
 
-                  playerView = (LayoutInflater.from(this).inflate(R.layout.player_texture_view, playerContainerFrame, false) as PlayerView).apply {
+                  // Основной плеер теперь работает на аппаратном SurfaceView (Zero-Copy, 50fps и 2K без нагрузки на GPU!)
+                  playerView = (LayoutInflater.from(this).inflate(R.layout.player_surface_view, playerContainerFrame, false) as PlayerView).apply {
                       useController = false
+                      isFocusable = false
                       resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                   }
                   playerContainerFrame.addView(playerView)
                   root.addView(playerContainerFrame)
 
-                  // Пункт 5: Маленькое окошко "Двойной эфир" теперь располагается в правом верхнем углу (там, где обычно Инфо, а Инфо сдвигается ниже!)
+                  // ИСПРАВЛЕН БАГ №3: dualStreamContainer больше НЕ забирает фокус пульта (isFocusable = false, isClickable = false),
+                  // поэтому кнопка OK и долгое нажатие OK всегда открывают меню, а не переключают каналы!
                   dualStreamContainer = FrameLayout(this).apply {
                       visibility = View.GONE
+                      isFocusable = false
+                      isFocusableInTouchMode = false
+                      isClickable = false
                       background = GradientDrawable().apply {
                           setColor(Color.BLACK); cornerRadius = 16f; setStroke(2, Color.parseColor("#00E5FF"))
                       }
                       setPadding(4, 4, 4, 4)
                       layoutParams = FrameLayout.LayoutParams(420, 236, Gravity.TOP or Gravity.END).apply { setMargins(0, 68, 22, 0) }
-                      setOnClickListener { swapMainAndDualStream() }
                   }
                   dualPlayerView = (LayoutInflater.from(this).inflate(R.layout.player_texture_view, dualStreamContainer, false) as PlayerView).apply {
                       useController = false
+                      isFocusable = false
+                      isClickable = false
                       resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                   }
                   dualStreamLabel = TextView(this).apply {
                       setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f); typeface = Typeface.DEFAULT_BOLD
                       setBackgroundColor(Color.parseColor("#AA000000")); setPadding(8, 3, 8, 3)
+                      isFocusable = false; isClickable = false
                       layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.START)
                   }
                   dualCloseBtn = TextView(this).apply {
                       text = "✖"; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f); typeface = Typeface.DEFAULT_BOLD
                       gravity = Gravity.CENTER
+                      isFocusable = false; isFocusableInTouchMode = false; isClickable = true
                       background = GradientDrawable().apply { setColor(Color.parseColor("#CCFF1744")); cornerRadius = 14f }
                       setPadding(10, 2, 10, 2)
                       layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(4, 4, 4, 4) }
@@ -3427,7 +3698,6 @@ jobs:
                       layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
                   }
 
-                  // Пункт 7: CHOICE_MODE_NONE полностью исключает раздвоение курсора при зажатой кнопке листания!
                   categoryListView = ListView(this).apply {
                       choiceMode = ListView.CHOICE_MODE_NONE; divider = null; dividerHeight = 0
                       overScrollMode = View.OVER_SCROLL_NEVER; isScrollingCacheEnabled = false
@@ -3506,7 +3776,6 @@ jobs:
                       layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                   }
 
-                  // Пункт 4 и 5: Убрана кнопка "Соседние", добавлена понятная кнопка включения/выключения 2-го экрана, а кнопка Выключения сделана красной круглой иконкой без подписи!
                   btnOsdTop = makeModernButton("▲ В ТОП") { currentChannel?.let { toggleTopChannel(it) }; updateCenterOsdContent() }
                   btnOsdFav = makeModernButton("★ Избр.") { currentChannel?.let { toggleFavorite(it) }; updateCenterOsdContent() }
                   btnOsdDualToggle = makeModernButton("⧉ 2-й экран") { toggleDualStreamWithCurrentOrNeighbor(); updateCenterOsdContent() }
@@ -3786,7 +4055,6 @@ jobs:
                   channelAdapter = createRichChannelAdapter(mutableListOf())
                   channelListView.adapter = channelAdapter
 
-                  // Пункт 6: Если выбрали группу, где играет активный канал — курсор на этот канал, иначе — в начало списка (позиция 0)!
                   categoryListView.setOnItemClickListener { _, _, position, _ ->
                       resetMenuInactivityTimer(); focusedCategoryPos = position; selectCategory(position)
                       showSideChannelsMode(focusCurrentChannelIfSameGroup = true)
@@ -3851,13 +4119,12 @@ jobs:
                       }
                       override fun onNothingSelected(parent: AdapterView<*>?) {}
                   }
-                  // Пункт 11: При клике на канал на телефоне НЕ сбрасываем скролл списка вверх — канал остаётся ровно на месте!
                   channelListView.setOnItemClickListener { _, _, position, _ ->
                       val list = displayedChannels.toList()
                       if (position in list.indices) {
                           focusedChannelPos = position
                           refreshChannelListHighlightInPlace(position)
-                          playChannelObj(list[position])
+                          playChannelObj(list[position], immediate = true)
                           if (controlMode != 1) closeAllMenus()
                       }
                   }
@@ -3899,7 +4166,6 @@ jobs:
                   return Color.parseColor(palette[abs(name.hashCode()) % palette.size])
               }
 
-              // Пункт 7: Единый источник выделения (только focusedChannelPos) — полностью устраняет фантомное раздвоение курсора при быстрой прокрутке!
               private fun createRichChannelAdapter(items: MutableList<String>): ArrayAdapter<String> {
                   return object : ArrayAdapter<String>(this@MainActivity, 0, items) {
                       override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
@@ -3976,7 +4242,8 @@ jobs:
                           child.setTextColor(t.textPrimaryColor)
                           child.background = null
                       }
-                      child.text = colorizeStatusText(child.text.toString())
+                      val raw = (listView.adapter?.getItem(itemPos) as? String) ?: child.text.toString()
+                      child.text = colorizeStatusText(raw)
                   }
               }
 
@@ -4023,7 +4290,7 @@ jobs:
                       val epgTxt = epg?.title ?: effectiveCategory(ch)
                       val prefix = if (off == 0) "▶ " else ""
                       val cardBtn = makeModernButton("$prefix${ch.name}\n🎬 ${epgTxt.take(20)}") {
-                          playChannelObj(ch)
+                          playChannelObj(ch, immediate = true)
                           buildAndShowZappingBar()
                       }.apply {
                           isSingleLine = false; maxLines = 2
@@ -4051,7 +4318,7 @@ jobs:
                       layoutParams = FrameLayout.LayoutParams(880, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
                   }
                   val title = TextView(this).apply {
-                      text = "TiViLook 2.4 — Выберите режим управления"
+                      text = "TiViLook 2.5 — Выберите режим управления"
                       setTextColor(currentTheme().textPrimaryColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
                       typeface = themeBoldFont(); gravity = Gravity.CENTER
                   }
@@ -4087,7 +4354,6 @@ jobs:
                   }
               }
 
-              // Пункт 2: Проверка попадания касания внутрь активного окна меню (если тап по пустому месту — закрываем все активные меню!)
               private fun isPointInsideVisibleView(x: Float, y: Float, v: View): Boolean {
                   if (v.visibility != View.VISIBLE) return false
                   val loc = IntArray(2)
@@ -4106,12 +4372,16 @@ jobs:
                       isPointInsideVisibleView(x, y, dualStreamContainer)
               }
 
-              // Пункт 2 и 4: На телефоне тап по пустому месту закрывает активные меню, а свайп вниз в центральном меню открывает плитку из 5 каналов!
               private fun initTouchGestureDetector() {
                   gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
                       override fun onDown(e: MotionEvent): Boolean = false
                       override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                           if (firstRunModeOverlay.visibility == View.VISIBLE) return false
+                          // На смартфоне нажатие по самому мини-окну 2-го эфира меняет каналы местами (без захвата фокуса пульта!)
+                          if (isDualStreamActive && isPointInsideVisibleView(e.rawX, e.rawY, dualStreamContainer) && !isPointInsideVisibleView(e.rawX, e.rawY, dualCloseBtn)) {
+                              swapMainAndDualStream()
+                              return true
+                          }
                           if (menuHistory.isNotEmpty()) {
                               if (!isTouchInsideAnyActiveMenu(e)) {
                                   closeAllMenus()
@@ -4137,14 +4407,13 @@ jobs:
                           if (isDualStreamActive) {
                               swapMainAndDualStream()
                           } else {
-                              previousChannel?.let { playChannelObj(it) } ?: navigateToMenu("SETTINGS")
+                              previousChannel?.let { playChannelObj(it, immediate = true) } ?: navigateToMenu("SETTINGS")
                           }
                           return true
                       }
                       override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
                           if (e1 == null || firstRunModeOverlay.visibility == View.VISIBLE) return false
-                          val dx = e2.x - e1.x
-                          val dy = e2.y - e1.y
+                          val dx = e2.x - e1.x; val dy = e2.y - e1.y
                           val curMenu = menuHistory.lastOrNull()
 
                           if (abs(dx) > abs(dy) * 1.45f && abs(dx) > 95f) {
@@ -4172,7 +4441,6 @@ jobs:
                                   switchChannelByOffset(if (dy < 0) +1 else -1)
                                   return true
                               } else if (curMenu == "OSD" && dy > 0) {
-                                  // Пункт 4: На телефоне при открытом центральном меню свайп вниз открывает плитку из 5 соседних каналов!
                                   buildAndShowZappingBar()
                                   return true
                               }
@@ -4182,7 +4450,6 @@ jobs:
                   })
               }
 
-              // Пункт 6: Навигация в списке каналов: если в группе есть активный канал — курсор встаёт на него, если группа другая — курсор в начало списка (0)!
               private fun showSideChannelsMode(focusCurrentChannelIfSameGroup: Boolean = true) {
                   isSideShowingChannels = true
                   isLeftRailVisible = false
@@ -4391,10 +4658,9 @@ jobs:
                   val cur = p.currentPosition
                   val target = (cur - sec * 1000L).coerceAtLeast(0L)
                   p.seekTo(target)
-                  Toast.makeText(this, "⏪ Машина времени: отмотка эфира на -$sec сек", Toast.LENGTH_SHORT).show()
               }
 
-              // Пункт 5: Понятный алгоритм включения и выключения двухоконного режима (кнопкой "⧉ 2-й экран" в меню OK или крестиком на мини-окне)
+              // ИСПРАВЛЕН БАГ №3: Полностью убраны всплывающие Toast-оповещения при включении/выключении/обмене каналов в режиме Картинка-в-картинке!
               private fun stopDualStreamMode() {
                   isDualStreamActive = false
                   try { dualPipPlayer?.stop(); dualPipPlayer?.release() } catch (_: Exception) {}
@@ -4402,7 +4668,6 @@ jobs:
                   dualStreamContainer.visibility = View.GONE
                   adjustInfoPanelMarginForDualStream()
                   updateCenterOsdContent()
-                  Toast.makeText(this, "Режим «Двойной эфир» выключен", Toast.LENGTH_SHORT).show()
               }
 
               private fun toggleDualStreamWithCurrentOrNeighbor() {
@@ -4429,17 +4694,16 @@ jobs:
                   }
                   dualPlayerView.player = dp
                   dualPipPlayer = dp
-                  dualStreamLabel.text = "2-й: ${ch.name} (2x Назад — обмен)"
+                  dualStreamLabel.text = "2-й: ${ch.name}"
                   dualStreamContainer.visibility = View.VISIBLE
                   adjustInfoPanelMarginForDualStream()
                   updateCenterOsdContent()
-                  Toast.makeText(this, "2-й экран: ${ch.name} (Выключить — кнопка «⧉ Выкл 2-й экран» в меню OK)", Toast.LENGTH_SHORT).show()
               }
 
               private fun swapMainAndDualStream() {
                   val mainCh = currentChannel ?: return
                   val secCh = dualStreamChannel ?: return
-                  playChannelObj(secCh)
+                  playChannelObj(secCh, immediate = true, silentSwap = true)
                   startDualStreamChannel(mainCh)
               }
 
@@ -4473,10 +4737,8 @@ jobs:
                   applyCurrentThemeToAllPanels()
                   if (minutes <= 0) {
                       player?.volume = 1.0f
-                      Toast.makeText(this, "Таймер сна отключён", Toast.LENGTH_SHORT).show()
                       return
                   }
-                  Toast.makeText(this, "Приложение выключится через $minutes мин.", Toast.LENGTH_SHORT).show()
                   val tick = object : Runnable {
                       override fun run() {
                           sleepTimerMinutesLeft--
@@ -4643,7 +4905,7 @@ jobs:
                       0 -> "Выключен"
                       1 -> "Свой цвет у каждой группы"
                       2 -> "Плавный спектр (переливающийся)"
-                      else -> "Захват кадра видео (Live)"
+                      else -> "Захват кадра видео (Live PixelCopy)"
                   }
                   val dropName = if (onDropBehavior == 0) "Перезапуск соединения (14с)" else "Автоперескок на следующий канал"
                   val hideName = if (showChannelBannerOnSwitch) "$menuHideDelaySec сек (Баннер ВКЛ)" else "$menuHideDelaySec сек (Баннер ВЫКЛ)"
@@ -4655,7 +4917,7 @@ jobs:
                       "🖥  Формат экрана: ${screenAspectModeName()}",
                       "🌙  Яркость экрана и меню: $brightnessPercent%",
                       "⏲  Выход и Таймер сна: ${if (sleepTimerMinutesLeft > 0) "$sleepTimerMinutesLeft мин" else "Выключен"}",
-                      if (dohEnabled) "[+]  DNS-over-HTTPS (обход блокировок): ВКЛ" else "[-]  DNS-over-HTTPS (обход блокировок): ВЫКЛ",
+                      if (dohEnabled) "[+]  DNS-over-HTTPS (Cloudflare 1.1.1.1): ВКЛ" else "[-]  DNS-over-HTTPS (Cloudflare 1.1.1.1): ВЫКЛ",
                       "⚡  При обрыве потока: $dropName",
                       "⏱  Автоскрытие меню и баннера: $hideName",
                       "🔄  Обновить все 4 источника телепрограммы EPG"
@@ -4694,7 +4956,7 @@ jobs:
                           try {
                               tickCounter++
                               ambilightHue = (ambilightHue + 8f) % 360f
-                              if (ambilightMode == 3) sampleVideoFrameColorIfPossible()
+                              if (ambilightMode == 3 && tickCounter % 2 == 0) sampleVideoFrameColorIfPossible()
                               if (tickCounter % 60 == 0) stepPixelOrbiter()
 
                               clockTextView.text = timeFmt.format(Date())
@@ -4728,7 +4990,7 @@ jobs:
                                               consecutiveDropFailures = 0
                                               switchChannelByOffset(+1)
                                           } else {
-                                              if (antiBlockEnabled) userAgentIndex = (userAgentIndex + 1) % russianSmartTvAgents.size
+                                              if (antiBlockEnabled) userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                                               reloadIconIndicator.visibility = View.VISIBLE
                                               uiHandler.postDelayed({ reloadIconIndicator.visibility = View.GONE }, 3500L)
                                               reconnectCurrentStream()
@@ -4825,7 +5087,7 @@ jobs:
                       .setExtensionRendererMode(extensionMode)
                       .setEnableDecoderFallback(true)
 
-                  val activeAgent = russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size]
+                  val activeAgent = CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
                   val httpDataSourceFactory = DefaultHttpDataSource.Factory()
                       .setUserAgent(activeAgent)
                       .setAllowCrossProtocolRedirects(true)
@@ -4929,12 +5191,14 @@ jobs:
                   for (neighbor in neighbors) {
                       try {
                           preloaderExecutor.submit {
+                              if (isAnalyzerRunning) return@submit
                               try {
                                   val conn = URL(neighbor.url).openConnection() as HttpURLConnection
-                                  conn.setRequestProperty("User-Agent", russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size])
-                                  conn.connectTimeout = 3500; conn.readTimeout = 3500
+                                  conn.setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
+                                  conn.connectTimeout = 3000; conn.readTimeout = 3000
                                   if (conn.responseCode in 200..299) {
-                                      conn.inputStream.bufferedReader().readLines()
+                                      val buf = ByteArray(128)
+                                      conn.inputStream.read(buf)
                                       conn.disconnect()
                                       synchronized(preloadedLock) { preloadedNeighbors.add(neighbor.url) }
                                   }
@@ -4944,39 +5208,13 @@ jobs:
                   }
               }
 
-              private fun cleanChannelDisplayName(raw: String): String {
-                  var s = raw
-                  s = s.replace(Regex("\\[[^\\]]*\\]"), " ")
-                  s = s.replace(Regex("\\([^)]*\\)"), " ")
-                  s = s.replace(Regex("(?i)\\b(1080p|1080i|720p|576p|540p|480p|360p|2160p|1440p|50fps|60fps|25fps|fhd|uhd|qhd|quadhd|fullhd|hd|sd|hevc|h264)\\b"), " ")
-                  s = s.replace(Regex("\\s+"), " ").trim()
-                  return s.trim('-', '.', '•', '|', '_').ifEmpty { raw.trim() }
-              }
-
-              // Пункт 12: Расширенная нормализация имён каналов для 95% совпадения с программой передач EPG!
-              private fun normalizeName(raw: String): String {
-                  val clean = cleanChannelDisplayName(raw).lowercase()
-                      .replace("ё", "е")
-                      .replace("setanta", "сетанта").replace("sport", "спорт").replace("match", "матч")
-                      .replace("futbol", "футбол").replace("football", "футбол").replace("kino", "кино")
-                      .replace("discovery", "дискавери").replace("national geographic", "нэшнлгеографик")
-                      .replace("nat geo", "натгео").replace("eurosport", "евроспорт").replace("viasat", "виасат")
-                      .replace("history", "хистори").replace("nickelodeon", "никелодеон").replace("cartoon", "картун")
-                      .replace("tv1000", "тв1000").replace("tv 1000", "тв1000").replace("action", "экшн")
-                      .replace("россия", "россия").replace("первый канал", "первый")
-                      .replace(Regex("\\b(телеканал|канал|тв|tv|ru|rus|original|international|int)\\b"), "")
-                  val sb = StringBuilder()
-                  for (c in clean) if (c in 'a'..'z' || c in 'а'..'я' || c in '0'..'9') sb.append(c)
-                  return sb.toString()
-              }
-
               private fun getChannelEpgList(ch: Channel?): List<EpgProgram> {
                   if (ch == null) return emptyList()
                   if (ch.tvgId.isNotEmpty()) {
                       val byId = epgById[ch.tvgId] ?: epgById[ch.tvgId.lowercase()]
                       if (!byId.isNullOrEmpty()) return byId.toList()
                   }
-                  val norm = normalizeName(ch.name)
+                  val norm = CoreEngines.normalizeName(ch.name)
                   if (norm.isNotEmpty()) {
                       val exact = epgByName[norm]
                       if (!exact.isNullOrEmpty()) return exact.toList()
@@ -4996,17 +5234,20 @@ jobs:
                   return Pair(list[idx], if (idx + 1 < list.size) list[idx + 1] else null)
               }
 
-              // Пункт 12: Исправленный загрузчик EPG с обходом блокировок User-Agent и редиректов HTTP->HTTPS
               private fun loadEpgOncePerDayInBackground(forceRefresh: Boolean) {
-                  thread {
-                      val cacheFile = File(filesDir, "epg_cache_v24.json")
+                  thread(priority = Thread.MIN_PRIORITY) {
+                      val cacheFile = File(filesDir, "epg_stream_v25.jsonl")
                       val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
-                      val lastSyncMs = prefs.getLong("last_epg_sync_v24_ms", 0L)
+                      val lastSyncMs = prefs.getLong("last_epg_sync_v25_ms", 0L)
                       val now = System.currentTimeMillis()
                       val dayMs = 24 * 3600_000L
 
                       if (!forceRefresh && cacheFile.exists() && (now - lastSyncMs) in 1 until dayMs) {
-                          if (restoreEpgFromCacheFile(cacheFile)) return@thread
+                          val restored = CoreEngines.restoreEpgFromStreamCache(cacheFile, epgByName)
+                          if (restored > 0) {
+                              epgLoadedCount = restored
+                              return@thread
+                          }
                       }
 
                       val mergedById = HashMap<String, MutableList<EpgProgram>>()
@@ -5015,13 +5256,13 @@ jobs:
 
                       for (candidateUrl in (listOf(epgUrl) + epgUrls).distinct()) {
                           try {
-                              val rawStream = openStreamWithRussiaBypass(candidateUrl, 25000)
+                              val rawStream = CoreEngines.openStreamWithBypass(candidateUrl, userAgentIndex, dohEnabled, 25000)
                               val stream: InputStream = if (candidateUrl.endsWith(".gz", true)) GZIPInputStream(rawStream) else rawStream
 
                               val parser = XmlPullParserFactory.newInstance().newPullParser()
                               parser.setInput(stream, "UTF-8")
 
-                              val minTime = now - 3 * 3600_000L; val maxTime = now + 20 * 3600_000L
+                              val minTime = now - 3 * 3600_000L; val maxTime = now + 18 * 3600_000L
                               val tempById = HashMap<String, MutableList<EpgProgram>>()
                               val tempIdToNames = HashMap<String, MutableList<String>>()
 
@@ -5037,8 +5278,8 @@ jobs:
                                           if (currentTag == "channel") currentChanId = parser.getAttributeValue(null, "id") ?: ""
                                           else if (currentTag == "programme") {
                                               progChanId = parser.getAttributeValue(null, "channel") ?: ""
-                                              progStart = parseXmltvDate(parser.getAttributeValue(null, "start") ?: "")
-                                              progStop = parseXmltvDate(parser.getAttributeValue(null, "stop") ?: "")
+                                              progStart = CoreEngines.parseXmltvDate(parser.getAttributeValue(null, "start") ?: "")
+                                              progStop = CoreEngines.parseXmltvDate(parser.getAttributeValue(null, "stop") ?: "")
                                               progTitle = ""; progDesc = ""
                                           }
                                       }
@@ -5046,7 +5287,7 @@ jobs:
                                           val txt = parser.text ?: ""
                                           if (txt.isNotBlank()) {
                                               if (currentTag == "display-name" && currentChanId.isNotEmpty()) {
-                                                  val nKey = normalizeName(txt)
+                                                  val nKey = CoreEngines.normalizeName(txt)
                                                   if (nKey.isNotEmpty()) tempIdToNames.getOrPut(currentChanId) { mutableListOf() }.add(nKey)
                                               } else if (currentTag == "title" && progStop >= minTime && progStart <= maxTime) progTitle += txt
                                               else if (currentTag == "desc" && progStop >= minTime && progStart <= maxTime) progDesc += txt
@@ -5088,61 +5329,10 @@ jobs:
                       }
 
                       if (mergedByName.isNotEmpty()) {
-                          saveEpgToCacheFile(cacheFile, mergedByName)
-                          prefs.edit().putLong("last_epg_sync_v24_ms", System.currentTimeMillis()).apply()
+                          CoreEngines.saveEpgToStreamCache(cacheFile, mergedByName)
+                          prefs.edit().putLong("last_epg_sync_v25_ms", System.currentTimeMillis()).apply()
                       }
                   }
-              }
-
-              private fun saveEpgToCacheFile(file: File, byName: Map<String, List<EpgProgram>>) {
-                  try {
-                      val root = JSONObject()
-                      for ((k, list) in byName) {
-                          val arr = JSONArray()
-                          for (p in list) arr.put(JSONObject().apply { put("t", p.title); put("d", p.desc); put("s", p.startMs); put("e", p.stopMs) })
-                          root.put(k, arr)
-                      }
-                      file.writeText(root.toString())
-                  } catch (_: Exception) {}
-              }
-
-              private fun restoreEpgFromCacheFile(file: File): Boolean {
-                  return try {
-                      val now = System.currentTimeMillis()
-                      val root = JSONObject(file.readText())
-                      val tempByName = HashMap<String, MutableList<EpgProgram>>()
-                      var total = 0
-                      for (k in root.keys()) {
-                          val arr = root.getJSONArray(k)
-                          val list = mutableListOf<EpgProgram>()
-                          for (i in 0 until arr.length()) {
-                              val o = arr.getJSONObject(i)
-                              val stop = o.getLong("e")
-                              if (stop >= now - 2 * 3600_000L) {
-                                  list.add(EpgProgram(o.getString("t"), o.optString("d", ""), o.getLong("s"), stop))
-                                  total++
-                              }
-                          }
-                          if (list.isNotEmpty()) tempByName[k] = list
-                      }
-                      if (total > 0) {
-                          runOnUiThread { epgByName.clear(); epgByName.putAll(tempByName); epgLoadedCount = total }
-                          true
-                      } else false
-                  } catch (_: Exception) { false }
-              }
-
-              private fun parseXmltvDate(raw: String): Long {
-                  if (raw.length < 14) return 0L
-                  return try {
-                      val clean = raw.trim()
-                      val sdf = if (clean.length >= 19 && (clean.contains("+") || clean.contains("-"))) {
-                          SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US)
-                      } else {
-                          SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply { timeZone = TimeZone.getTimeZone("GMT+3") }
-                      }
-                      sdf.parse(clean)?.time ?: 0L
-                  } catch (_: Exception) { 0L }
               }
 
               private fun updateCenterOsdContent() {
@@ -5273,10 +5463,7 @@ jobs:
               }
 
               private fun addLocalPlaylistFile(file: File) {
-                  if (!file.exists() || !file.canRead()) {
-                      Toast.makeText(this, "Не удалось прочитать файл: ${file.absolutePath}", Toast.LENGTH_LONG).show()
-                      return
-                  }
+                  if (!file.exists() || !file.canRead()) return
                   playlists.add(PlaylistEntry(file.name, file.absolutePath, true))
                   activePlaylistIndex = playlists.size - 1; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
               }
@@ -5334,11 +5521,10 @@ jobs:
                   animateMenuAppear(subModalOverlay); subModalList.requestFocus()
               }
 
-              // Пункт 9: В окне теста каналов вместо [+] и [-] автоматически рисуются объёмные зелёные и красные сферы GraphicOrbSpan!
               private fun openAnalyzerGroupsModal(firstOpen: Boolean = false) {
                   val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
-                  val aliveTotal = channelHealthMap.values.count { it }
-                  val deadTotal = channelHealthMap.values.count { !it }
+                  val aliveTotal = aliveChannelsAtomic.get()
+                  val deadTotal = deadChannelsAtomic.get()
                   subModalTitle.text = colorizeStatusText("Тест каналов ( [+] $aliveTotal   •   [-] $deadTotal )")
                   subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
                   if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
@@ -5391,15 +5577,19 @@ jobs:
                       val status = when (channelHealthMap[ch.url]) { true -> "[+] Работает"; false -> "[-] Не отвечает"; null -> "[?] Очередь" }
                       "${i + 1}.  $status  —  ${ch.name}"
                   })
-                  subModalList.setOnItemClickListener { _, _, idx, _ -> if (idx in groupChans.indices) { playChannelObj(groupChans[idx]); closeAllMenus() } }
+                  subModalList.setOnItemClickListener { _, _, idx, _ -> if (idx in groupChans.indices) { playChannelObj(groupChans[idx], immediate = true); closeAllMenus() } }
                   if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
               }
 
+              // ИСПРАВЛЕН БАГ №2: Атомарные счётчики O(1) и ограничение частоты обновления UI раз в 2500мс — никаких зависаний при одновременном листании!
               private fun startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>) {
                   val targetChannels = rawTargetChannels.filter { !manualDisabledUrls.contains(it.url) }
                   if (isAnalyzerRunning || targetChannels.isEmpty()) return
                   isAnalyzerRunning = true
                   targetChannels.forEach { channelHealthMap.remove(it.url) }
+                  aliveChannelsAtomic.set(0)
+                  deadChannelsAtomic.set(0)
+
                   val snapshot = targetChannels.toList()
                   val total = snapshot.size
                   val counter = AtomicInteger(0)
@@ -5410,22 +5600,24 @@ jobs:
                   resetMenuInactivityTimer()
 
                   thread(priority = Thread.MIN_PRIORITY) {
-                      val pool = Executors.newFixedThreadPool(3)
+                      val pool = Executors.newFixedThreadPool(2)
                       var lastUiUpdateMs = 0L
                       for (ch in snapshot) {
                           pool.submit {
                               if (!isAnalyzerRunning) return@submit
-                              try { Thread.sleep(60) } catch (_: Exception) {}
+                              try { Thread.sleep(85) } catch (_: Exception) {}
                               val ok = checkStreamAliveWithHardTimeout(ch.url)
                               channelHealthMap[ch.url] = ok
+                              if (ok) aliveChannelsAtomic.incrementAndGet() else deadChannelsAtomic.incrementAndGet()
                               if (ok && autoDisabledUrls.remove(ch.url)) autoRestoredCounter.incrementAndGet()
+
                               val done = counter.incrementAndGet()
                               val now = System.currentTimeMillis()
-                              if (now - lastUiUpdateMs >= 1200L || done >= total) {
+                              if (now - lastUiUpdateMs >= 2500L || done >= total) {
                                   lastUiUpdateMs = now
+                                  val aliveCount = aliveChannelsAtomic.get()
+                                  val deadCount = deadChannelsAtomic.get()
                                   runOnUiThread {
-                                      val aliveCount = snapshot.count { channelHealthMap[it.url] == true }
-                                      val deadCount = snapshot.count { channelHealthMap[it.url] == false }
                                       if (isAnalyzerRunning && done < total) {
                                           analyzerStatusBanner.text = colorizeStatusText("Тест: $done / $total   •   [+] $aliveCount   [-] $deadCount")
                                           val curMenu = menuHistory.lastOrNull()
@@ -5441,10 +5633,10 @@ jobs:
                       pool.shutdownNow()
                       if (isAnalyzerRunning) {
                           isAnalyzerRunning = false
+                          val aliveCount = aliveChannelsAtomic.get()
+                          val deadCount = deadChannelsAtomic.get()
+                          val restored = autoRestoredCounter.get()
                           runOnUiThread {
-                              val aliveCount = snapshot.count { channelHealthMap[it.url] == true }
-                              val deadCount = snapshot.count { channelHealthMap[it.url] == false }
-                              val restored = autoRestoredCounter.get()
                               if (restored > 0) { saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex) }
                               analyzerStatusBanner.text = colorizeStatusText("Тест завершён: [+] $aliveCount  |  [-] $deadCount")
                               uiHandler.postDelayed({ analyzerStatusBanner.visibility = View.GONE }, 5500L)
@@ -5457,14 +5649,12 @@ jobs:
                   var conn: HttpURLConnection? = null
                   return try {
                       conn = URL(urlStr).openConnection() as HttpURLConnection
-                      conn.setRequestProperty("User-Agent", russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size])
-                      conn.instanceFollowRedirects = true; conn.connectTimeout = 2800; conn.readTimeout = 2800
-                      val targetConn = conn
-                      val killer = Thread { try { Thread.sleep(3100); targetConn.disconnect() } catch (_: Exception) {} }.apply { isDaemon = true; start() }
+                      conn.setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
+                      conn.instanceFollowRedirects = true; conn.connectTimeout = 2500; conn.readTimeout = 2500
                       val code = conn.responseCode
-                      val buf = ByteArray(48)
+                      val buf = ByteArray(32)
                       val readBytes = if (code in 200..299) conn.inputStream.read(buf) else -1
-                      conn.disconnect(); killer.interrupt()
+                      conn.disconnect()
                       code in 200..299 && readBytes > 0
                   } catch (_: Exception) { try { conn?.disconnect() } catch (_: Exception) {}; false }
               }
@@ -5571,73 +5761,6 @@ jobs:
                   animateMenuAppear(subModalOverlay); nameInput.requestFocus()
               }
 
-              // Пункт 1: Фильтр для полного исключения арабскоязычных каналов во всех вкладках + акцент на русскоязычные каналы во вкладке Кино!
-              private fun isArabicChannel(rawName: String, rawGroup: String, url: String): Boolean {
-                  if (rawName.any { it.code in 0x0600..0x06FF || it.code in 0x0750..0x077F }) return true
-                  val lower = "$rawName $rawGroup $url".lowercase()
-                  val arabKeywords = listOf(
-                      "arab", "al jazeera", "aljazeera", "rotana", "mbc", "osn", "shahid", "alarabiya", "al arabiya",
-                      "beinsport", "bein ", "alkass", "al kass", "dubai", "abu dhabi", "sharjah", "kuwait", "qatar",
-                      "saudi", "egypt", "nilesat", "badr", "koora", "quran", "sunnah", "iqraa", "majd", "spacetoon arab"
-                  )
-                  return arabKeywords.any { lower.contains(it) }
-              }
-
-              private fun isRussianOrCisChannel(name: String, url: String): Boolean {
-                  if (name.any { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }) return true
-                  val l = "$name $url".lowercase()
-                  return l.contains(".ru") || l.contains(".kz") || l.contains(".by") || l.contains(".am") ||
-                      l.contains("kino") || l.contains("film") || l.contains("tv1000") || l.contains("tv 1000") ||
-                      l.contains("viasat") || l.contains("amedia") || l.contains("setanta") || l.contains("match")
-              }
-
-              // Пункт 10: Расширенная классификация для наполнения группы "Развлечения"
-              private fun mapToTenCategories(rawGroup: String, name: String): String {
-                  val text = (rawGroup + " " + name).lowercase()
-                  return when {
-                      text.contains("2k") || text.contains("qhd") || text.contains("quadhd") || text.contains("1440p") || text.contains("2160p") || text.contains("uhd") || text.contains("4k") -> "2K"
-                      text.contains("взросл") || text.contains("18+") || text.contains("adult") || text.contains("xxx") -> "Прочее"
-                      text.contains("спорт") || text.contains("футбол") || text.contains("матч") || text.contains("сетанта") || text.contains("setanta") || text.contains("sport") || text.contains("khl") || text.contains("кхл") || text.contains("ufc") || text.contains("бокс") -> "Спорт"
-                      text.contains("кино") || text.contains("фильм") || text.contains("сериал") || text.contains("movie") || text.contains("cinema") || text.contains("film") || text.contains("tv1000") || text.contains("tv 1000") || text.contains("иллюзион") || text.contains("комедия") || text.contains("детектив") -> "Кино и сериалы"
-                      text.contains("детск") || text.contains("мульт") || text.contains("kids") || text.contains("карусель") || text.contains("nickelodeon") || text.contains("cartoon") || text.contains("disney") -> "Детские"
-                      text.contains("наук") || text.contains("док") || text.contains("познав") || text.contains("science") || text.contains("discovery") || text.contains("nat geo") || text.contains("animal") || text.contains("планет") || text.contains("viasat") || text.contains("история") -> "Познавательные"
-                      text.contains("муз") || text.contains("music") || text.contains("mtv") || text.contains("bridge") || text.contains("stingray") || text.contains("муз-тв") || text.contains("ru.tv") || text.contains(" шансон") -> "Музыка"
-                      text.contains("развлеч") || text.contains("шоу") || text.contains("тнт") || text.contains("стс") || text.contains("пятница") || text.contains("суббота") || text.contains("ю тв") || text.contains("че!") || text.contains("2x2") || text.contains("2х2") || text.contains("квн") || text.contains("сарафан") || text.contains("юмор") || text.contains("entertainment") || text.contains("comedy") || text.contains("fashion") || text.contains("lifestyle") || text.contains("еда") || text.contains("кухня") -> "Развлечения"
-                      text.contains("новост") || text.contains("общ") || text.contains("news") || text.contains("россия") || text.contains("первый") || text.contains("нтв") || text.contains("рбк") || text.contains("рен") || text.contains("твц") || text.contains("пятый") || text.contains("домашний") || text.contains("звезда") || text.contains("мир") -> "Новости и общие"
-                      else -> "Прочее"
-                  }
-              }
-
-              private fun parseM3uLinesDeduplicated(lines: List<String>, filterQuality: Boolean): List<Channel> {
-                  val byNormName = LinkedHashMap<String, Channel>()
-                  var currentRawName = "Канал"; var currentGroup = ""; var currentTvgId = ""
-                  val quote = 34.toChar().toString()
-                  for (line in lines) {
-                      val trimmed = line.trim()
-                      if (trimmed.startsWith("#EXTINF:")) {
-                          currentRawName = trimmed.substringAfterLast(",").trim()
-                          currentGroup = if (trimmed.contains("group-title=$quote")) trimmed.substringAfter("group-title=$quote").substringBefore(quote) else ""
-                          currentTvgId = if (trimmed.contains("tvg-id=$quote")) trimmed.substringAfter("tvg-id=$quote").substringBefore(quote) else ""
-                      } else if (trimmed.startsWith("#EXTGRP:")) {
-                          currentGroup = trimmed.substringAfter("#EXTGRP:").trim()
-                      } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-                          if (isArabicChannel(currentRawName, currentGroup, trimmed)) continue
-                          val cat = customCategoryMap[trimmed] ?: mapToTenCategories(currentGroup, currentRawName)
-                          // Во вкладке Кино оставляем только русскоязычные / СНГ каналы!
-                          if (filterQuality && cat == "Кино и сериалы" && !isRussianOrCisChannel(currentRawName, trimmed)) continue
-
-                          val cleanTitle = cleanChannelDisplayName(currentRawName)
-                          val ch = Channel(cleanTitle, trimmed, cat, currentTvgId)
-                          val key = normalizeName(cleanTitle).ifEmpty { trimmed }
-                          val existing = byNormName[key]
-                          if (existing == null || currentRawName.contains("50fps", true) || currentRawName.contains("1080", true)) {
-                              byNormName[key] = ch
-                          }
-                      }
-                  }
-                  return byNormName.values.toList()
-              }
-
               private fun ensureDefaultPlaylists() {
                   playlists.removeAll { it.source == "BUILTIN_VIP_PROVIDER" }
                   if (playlists.isEmpty()) playlists.add(PlaylistEntry("Основной (RU + Футбол 50fps + 2K)", "BUILTIN_OPEN_RU", false))
@@ -5648,9 +5771,11 @@ jobs:
                   return !manualDisabledUrls.contains(ch.url) && !autoDisabledUrls.contains(ch.url) && !disabledCategories.contains(effectiveCategory(ch))
               }
 
+              // Потоковая загрузка плейлистов с контролем поколений (отменяет устаревшие потоки при быстром переключении)
               private fun loadActivePlaylist(autoPlayLast: Boolean) {
                   ensureDefaultPlaylists()
                   val entry = playlists[activePlaylistIndex]
+                  val myGen = ++playlistLoadGeneration
                   thread {
                       try {
                           val finalChannels: List<Channel> = when {
@@ -5658,24 +5783,38 @@ jobs:
                                   val result = mutableListOf<Channel>()
                                   val existingKeys = HashSet<String>()
                                   for (extra in BuiltinCatalog.extraOpenStreams) {
-                                      if (isArabicChannel(extra.name, extra.category, extra.url)) continue
-                                      val cleanTitle = cleanChannelDisplayName(extra.name)
-                                      if (existingKeys.add(normalizeName(cleanTitle) + "_" + extra.category)) {
+                                      if (CoreEngines.isArabicChannel(extra.name, extra.category, extra.url)) continue
+                                      val cleanTitle = CoreEngines.cleanChannelDisplayName(extra.name)
+                                      if (existingKeys.add(CoreEngines.normalizeName(cleanTitle) + "_" + extra.category)) {
                                           result.add(Channel(cleanTitle, extra.url, customCategoryMap[extra.url] ?: extra.category, extra.tvgId))
                                       }
                                   }
-                                  val combinedLines = mutableListOf<String>()
+                                  val targetMap = LinkedHashMap<String, Channel>()
                                   for (srcUrl in openRusSources) {
-                                      try { combinedLines.addAll(openStreamWithRussiaBypass(srcUrl, 6000).bufferedReader().readLines()) } catch (_: Exception) {}
+                                      if (myGen != playlistLoadGeneration) return@thread
+                                      try {
+                                          val reader = CoreEngines.openStreamWithBypass(srcUrl, userAgentIndex, dohEnabled, 6000).bufferedReader()
+                                          CoreEngines.parseM3uReaderIntoMap(reader, targetMap, customCategoryMap, true)
+                                      } catch (_: Exception) {}
                                   }
-                                  for (ch in parseM3uLinesDeduplicated(combinedLines, true)) {
-                                      if (existingKeys.add(normalizeName(ch.name) + "_" + ch.category)) result.add(ch)
+                                  for (ch in targetMap.values) {
+                                      if (existingKeys.add(CoreEngines.normalizeName(ch.name) + "_" + ch.category)) result.add(ch)
                                   }
                                   result
                               }
-                              entry.isLocal -> parseM3uLinesDeduplicated(File(entry.source).readLines(), false)
-                              else -> parseM3uLinesDeduplicated(openStreamWithRussiaBypass(entry.source, 10000).bufferedReader().readLines(), false)
+                              entry.isLocal -> {
+                                  val targetMap = LinkedHashMap<String, Channel>()
+                                  CoreEngines.parseM3uReaderIntoMap(BufferedReader(FileReader(File(entry.source))), targetMap, customCategoryMap, false)
+                                  targetMap.values.toList()
+                              }
+                              else -> {
+                                  val targetMap = LinkedHashMap<String, Channel>()
+                                  val reader = CoreEngines.openStreamWithBypass(entry.source, userAgentIndex, dohEnabled, 10000).bufferedReader()
+                                  CoreEngines.parseM3uReaderIntoMap(reader, targetMap, customCategoryMap, false)
+                                  targetMap.values.toList()
+                              }
                           }
+                          if (myGen != playlistLoadGeneration) return@thread
                           runOnUiThread {
                               allChannels.clear(); allChannels.addAll(finalChannels); updateCategoriesList()
                               val currentList = allChannels.filter { isChannelActive(it) }
@@ -5683,15 +5822,16 @@ jobs:
                                   val targetCh = (if (autoPlayLast && lastSavedChannelUrl.isNotEmpty()) currentList.firstOrNull { it.url == lastSavedChannelUrl } else null) ?: currentList[0]
                                   selectCategory(categories.indexOf(effectiveCategory(targetCh)).takeIf { it >= 2 } ?: 1)
                                   openChannelsDirectlyWithCurrentFocus = true
-                                  playChannelObj(targetCh)
+                                  playChannelObj(targetCh, immediate = true)
                               } else selectCategory(1)
                           }
                       } catch (_: Exception) {
+                          if (myGen != playlistLoadGeneration) return@thread
                           runOnUiThread {
                               if (allChannels.isEmpty()) {
-                                  allChannels.addAll(BuiltinCatalog.extraOpenStreams.filter { !isArabicChannel(it.name, it.category, it.url) })
+                                  allChannels.addAll(BuiltinCatalog.extraOpenStreams.filter { !CoreEngines.isArabicChannel(it.name, it.category, it.url) })
                                   updateCategoriesList(); selectCategory(1)
-                                  displayedChannels.firstOrNull()?.let { playChannelObj(it) }
+                                  displayedChannels.firstOrNull()?.let { playChannelObj(it, immediate = true) }
                               }
                           }
                       }
@@ -5722,7 +5862,6 @@ jobs:
                       "Все каналы" -> activeAll
                       else -> activeAll.filter { effectiveCategory(it) == catName }
                   }
-                  // В категории Кино и сериалы русскоязычные каналы поднимаем в самый верх!
                   val comparator = Comparator<Channel> { a, b ->
                       if (catName == "Кино и сериалы") {
                           val aRu = a.name.any { it in 'а'..'я' || it in 'А'..'Я' }
@@ -5740,7 +5879,6 @@ jobs:
                   refreshChannelAdapter()
               }
 
-              // Пункт 10: Во всех группах полностью убраны метки (RU), (EN), (RU/EN)!
               private fun refreshChannelAdapter() {
                   val snapshot = displayedChannels.toList()
                   channelAdapter.clear()
@@ -5768,11 +5906,24 @@ jobs:
                   }.start()
               }
 
-              private fun playChannelObj(channel: Channel) {
-                  if (currentChannel != null && currentChannel?.url != channel.url) {
+              // ИСПРАВЛЕН БАГ №2: Debounce (160мс) для быстрого перелистывания каналов — ExoPlayer.prepare() вызывается только когда вы остановились на канале!
+              private val executeDebouncedPlayRunnable = Runnable {
+                  val target = pendingDebouncedChannel ?: return@Runnable
+                  try {
+                      player?.setMediaItem(createLiveMediaItem(target.url))
+                      player?.prepare()
+                      player?.play()
+                  } catch (_: Exception) {}
+                  uiHandler.removeCallbacks(preloadNeighborsRunnable)
+                  if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 1500L)
+              }
+
+              private fun playChannelObj(channel: Channel, immediate: Boolean = false, silentSwap: Boolean = false) {
+                  if (!silentSwap && currentChannel != null && currentChannel?.url != channel.url) {
                       previousChannel = currentChannel
                   }
                   currentChannel = channel
+                  pendingDebouncedChannel = channel
                   lastSavedChannelUrl = channel.url
                   lowSignalStuckSeconds = 0
                   consecutiveDropFailures = 0
@@ -5780,21 +5931,22 @@ jobs:
 
                   uiHandler.removeCallbacks(hideMorphFallbackRunnable)
                   morphTransitionOverlay.visibility = View.VISIBLE
-                  morphTransitionOverlay.alpha = 0.55f
-                  uiHandler.postDelayed(hideMorphFallbackRunnable, 450L)
+                  morphTransitionOverlay.alpha = 0.50f
+                  uiHandler.postDelayed(hideMorphFallbackRunnable, 420L)
 
-                  try {
-                      player?.setMediaItem(createLiveMediaItem(channel.url))
-                      player?.prepare()
-                      player?.play()
-                  } catch (_: Exception) {}
+                  uiHandler.removeCallbacks(executeDebouncedPlayRunnable)
+                  if (immediate) {
+                      executeDebouncedPlayRunnable.run()
+                  } else {
+                      uiHandler.postDelayed(executeDebouncedPlayRunnable, 160L)
+                  }
 
                   val topBadge = if (topUrls.contains(channel.url)) "▲ " else ""
                   val star = if (favoriteUrls.contains(channel.url)) "★ " else ""
                   val (epg, _) = getCurrentAndNextEpg(channel)
                   val epgLine = if (epg != null) "\n🎬 " + epg.title else ""
 
-                  if (menuHistory.isEmpty() && showChannelBannerOnSwitch) {
+                  if (!silentSwap && menuHistory.isEmpty() && showChannelBannerOnSwitch) {
                       showBanner(topBadge + star + channel.name + "  •  " + effectiveCategory(channel) + epgLine)
                   } else {
                       currentChannelBanner.visibility = View.GONE
@@ -5804,9 +5956,6 @@ jobs:
                   if (centerOsdPanel.visibility == View.VISIBLE) updateCenterOsdContent()
                   if (infoPanel.visibility == View.VISIBLE) updateStreamInfoText()
                   if (fullEpgOverlay.visibility == View.VISIBLE) openFullScreenChannelEpg()
-
-                  uiHandler.removeCallbacks(preloadNeighborsRunnable)
-                  uiHandler.postDelayed(preloadNeighborsRunnable, 1200L)
               }
 
               private val preloadNeighborsRunnable = Runnable { currentChannel?.let { preloadNeighboringChannels(it) } }
@@ -5931,7 +6080,7 @@ jobs:
                   val idx = list.indexOfFirst { it.url == currentChannel?.url }
                   val targetIdx = if (idx == -1) 0 else (idx + offset + list.size) % list.size
                   focusedChannelPos = targetIdx
-                  playChannelObj(list[targetIdx])
+                  playChannelObj(list[targetIdx], immediate = false)
               }
 
               override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
@@ -5952,7 +6101,6 @@ jobs:
                   return super.onKeyUp(keyCode, event)
               }
 
-              // Пункт 5: При включенном двухоконном режиме двойное нажатие кнопки Назад («Прыжок назад») меняет основной и второй каналы местами!
               override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
                   if (keyCode == KeyEvent.KEYCODE_BACK) {
                       if (navigateBackInMenu()) return true
@@ -5964,8 +6112,7 @@ jobs:
                               swapMainAndDualStream()
                           } else {
                               val prev = previousChannel
-                              if (prev != null) playChannelObj(prev)
-                              else Toast.makeText(this, "Предыдущий канал ещё не выбран", Toast.LENGTH_SHORT).show()
+                              if (prev != null) playChannelObj(prev, immediate = true)
                           }
                       } else {
                           lastBackTapMs = now
@@ -6039,7 +6186,7 @@ jobs:
           path: app/permanent_key.jks
           key: mibox-iptv-immutable-signing-jks-v1
 
-      - name: Step 4 - Ensure Keystore Exists and Compile TiViLook v2.4 APK
+      - name: Step 4 - Ensure Keystore Exists and Compile TiViLook v2.5 APK
         run: |
           mkdir -p ~/.android
           if [ ! -f app/permanent_key.jks ]; then
@@ -6053,10 +6200,10 @@ jobs:
           fi
           cp app/permanent_key.jks ~/.android/debug.keystore || true
           gradle assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk TiViLook-v2.4.${GITHUB_RUN_NUMBER}.apk
+          cp app/build/outputs/apk/release/app-release.apk TiViLook-v2.5.${GITHUB_RUN_NUMBER}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: TiViLook-v2.4.${{ github.run_number }}
-          path: TiViLook-v2.4.${{ github.run_number }}.apk
+          name: TiViLook-v2.5.${{ github.run_number }}
+          path: TiViLook-v2.5.${{ github.run_number }}.apk
