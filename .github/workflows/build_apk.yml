@@ -27,8 +27,19 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.5
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+
+      - name: Ensure gradle.properties has AndroidX enabled
+        run: |
+          cat << 'PROPS' > gradle.properties
+          org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.nonTransitiveRClass=false
+          PROPS
 
       - name: Step 3.5 - Generate Clean Kotlin Modules & RecyclerView v2.6
         run: |
@@ -4388,7 +4399,6 @@ jobs:
         with:
           name: TiViLook-v2.6.${{ github.run_number }}
           path: TiViLook-v2.6.${{ github.run_number }}.apk
-
       - name: Step 5 - Auto-Commit Clean Kotlin Files & Slim Down Workflow (Пункт 1)
         run: |
           cat << 'SLIM_YML' > .github/workflows/build_apk.yml
@@ -4419,8 +4429,19 @@ jobs:
                     java-version: '17'
                     distribution: 'temurin'
 
-                - name: Setup Gradle
+                - name: Setup Gradle 8.5
                   uses: gradle/actions/setup-gradle@v3
+                  with:
+                    gradle-version: '8.5'
+
+                - name: Ensure gradle.properties has AndroidX enabled
+                  run: |
+                    cat << 'PROPS' > gradle.properties
+                    org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
+                    android.useAndroidX=true
+                    android.enableJetifier=true
+                    android.nonTransitiveRClass=false
+                    PROPS
 
                 - name: Bump Version Number
                   run: |
@@ -4464,7 +4485,8 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add app/ .github/workflows/build_apk.yml
+          git add gradle.properties app/ .github/workflows/build_apk.yml
           git reset app/permanent_key.jks || true
           git commit -m "chore: migrate to clean modular Kotlin files and RecyclerView v2.6 [skip ci]" || true
           git push || true
+      
