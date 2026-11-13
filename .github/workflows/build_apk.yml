@@ -1,14 +1,26 @@
-name: Build MiBox IPTV APK
+name: Build TiViLook APK
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main, master ]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tivilook-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -17,1877 +29,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.4'
-          cache-disabled: true
 
-      - name: Step 1 - Generate Gradle and Resources
-        run: |
-          python3 - << 'PYEOF'
-          import os, subprocess
-
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "4"))
-          ver_code = 200 + run_num
-          ver_name = f"0.4.{run_num}"
-
-          os.makedirs("app/src/main/java/com/example/miboxiptv", exist_ok=True)
-          os.makedirs("app/src/main/res/drawable", exist_ok=True)
-
-          with open("settings.gradle", "w") as f:
-              f.write('''pluginManagement {
-              repositories { google(); mavenCentral(); gradlePluginPortal() }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories { google(); mavenCentral() }
-          }
-          rootProject.name = "MiBoxIPTV"
-          include ":app"
-          ''')
-
-          with open("build.gradle", "w") as f:
-              f.write('''plugins {
-              id "com.android.application" version "8.2.2" apply false
-              id "org.jetbrains.kotlin.android" version "1.9.22" apply false
-          }
-          ''')
-
-          with open("gradle.properties", "w") as f:
-              f.write("android.useAndroidX=true\n")
-
-          with open("app/build.gradle", "w") as f:
-              f.write(f'''plugins {{
-              id "com.android.application"
-              id "org.jetbrains.kotlin.android"
-          }}
-          android {{
-              namespace "com.example.miboxiptv"
-              compileSdk 34
-              defaultConfig {{
-                  applicationId "com.example.miboxiptv"
-                  minSdk 23
-                  targetSdk 34
-                  versionCode {ver_code}
-                  versionName "{ver_name}"
-              }}
-              compileOptions {{
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }}
-              kotlinOptions {{ jvmTarget = "17" }}
-          }}
-                    dependencies {{
-              implementation "androidx.core:core-ktx:1.12.0"
-              implementation "androidx.appcompat:appcompat:1.6.1"
-              implementation "androidx.media3:media3-common:1.2.1"
-              implementation "androidx.media3:media3-datasource:1.2.1"
-              implementation "androidx.media3:media3-exoplayer:1.2.1"
-              implementation "androidx.media3:media3-exoplayer-hls:1.2.1"
-              implementation "androidx.media3:media3-ui:1.2.1"
-          }}
-          ''')
-
-          with open("app/src/main/res/drawable/ic_launcher.xml", "w") as f:
-              f.write('''<?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="108dp" android:height="108dp"
-              android:viewportWidth="108" android:viewportHeight="108">
-              <path android:fillColor="#141026" android:pathData="M0,0h108v108h-108z"/>
-              <path android:fillColor="#00E5FF" android:pathData="M18,26h72c3.3,0 6,2.7 6,6v42c0,3.3 -2.7,6 -6,6H18c-3.3,0 -6,-2.7 -6,-6V32c0,-3.3 2.7,-6 6,-6z"/>
-              <path android:fillColor="#1E1836" android:pathData="M22,30h64v38H22z"/>
-              <path android:fillColor="#FF2A85" android:pathData="M45,39l22,10l-22,10z"/>
-              <path android:fillColor="#00E5FF" android:pathData="M36,84h36v4H36z"/>
-          </vector>''')
-
-          with open("app/src/main/res/drawable/ic_banner.xml", "w") as f:
-              f.write('''<?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="320dp" android:height="180dp"
-              android:viewportWidth="320" android:viewportHeight="180">
-              <path android:fillColor="#141026" android:pathData="M0,0h320v180h-320z"/>
-              <path android:fillColor="#1F193D" android:pathData="M0,130h320v50h-320z"/>
-              <path android:fillColor="#00E5FF" android:pathData="M96,32h128c5.5,0 10,4.5 10,10v76c0,5.5 -4.5,10 -10,10H96c-5.5,0 -10,-4.5 -10,-10V42c0,-5.5 4.5,-10 10,-10z"/>
-              <path android:fillColor="#141026" android:pathData="M102,38h116v68H102z"/>
-              <path android:fillColor="#FF2A85" android:pathData="M146,54l36,18l-36,18z"/>
-              <path android:fillColor="#00E5FF" android:pathData="M126,136h68v6H126z"/>
-          </vector>''')
-
-          with open("app/src/main/AndroidManifest.xml", "w") as f:
-              f.write('''<?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET" />
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-              <uses-feature android:name="android.software.leanback" android:required="false" />
-              <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-              <application
-                  android:allowBackup="true"
-                  android:banner="@drawable/ic_banner"
-                  android:icon="@drawable/ic_launcher"
-                  android:label="MiBox IPTV"
-                  android:hardwareAccelerated="true"
-                  android:theme="@style/Theme.AppCompat.NoActionBar"
-                  android:usesCleartextTraffic="true">
-                  <activity
-                      android:name=".MainActivity"
-                      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
-                      android:exported="true"
-                      android:screenOrientation="landscape">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                          <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>''')
-          PYEOF
-
-      - name: Step 2 - Generate Builtin Channels Catalog
-        run: |
-          python3 - << 'PYEOF'
-          with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "w") as f:
-              f.write(r'''package com.example.miboxiptv
-
-          object BuiltinCatalog {
-              // Базовый адрес и ключ разбиты на части, чтобы боты GitHub не индексировали прямую ссылку
-              private val p1 = "http://tsmxkuov."
-              private val p2 = "rostelekom.xyz/iptv/"
-              val defaultToken = "8FUPZRUS" + "Y2SKCM"
-
-              // Открытые международные потоки Sport / Music / RU для обогащения 1-го плейлиста
-              val extraOpenStreams = listOf(
-                  Channel("Red Bull TV FHD (EN)", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master_3360.m3u8", "Спорт", ""),
-                  Channel("Red Bull Moto/Snow FHD", "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8", "Спорт", ""),
-                  Channel("Fuel TV Action Sports FHD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/fuel-tv/manifest.m3u8", "Спорт", ""),
-                  Channel("Trace Sport Stars FHD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-sport-stars/manifest.m3u8", "Спорт", ""),
-                  Channel("MMA TV / Fight Sports HD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/fight-sports/manifest.m3u8", "Спорт", ""),
-                  Channel("World Poker Tour FHD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/world-poker-tour/manifest.m3u8", "Спорт", ""),
-                  Channel("Deluxe Music HD (EN/DE)", "https://sdn-global-live-streaming-packager-cache.3qsdn.com/13456/13456_264_live.m3u8", "Музыка", ""),
-                  Channel("Trace Urban FHD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-urban/manifest.m3u8", "Музыка", ""),
-                  Channel("Trace Latina FHD (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/trace-latina/manifest.m3u8", "Музыка", ""),
-                  Channel("Clubbing TV 1080p (EN)", "https://d35j504z0x2vu2.cloudfront.net/v1/master/0bc8e8376bd8417a1b6761138aa41c26c7309312/clubbing-tv/manifest.m3u8", "Музыка", ""),
-                  Channel("Now 80s Music FHD (EN)", "https://lightning-now80s-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
-                  Channel("Now 90s Music FHD (EN)", "https://lightning-now90s-samsunguk.amagi.tv/playlist.m3u8", "Музыка", ""),
-                  Channel("Now Rock FHD (EN)", "https://lightning-nowrock-samsunguk.amagi.tv/playlist.m3u8", "Музыка", "")
-              )
-
-              // Встроенный второй плейлист из файла пользователя (ID|Название|Категория)
-              private val rawVipEntries = """
-          204|Первый канал HD|Новости и общие
-          15131|Первый канал HD 50|Новости и общие
-          205|Россия 1 HD|Новости и общие
-          15133|Россия 1 HD 50|Новости и общие
-          7252|Россия 1 HD orig|Новости и общие
-          213|НТВ HD|Новости и общие
-          6303|СТС HD|Развлечения
-          237|ТНТ HD|Развлечения
-          10024|ТНТ HD 50|Развлечения
-          7251|ТНТ HD Orig|Развлечения
-          5031|Пятница! HD|Развлечения
-          5033|ТВ3 HD|Развлечения
-          2024|Рен ТВ HD|Новости и общие
-          19222|ТВЦ HD|Новости и общие
-          15115|Звезда HD|Новости и общие
-          15116|Домашний HD|Развлечения
-          15118|Суббота HD|Развлечения
-          15119|Мир HD|Новости и общие
-          2107|Мир 24 HD|Новости и общие
-          16075|РБК HD|Новости и общие
-          10029|РБК 50|Новости и общие
-          18039|Известия FHD|Новости и общие
-          18038|360 Новости HD|Новости и общие
-          2065|360 HD|Новости и общие
-          507|Россия 24|Новости и общие
-          523|Москва 24|Новости и общие
-          715|Санкт-Петербург|Новости и общие
-          6144|78 Канал Санкт-Петербург|Новости и общие
-          19220|Первый Псковский|Новости и общие
-          20139|Вместе-РФ FHD|Новости и общие
-          846|Русский Север FHD|Новости и общие
-          224|Кинопремьера HD|Кино и сериалы
-          7222|Премиальное HD|Кино и сериалы
-          10017|Премиальное HD 50|Кино и сериалы
-          904|Остросюжетное HD|Кино и сериалы
-          7244|Киносемья HD|Кино и сериалы
-          7245|Киносвидание HD|Кино и сериалы
-          7247|Страшное HD|Кино и сериалы
-          7248|Кинокомедия HD|Кино и сериалы
-          7249|Киномикс HD|Кино и сериалы
-          7250|Кинохит HD|Кино и сериалы
-          10045|Мужское Кино HD|Кино и сериалы
-          2097|Кино ТВ HD|Кино и сериалы
-          19229|Киносерия HD|Кино и сериалы
-          19231|Наше Новое Кино HD|Кино и сериалы
-          911|Дом Кино Премиум HD|Кино и сериалы
-          7347|Мосфильм. Золотая коллекция HD|Кино и сериалы
-          229|Amedia Premium HD|Кино и сериалы
-          6010|Amedia Hit HD|Кино и сериалы
-          2046|Amedia 2 HD|Кино и сериалы
-          202|Viju+ Premiere HD|Кино и сериалы
-          200|Viju+ Comedy HD|Кино и сериалы
-          201|Viju+ Megahit HD|Кино и сериалы
-          2443|Viju+ Serial HD|Кино и сериалы
-          6386|Viju TV1000 Action HD|Кино и сериалы
-          6387|Viju TV1000 HD|Кино и сериалы
-          6388|Viju TV1000 Русское HD|Кино и сериалы
-          209|Hollywood HD|Кино и сериалы
-          19216|Fox HD|Кино и сериалы
-          14003|Fox Life HD|Кино и сериалы
-          2062|.red HD|Кино и сериалы
-          9135|Кинеко HD|Кино и сериалы
-          6389|Сапфир HD|Кино и сериалы
-          18036|START Air HD|Кино и сериалы
-          19248|START World HD|Кино и сериалы
-          20211|KION Хит HD|Кино и сериалы
-          7260|KinoJam 1 HD|Кино и сериалы
-          7261|KinoJam 2 HD|Кино и сериалы
-          20209|DetectiveJam HD|Кино и сериалы
-          20210|FamilyJam HD|Кино и сериалы
-          2056|Киноужас HD|Кино и сериалы
-          5052|Победа HD|Кино и сериалы
-          2436|Блокбастер HD|Кино и сериалы
-          2438|Хит HD|Кино и сериалы
-          2439|Кинопоказ HD|Кино и сериалы
-          2440|Наше Мужское HD|Кино и сериалы
-          2441|Камеди HD|Кино и сериалы
-          6299|Шокирующее HD|Кино и сериалы
-          16062|НТВ Хит HD|Кино и сериалы
-          744|НТВ Сериал|Кино и сериалы
-          16021|FAN HD|Кино и сериалы
-          6396|Trash HD|Кино и сериалы
-          11015|BCU Кинозал Premiere 1 HD|Кино и сериалы
-          11016|BCU Кинозал Premiere 2 HD|Кино и сериалы
-          11017|BCU Кинозал Premiere 3 HD|Кино и сериалы
-          11026|BCU СССР HD|Кино и сериалы
-          11027|BCU Action HD|Кино и сериалы
-          11028|BCU Catastrophe HD|Кино и сериалы
-          11029|BCU Cinema HD|Кино и сериалы
-          11030|BCU Cinema+ HD|Кино и сериалы
-          11031|BCU Comedy HD|Кино и сериалы
-          11032|BCU Fantastic HD|Кино и сериалы
-          11033|BCU FilMystic HD|Кино и сериалы
-          11037|BCU Kinorating HD|Кино и сериалы
-          11038|BCU Marvel HD|Кино и сериалы
-          11039|BCU Premiere HD|Кино и сериалы
-          11040|BCU Romantic HD|Кино и сериалы
-          11041|BCU Russian HD|Кино и сериалы
-          11042|BCU VHS HD|Кино и сериалы
-          11045|BCU Ultra 4K|Кино и сериалы
-          11046|BCU RuSerial HD|Кино и сериалы
-          11048|BCU Criminal HD|Кино и сериалы
-          20112|CineMan Premium|Кино и сериалы
-          11005|CineMan Top|Кино и сериалы
-          11006|CineMan Action|Кино и сериалы
-          11007|CineMan Thriller|Кино и сериалы
-          11009|CineMan Marvel|Кино и сериалы
-          11010|CineMan Ужасы|Кино и сериалы
-          11011|CineMan Комедия|Кино и сериалы
-          11012|CineMan VHS|Кино и сериалы
-          11013|CineMan РуКино|Кино и сериалы
-          13011|MM NewFilm 1 HD|Кино и сериалы
-          13012|MM NewFilm 2 HD|Кино и сериалы
-          13013|MM NewFilm 3 HD|Кино и сериалы
-          13014|MM NewFilm RU HD|Кино и сериалы
-          13028|MM Боевик HD|Кино и сериалы
-          13034|MM Катастрофа HD|Кино и сериалы
-          13036|MM Киберпанк HD|Кино и сериалы
-          13038|MM Комедия HD|Кино и сериалы
-          13039|MM Криминал HD|Кино и сериалы
-          13048|MM Приключения HD|Кино и сериалы
-          13056|MM Супергерои HD|Кино и сериалы
-          13057|MM Flip UHD|Кино и сериалы
-          13058|MM Триллер HD|Кино и сериалы
-          13062|MM Фантастика HD|Кино и сериалы
-          13099|MM Ужасы HD|Кино и сериалы
-          15087|Liberty DC FHD|Кино и сериалы
-          15088|Liberty Ужасы 4K|Кино и сериалы
-          15089|Liberty Триллер 4K|Кино и сериалы
-          15090|Liberty Marvel 4K|Кино и сериалы
-          15096|Liberty Боевики FHD|Кино и сериалы
-          15110|Liberty Кино Микс 4K|Кино и сериалы
-          16054|Liberty Комедии FHD|Кино и сериалы
-          16055|Liberty Сериалы FHD|Кино и сериалы
-          18046|Liberty РусФильм 4K|Кино и сериалы
-          18178|Liberty Семейный 4K|Кино и сериалы
-          20163|Yosso TV Netflix|Кино и сериалы
-          20165|Yosso TV Best 60 FPS|Кино и сериалы
-          14177|Yosso TV New Кино|Кино и сериалы
-          15105|Yosso TV Adrenaline|Кино и сериалы
-          15168|Yosso TV Thriller|Кино и сериалы
-          16078|KLI Cinema HD|Кино и сериалы
-          16080|KLI Comedy HD|Кино и сериалы
-          18048|KLI Premium HD|Кино и сериалы
-          18049|KLI Russian HD|Кино и сериалы
-          18050|KLI Fantastic HD|Кино и сериалы
-          18174|KLI Thriller HD|Кино и сериалы
-          20051|KLI Action FHD|Кино и сериалы
-          20177|KLI Netflix HD|Кино и сериалы
-          31632|KLI MARVEL HD|Кино и сериалы
-          31720|СТРАХ FHD (2.0)|Кино и сериалы
-          31722|ФАНТАСТИКА FHD (2.0)|Кино и сериалы
-          19274|BOX Franchise HD|Кино и сериалы
-          19277|BOX Gangster HD|Кино и сериалы
-          19278|BOX Oscar HD|Кино и сериалы
-          19281|BOX Serial HD|Кино и сериалы
-          19421|BOX Cyber HD|Кино и сериалы
-          31637|VeleS 60FPS|Кино и сериалы
-          31641|VeleS Premiere|Кино и сериалы
-          31690|UZ Films 60 fps HD|Кино и сериалы
-          19315|Prokop TV Cinema 60 fps|Кино и сериалы
-          19272|Prokop TV Netflix|Кино и сериалы
-          212|Матч ТВ HD|Спорт
-          10020|Матч ТВ HD 50|Спорт
-          220|Матч! Премьер HD|Спорт
-          10021|Матч! Премьер HD 50|Спорт
-          222|Матч! Футбол 1 HD|Спорт
-          10015|Матч! Футбол 1 HD 50|Спорт
-          211|Матч! Футбол 2 HD|Спорт
-          10027|Матч! Футбол 2 HD 50|Спорт
-          206|Матч! Футбол 3 HD|Спорт
-          10016|Матч! Футбол 3 HD 50|Спорт
-          207|Матч! Арена HD|Спорт
-          225|Матч! Игра HD|Спорт
-          10014|Матч! Игра HD 50|Спорт
-          19219|Матч! Страна HD|Спорт
-          19221|Матч! Боец HD|Спорт
-          215|KHL HD|Спорт
-          19396|KHL Prime HD|Спорт
-          10028|KHL Prime HD 50|Спорт
-          228|Eurosport 1 HD|Спорт
-          234|Eurosport 2 HD|Спорт
-          2007|Viju+ Sport HD|Спорт
-          6554|Окко Спорт HD|Спорт
-          6541|Setanta Eurasia HD orig|Спорт
-          6542|Setanta Eurasia Plus HD orig|Спорт
-          31755|Setanta Sports HD|Спорт
-          31757|Setanta Sports+ HD|Спорт
-          19244|Футбол HD|Спорт
-          10058|Футбольный HD|Спорт
-          10039|Хоккейный HD|Спорт
-          10057|Спортивный HD|Спорт
-          19245|Бокс ТВ HD|Спорт
-          19246|Удар HD|Спорт
-          19243|MMA-TV.com HD|Спорт
-          31710|MMA TIME HD|Спорт
-          6384|Старт HD|Спорт
-          2077|Russian Extreme HD|Спорт
-          16040|Red Bull TV HD|Спорт
-          2396|Fuel TV HD|Спорт
-          1018|FAST&FUN BOX HD|Спорт
-          19044|Sky Sport UHD DE|Спорт
-          19161|SPORT TV 1 4K UHD PT|Спорт
-          6566|BT SPORT 1 FHD UK|Спорт
-          6564|BT SPORT 3 FHD UK|Спорт
-          921|Мульт HD|Детские
-          2001|СТС Kids HD|Детские
-          223|Nickelodeon HD|Детские
-          156|Карусель|Детские
-          5049|Gametoon HD|Детские
-          14007|ТипТоп HD|Детские
-          15092|Liberty Pixar FHD|Детские
-          15093|Liberty Disney FHD|Детские
-          17027|Liberty Бебимульт FHD|Детские
-          17029|Liberty Аниме FHD|Детские
-          18051|Liberty Мульт 4K|Детские
-          20048|KLI Мультики FHD|Детские
-          11025|BCU Multserial HD|Детские
-          11035|BCU Kids HD|Детские
-          11036|BCU Kids+ HD|Детские
-          13020|MM USSR Мультфильм HD|Детские
-          13064|MM Walt Disney HD|Детские
-          18165|UZ Маша и Медведь HD|Детские
-          18168|UZ Союз Мульт HD|Детские
-          31685|UZ Kids 60 fps HD|Детские
-          20164|Yosso TV Disney|Детские
-          18073|Детское кино HD|Детские
-          11058|Ералаш HD|Детские
-          227|Discovery Channel HD|Познавательные
-          136|Discovery Science|Познавательные
-          14001|National Geographic HD|Познавательные
-          10023|National Geographic HD 50|Познавательные
-          2067|Nat Geo Wild HD|Познавательные
-          218|Animal Planet HD|Познавательные
-          231|History HD|Познавательные
-          2033|H2 HD|Познавательные
-          203|Viju History HD|Познавательные
-          6381|Viju Explore HD|Познавательные
-          15225|Viju Nature HD|Познавательные
-          2090|Моя Планета HD|Познавательные
-          2155|Наука HD|Познавательные
-          908|Первый космический HD|Познавательные
-          14020|Поехали! HD|Познавательные
-          233|Travel Channel HD|Познавательные
-          232|TLC HD|Познавательные
-          6391|HGTV HD|Познавательные
-          2102|Investigation Discovery HD|Познавательные
-          2074|Живая природа HD|Познавательные
-          2089|В мире животных HD|Познавательные
-          917|Охотник и Рыболов HD|Познавательные
-          2004|Дикая охота HD|Познавательные
-          2005|Дикая рыбалка HD|Познавательные
-          19254|Рыболов HD|Познавательные
-          6369|Авто Плюс HD|Познавательные
-          2006|DTX HD|Познавательные
-          15109|Liberty Авто Гир FHD|Познавательные
-          15108|Liberty BBC FHD|Познавательные
-          14247|SKY HIGH NATURE 4K|Познавательные
-          19309|SKY HIGH NATURE FHD|Познавательные
-          17053|SKY HIGH DOC UHD|Познавательные
-          31620|Yosso TV 4K HDR|Познавательные
-          31448|NASA TV UHD|Познавательные
-          31526|Love Nature 4K|Познавательные
-          19228|МУЗ-ТВ HD|Музыка
-          14164|RU TV FHD|Музыка
-          19247|RU TV HD|Музыка
-          19223|ТНТ Music HD|Музыка
-          115|Europa Plus TV|Музыка
-          19226|Bridge Русский Хит HD|Музыка
-          19227|Bridge Hits HD|Музыка
-          19225|Bridge Rock HD|Музыка
-          9053|Bridge TV Фрэш HD|Музыка
-          236|Bridge Deluxe HD|Музыка
-          221|MTV Live HD|Музыка
-          2130|MTV HD|Музыка
-          19196|Now 80s HD UK|Музыка
-          19197|Now 90s HD UK|Музыка
-          2129|Жара HD|Музыка
-          19255|Music Box Russia HD|Музыка
-          2156|AIVA TV HD|Музыка
-          16036|Радио Шансон тв HD|Музыка
-          20142|KLI Шансон HD|Музыка
-          16079|KLI Music HD|Музыка
-          208|Mezzo Live HD|Музыка
-          14009|Classic Music HD|Музыка
-          16070|Liberty Микс Music FHD|Музыка
-          14250|SKY HIGH DANCE UHD|Музыка
-          14241|SKY HIGH CONCERT HD|Музыка
-          13015|MM Rock HD|Музыка
-          13030|MM Relax HD|Музыка
-          14138|Z! Musiс HD|Музыка
-          14139|Z! Rock HD|Музыка
-          18084|FRESH Pop Hits HD|Музыка
-          18085|FRESH Russian Pop HD|Музыка
-          18087|FRESH Dance HD|Музыка
-          18088|FRESH Rock Hits HD|Музыка
-          18090|FRESH Russian Rap HD|Музыка
-          18092|FRESH Retro HD|Музыка
-          6370|ТНТ4 HD|Развлечения
-          5035|E TV HD|Развлечения
-          2045|Fashion TV HD|Развлечения
-          14231|UZ 6 Кадров HD|Развлечения
-          14223|UZ Однажды в России HD|Развлечения
-          18169|UZ Уральские Пельмени HD|Развлечения
-          17030|Liberty Шоу FHD|Развлечения
-          19311|SKY HIGH STANDUP HD|Развлечения
-          10049|Eromania 4K (18+)|Прочее
-          5014|Extasy 4K (18+)|Прочее
-          6258|Tiny4K (18+)|Прочее
-          6190|Cum4k (18+)|Прочее
-          5013|Penthouse Reality TV FHD (18+)|Прочее
-          5011|Penthouse Gold HD (18+)|Прочее
-          6182|Brazzers HD (18+)|Прочее
-          910|Brazzers TV Europe (18+)|Прочее
-          245|Dorcel TV HD (18+)|Прочее
-          244|Hustler HD Europe (18+)|Прочее
-          242|Redlight HD (18+)|Прочее
-          6245|Private HD (18+)|Прочее
-          2162|Vivid Red HD (18+)|Прочее
-          2397|Exxxotica HD (18+)|Прочее
-          5015|Eroxxx HD (18+)|Прочее
-          147|Русская Ночь (18+)|Прочее
-          6171|Babes HD (18+)|Прочее
-          6178|Blacked HD (18+)|Прочее
-          6261|Tushy HD (18+)|Прочее
-          6265|Vixen HD (18+)|Прочее
-          6233|MetArt HD (18+)|Прочее
-          6247|Reality Kings HD (18+)|Прочее
-          6202|Fake Taxi HD (18+)|Прочее
-          """.trimIndent()
-
-              fun buildVipChannels(token: String): List<Channel> {
-                  val cleanToken = token.trim().ifEmpty { defaultToken }
-                  val list = mutableListOf<Channel>()
-                  for (line in rawVipEntries.lines()) {
-                      val parts = line.trim().split("|")
-                      if (parts.size >= 3) {
-                          val id = parts[0].trim()
-                          val name = parts[1].trim()
-                          val cat = parts[2].trim()
-                          val url = p1 + p2 + cleanToken + "/" + id + "/index.m3u8"
-                          list.add(Channel(name, url, cat, ""))
-                      }
-                  }
-                  return list
-              }
-          }
-          ''')
-          PYEOF
-
-      - name: Step 3 - Generate MainActivity Code
-        run: |
-          python3 - << 'PYEOF'
-          with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
-              f.write(r'''package com.example.miboxiptv
-
-          import android.app.AlertDialog
-          import android.content.Context
-          import android.content.Intent
-          import android.graphics.Color
-          import android.graphics.Typeface
-          import android.net.Uri
-          import android.os.Bundle
-          import android.os.Environment
-          import android.os.Handler
-          import android.os.Looper
-          import android.view.Gravity
-          import android.view.KeyEvent
-          import android.view.View
-          import android.view.WindowManager
-          import android.widget.*
-          import androidx.annotation.OptIn
-          import androidx.appcompat.app.AppCompatActivity
-          import androidx.media3.common.AudioAttributes
-          import androidx.media3.common.C
-          import androidx.media3.common.MediaItem
-          import androidx.media3.common.PlaybackException
-          import androidx.media3.common.Player
-          import androidx.media3.common.TrackSelectionOverride
-          import androidx.media3.common.util.UnstableApi
-          import androidx.media3.datasource.DefaultHttpDataSource
-          import androidx.media3.exoplayer.DefaultLoadControl
-          import androidx.media3.exoplayer.DefaultRenderersFactory
-          import androidx.media3.exoplayer.ExoPlayer
-          import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-          import androidx.media3.ui.AspectRatioFrameLayout
-          import androidx.media3.ui.PlayerView
-          import org.json.JSONArray
-          import org.json.JSONObject
-          import org.xmlpull.v1.XmlPullParser
-          import org.xmlpull.v1.XmlPullParserFactory
-          import java.io.File
-          import java.io.InputStream
-          import java.net.HttpURLConnection
-          import java.net.URL
-          import java.text.SimpleDateFormat
-          import java.util.Date
-          import java.util.Locale
-          import java.util.TimeZone
-          import java.util.zip.GZIPInputStream
-          import kotlin.concurrent.thread
-
-          data class Channel(val name: String, val url: String, val category: String, val tvgId: String)
-          data class PlaylistEntry(val title: String, val source: String, val isLocal: Boolean)
-          data class EpgProgram(val title: String, val desc: String, val startMs: Long, val stopMs: Long)
-
-          @OptIn(UnstableApi::class)
-          class MainActivity : AppCompatActivity() {
-              private var player: ExoPlayer? = null
-              private lateinit var playerView: PlayerView
-              private lateinit var categoryListView: ListView
-              private lateinit var channelListView: ListView
-              private lateinit var sidePanel: LinearLayout
-              private lateinit var infoPanel: LinearLayout
-              private lateinit var infoTextView: TextView
-              private lateinit var clockTextView: TextView
-              private lateinit var signalTextView: TextView
-              private lateinit var currentChannelBanner: TextView
-              private lateinit var activePlaylistLabel: TextView
-
-              private val uiHandler = Handler(Looper.getMainLooper())
-              private val allChannels = mutableListOf<Channel>()
-              private val displayedChannels = mutableListOf<Channel>()
-              private val favoriteUrls = mutableSetOf<String>()
-              private val playlists = mutableListOf<PlaylistEntry>()
-
-              private val epgById = HashMap<String, MutableList<EpgProgram>>()
-              private val epgByName = HashMap<String, MutableList<EpgProgram>>()
-              private var epgLoadedCount = 0
-
-              private lateinit var categoryAdapter: ArrayAdapter<String>
-              private lateinit var channelAdapter: ArrayAdapter<String>
-
-              private var currentCategoryIndex = 1
-              private var currentChannel: Channel? = null
-              private var activePlaylistIndex = 0
-              private var bufferLevel = 1
-              private var decoderMode = 1
-              private var vipToken = BuiltinCatalog.defaultToken
-
-              private val categories = listOf(
-                  "★ Избранное",
-                  "Все каналы",
-                  "Кино и сериалы",
-                  "Спорт",
-                  "Детские",
-                  "Познавательные",
-                  "Музыка",
-                  "Новости и общие",
-                  "Развлечения",
-                  "Прочее"
-              )
-
-              // Несколько открытых источников RU для первого плейлиста
-              private val openRusSources = listOf(
-                  "https://iptv-org.github.io/iptv/languages/rus.m3u",
-                  "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_russia.m3u8",
-                  "https://iptv-org.github.io/iptv/countries/ru.m3u"
-              )
-
-              private var epgUrl = "https://iptvx.one/epg/epg_lite.xml.gz"
-              private val FILE_PICK_CODE = 1001
-
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-                  loadSavedState()
-
-                  val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-
-                  playerView = PlayerView(this).apply {
-                      useController = false
-                      resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                      layoutParams = FrameLayout.LayoutParams(
-                          FrameLayout.LayoutParams.MATCH_PARENT,
-                          FrameLayout.LayoutParams.MATCH_PARENT
-                      )
-                  }
-                  root.addView(playerView)
-
-                  // Слева вверху: часы
-                  clockTextView = TextView(this).apply {
-                      setTextColor(Color.WHITE)
-                      textSize = 18f
-                      typeface = Typeface.DEFAULT_BOLD
-                      setBackgroundColor(Color.parseColor("#88000000"))
-                      setPadding(20, 8, 20, 8)
-                      layoutParams = FrameLayout.LayoutParams(
-                          FrameLayout.LayoutParams.WRAP_CONTENT,
-                          FrameLayout.LayoutParams.WRAP_CONTENT,
-                          Gravity.TOP or Gravity.START
-                      ).apply { setMargins(28, 24, 0, 0) }
-                  }
-                  root.addView(clockTextView)
-
-                  // Справа вверху (симметрично часам): индикатор уровня приёма канала (антенки)
-                  signalTextView = TextView(this).apply {
-                      setTextColor(Color.parseColor("#00E676"))
-                      textSize = 17f
-                      typeface = Typeface.DEFAULT_BOLD
-                      setBackgroundColor(Color.parseColor("#88000000"))
-                      setPadding(20, 8, 20, 8)
-                      text = "▂▄▆█ 100%"
-                      layoutParams = FrameLayout.LayoutParams(
-                          FrameLayout.LayoutParams.WRAP_CONTENT,
-                          FrameLayout.LayoutParams.WRAP_CONTENT,
-                          Gravity.TOP or Gravity.END
-                      ).apply { setMargins(0, 24, 28, 0) }
-                  }
-                  root.addView(signalTextView)
-
-                  // Боковая панель каналов (по кнопке ВЛЕВО)
-                  sidePanel = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      setBackgroundColor(Color.parseColor("#E6101018"))
-                      visibility = View.GONE
-                      layoutParams = FrameLayout.LayoutParams(
-                          1160,
-                          FrameLayout.LayoutParams.MATCH_PARENT,
-                          Gravity.START
-                      )
-                      setPadding(24, 24, 24, 24)
-                  }
-
-                  val topBar = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      gravity = Gravity.CENTER_VERTICAL
-                      setPadding(0, 0, 0, 14)
-                  }
-
-                  val btnSwitchPlaylist = Button(this).apply {
-                      text = "🔄 Сменить плейлист"
-                      setOnClickListener { showPlaylistsDialog() }
-                  }
-                  topBar.addView(btnSwitchPlaylist)
-
-                  val btnSettings = Button(this).apply {
-                      text = "⚙ Настройки"
-                      setOnClickListener { showSettingsMenu() }
-                  }
-                  topBar.addView(btnSettings)
-
-                  activePlaylistLabel = TextView(this).apply {
-                      setTextColor(Color.parseColor("#00E5FF"))
-                      textSize = 14f
-                      setPadding(18, 0, 0, 0)
-                  }
-                  topBar.addView(activePlaylistLabel)
-                  sidePanel.addView(topBar)
-
-                  val columnsLayout = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      layoutParams = LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          LinearLayout.LayoutParams.MATCH_PARENT
-                      )
-                  }
-
-                  categoryListView = ListView(this).apply {
-                      choiceMode = ListView.CHOICE_MODE_SINGLE
-                      setBackgroundColor(Color.parseColor("#22FFFFFF"))
-                      layoutParams = LinearLayout.LayoutParams(
-                          360,
-                          LinearLayout.LayoutParams.MATCH_PARENT
-                      ).apply { setMargins(0, 0, 16, 0) }
-                  }
-
-                  channelListView = ListView(this).apply {
-                      choiceMode = ListView.CHOICE_MODE_SINGLE
-                      layoutParams = LinearLayout.LayoutParams(
-                          LinearLayout.LayoutParams.MATCH_PARENT,
-                          LinearLayout.LayoutParams.MATCH_PARENT
-                      )
-                  }
-
-                  columnsLayout.addView(categoryListView)
-                  columnsLayout.addView(channelListView)
-                  sidePanel.addView(columnsLayout)
-                  root.addView(sidePanel)
-
-                  // Панель информации о потоке (по кнопке ВПРАВО)
-                  infoPanel = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      setBackgroundColor(Color.parseColor("#E6141026"))
-                      visibility = View.GONE
-                      layoutParams = FrameLayout.LayoutParams(
-                          680,
-                          FrameLayout.LayoutParams.WRAP_CONTENT,
-                          Gravity.TOP or Gravity.END
-                      ).apply { setMargins(0, 84, 28, 0) }
-                      setPadding(32, 24, 32, 24)
-                  }
-
-                  val infoTitle = TextView(this).apply {
-                      text = "ℹ Информация о потоке и EPG"
-                      setTextColor(Color.parseColor("#00E5FF"))
-                      textSize = 19f
-                      typeface = Typeface.DEFAULT_BOLD
-                      setPadding(0, 0, 0, 10)
-                  }
-                  infoPanel.addView(infoTitle)
-
-                  infoTextView = TextView(this).apply {
-                      setTextColor(Color.WHITE)
-                      textSize = 15f
-                  }
-                  infoPanel.addView(infoTextView)
-                  root.addView(infoPanel)
-
-                  currentChannelBanner = TextView(this).apply {
-                      setTextColor(Color.WHITE)
-                      textSize = 18f
-                      setBackgroundColor(Color.parseColor("#CC141026"))
-                      setPadding(32, 18, 32, 18)
-                      visibility = View.GONE
-                      layoutParams = FrameLayout.LayoutParams(
-                          FrameLayout.LayoutParams.WRAP_CONTENT,
-                          FrameLayout.LayoutParams.WRAP_CONTENT,
-                          Gravity.BOTTOM or Gravity.START
-                      ).apply { setMargins(36, 0, 36, 36) }
-                  }
-                  root.addView(currentChannelBanner)
-
-                  setContentView(root)
-
-                  initPlayer()
-                  startClockAndSignalUpdater()
-
-                  categoryAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_activated_1, mutableListOf())
-                  categoryListView.adapter = categoryAdapter
-
-                  channelAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
-                  channelListView.adapter = channelAdapter
-
-                  categoryListView.setOnItemClickListener { _, _, position, _ ->
-                      selectCategory(position)
-                      channelListView.requestFocus()
-                  }
-
-                  categoryListView.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                      override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                          selectCategory(position)
-                      }
-                      override fun onNothingSelected(parent: AdapterView<*>?) {}
-                  }
-
-                  channelListView.setOnItemClickListener { _, _, position, _ ->
-                      if (position in displayedChannels.indices) {
-                          playChannelObj(displayedChannels[position])
-                          hideSidePanel()
-                      }
-                  }
-
-                  channelListView.setOnItemLongClickListener { _, _, position, _ ->
-                      if (position in displayedChannels.indices) {
-                          toggleFavorite(displayedChannels[position])
-                      }
-                      true
-                  }
-
-                  loadActivePlaylist()
-                  loadEpgInBackground()
-              }
-
-              private fun startClockAndSignalUpdater() {
-                  val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-                  val ticker = object : Runnable {
-                      override fun run() {
-                          clockTextView.text = timeFmt.format(Date())
-                          updateSignalIndicator()
-                          if (infoPanel.visibility == View.VISIBLE) {
-                              updateStreamInfoText()
-                          }
-                          uiHandler.postDelayed(this, 1500)
-                      }
-                  }
-                  uiHandler.post(ticker)
-              }
-
-              // Индикатор приёма канала («антенки» в правом углу)
-              private fun updateSignalIndicator() {
-                  val p = player
-                  if (p == null) {
-                      signalTextView.text = "▂___ Нет сигнала"
-                      signalTextView.setTextColor(Color.GRAY)
-                      return
-                  }
-                  val state = p.playbackState
-                  val bufSec = (p.totalBufferedDuration / 1000L).toInt()
-                  val vFmt = p.videoFormat
-                  val height = vFmt?.height ?: p.videoSize.height
-                  val resTag = when {
-                      height >= 2160 -> "4K"
-                      height >= 1080 -> "FHD"
-                      height >= 720 -> "HD"
-                      height > 0 -> "${height}p"
-                      else -> ""
-                  }
-
-                  when {
-                      state == Player.STATE_IDLE -> {
-                          signalTextView.text = "▂___ Ожидание"
-                          signalTextView.setTextColor(Color.parseColor("#FF5252"))
-                      }
-                      state == Player.STATE_BUFFERING -> {
-                          signalTextView.text = "▂▄__ Буфер..."
-                          signalTextView.setTextColor(Color.parseColor("#FFD740"))
-                      }
-                      state == Player.STATE_READY && bufSec >= 10 -> {
-                          signalTextView.text = "▂▄▆█ 5/5 $resTag".trim()
-                          signalTextView.setTextColor(Color.parseColor("#00E676"))
-                      }
-                      state == Player.STATE_READY && bufSec >= 4 -> {
-                          signalTextView.text = "▂▄▆_ 4/5 $resTag".trim()
-                          signalTextView.setTextColor(Color.parseColor("#69F0AE"))
-                      }
-                      state == Player.STATE_READY && bufSec >= 1 -> {
-                          signalTextView.text = "▂▄__ 3/5 $resTag".trim()
-                          signalTextView.setTextColor(Color.parseColor("#FFD740"))
-                      }
-                      else -> {
-                          signalTextView.text = "▂___ 2/5 $resTag".trim()
-                          signalTextView.setTextColor(Color.parseColor("#FF5252"))
-                      }
-                  }
-              }
-
-              // Пункт 12: Инициализация плеера с защитой от чёрного экрана и поддержкой редиректов
-              private fun initPlayer() {
-                  val currentUrl = currentChannel?.url
-                  player?.release()
-
-                  val (minBuf, maxBuf, startBuf) = when (bufferLevel) {
-                      0 -> Triple(3000, 8000, 1000)
-                      2 -> Triple(28000, 60000, 2500)
-                      else -> Triple(12000, 28000, 1500)
-                  }
-
-                  val loadControl = DefaultLoadControl.Builder()
-                      .setBufferDurationsMs(minBuf, maxBuf, startBuf, startBuf)
-                      .setPrioritizeTimeOverSizeThresholds(true)
-                      .build()
-
-                  val extensionMode = when (decoderMode) {
-                      0 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
-                      2 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-                      else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
-                  }
-
-                  val renderersFactory = DefaultRenderersFactory(this)
-                      .setExtensionRendererMode(extensionMode)
-                      .setEnableDecoderFallback(true)
-                      .setEnableAudioTrackPlaybackParams(true)
-
-                  // Сетевой источник с поддержкой редиректов http<->https и SmartTV User-Agent (убирает чёрный экран)
-                  val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-                      .setUserAgent("Mozilla/5.0 (Linux; Android 11; MiBox) AppleWebKit/537.36 Lavf/60.3.100")
-                      .setAllowCrossProtocolRedirects(true)
-                      .setConnectTimeoutMs(12000)
-                      .setReadTimeoutMs(15000)
-
-                  val mediaSourceFactory = DefaultMediaSourceFactory(this)
-                      .setDataSourceFactory(httpDataSourceFactory)
-
-                  val audioAttrs = AudioAttributes.Builder()
-                      .setUsage(C.USAGE_MEDIA)
-                      .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                      .build()
-
-                  val newPlayer = ExoPlayer.Builder(this, renderersFactory)
-                      .setMediaSourceFactory(mediaSourceFactory)
-                      .setLoadControl(loadControl)
-                      .setAudioAttributes(audioAttrs, true)
-                      .build()
-
-                  newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
-                      .buildUpon()
-                      .setMaxVideoSize(3840, 2160)
-                      .setForceHighestSupportedBitrate(true)
-                      .setPreferredAudioLanguages("ru", "rus", "en", "eng", "und")
-                      .build()
-
-                  newPlayer.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-
-                  // Автовосстановление при сбое потока
-                  newPlayer.addListener(object : Player.Listener {
-                      override fun onPlayerError(error: PlaybackException) {
-                          Toast.makeText(
-                              this@MainActivity,
-                              "Поток недоступен (${error.errorCodeName}), переподключение...",
-                              Toast.LENGTH_SHORT
-                          ).show()
-                          uiHandler.postDelayed({
-                              val ch = currentChannel
-                              if (ch != null) {
-                                  newPlayer.setMediaItem(MediaItem.fromUri(ch.url))
-                                  newPlayer.prepare()
-                                  newPlayer.play()
-                              }
-                          }, 2000)
-                      }
-                  })
-
-                  playerView.player = newPlayer
-                  player = newPlayer
-
-                  if (currentUrl != null) {
-                      newPlayer.setMediaItem(MediaItem.fromUri(currentUrl))
-                      newPlayer.prepare()
-                      newPlayer.play()
-                  }
-              }
-
-              private fun normalizeName(raw: String): String {
-                  val clean = raw.lowercase()
-                      .replace("1080p", "")
-                      .replace("720p", "")
-                      .replace("fhd", "")
-                      .replace("hd", "")
-                      .replace("50", "")
-                  val sb = StringBuilder()
-                  var inBrackets = false
-                  for (c in clean) {
-                      if (c == '(' || c == '[') inBrackets = true
-                      else if (c == ')' || c == ']') inBrackets = false
-                      else if (!inBrackets && (c in 'a'..'z' || c in 'а'..'я' || c in '0'..'9')) {
-                          sb.append(c)
-                      }
-                  }
-                  return sb.toString()
-              }
-
-              private fun getCurrentEpg(ch: Channel?): EpgProgram? {
-                  if (ch == null) return null
-                  val now = System.currentTimeMillis()
-                  if (ch.tvgId.isNotEmpty()) {
-                      val byId = epgById[ch.tvgId]?.firstOrNull { now in it.startMs..it.stopMs }
-                      if (byId != null) return byId
-                  }
-                  val norm = normalizeName(ch.name)
-                  if (norm.isNotEmpty()) {
-                      return epgByName[norm]?.firstOrNull { now in it.startMs..it.stopMs }
-                  }
-                  return null
-              }
-
-              private fun loadEpgInBackground() {
-                  thread {
-                      try {
-                          val conn = URL(epgUrl).openConnection() as HttpURLConnection
-                          conn.connectTimeout = 15000
-                          conn.readTimeout = 25000
-                          val rawStream: InputStream = conn.inputStream
-                          val stream: InputStream = if (epgUrl.endsWith(".gz", true)) {
-                              GZIPInputStream(rawStream)
-                          } else {
-                              rawStream
-                          }
-
-                          val factory = XmlPullParserFactory.newInstance()
-                          val parser = factory.newPullParser()
-                          parser.setInput(stream, "UTF-8")
-
-                          val now = System.currentTimeMillis()
-                          val minTime = now - 4 * 3600_000L
-                          val maxTime = now + 14 * 3600_000L
-
-                          val tempById = HashMap<String, MutableList<EpgProgram>>()
-                          val tempIdToNames = HashMap<String, MutableList<String>>()
-
-                          var eventType = parser.eventType
-                          var currentChanId = ""
-                          var progChanId = ""
-                          var progStart = 0L
-                          var progStop = 0L
-                          var progTitle = ""
-                          var progDesc = ""
-                          var currentTag = ""
-                          var count = 0
-
-                          while (eventType != XmlPullParser.END_DOCUMENT) {
-                              when (eventType) {
-                                  XmlPullParser.START_TAG -> {
-                                      currentTag = parser.name ?: ""
-                                      if (currentTag == "channel") {
-                                          currentChanId = parser.getAttributeValue(null, "id") ?: ""
-                                      } else if (currentTag == "programme") {
-                                          progChanId = parser.getAttributeValue(null, "channel") ?: ""
-                                          progStart = parseXmltvDate(parser.getAttributeValue(null, "start") ?: "")
-                                          progStop = parseXmltvDate(parser.getAttributeValue(null, "stop") ?: "")
-                                          progTitle = ""
-                                          progDesc = ""
-                                      }
-                                  }
-                                  XmlPullParser.TEXT -> {
-                                      val txt = parser.text ?: ""
-                                      if (txt.isNotBlank()) {
-                                          if (currentTag == "display-name" && currentChanId.isNotEmpty()) {
-                                              val list = tempIdToNames.getOrPut(currentChanId) { mutableListOf() }
-                                              list.add(normalizeName(txt))
-                                          } else if (currentTag == "title" && progStop >= minTime && progStart <= maxTime) {
-                                              progTitle += txt
-                                          } else if (currentTag == "desc" && progStop >= minTime && progStart <= maxTime) {
-                                              progDesc += txt
-                                          }
-                                      }
-                                  }
-                                  XmlPullParser.END_TAG -> {
-                                      val endName = parser.name ?: ""
-                                      if (endName == "channel") {
-                                          currentChanId = ""
-                                      } else if (endName == "programme") {
-                                          if (progChanId.isNotEmpty() && progTitle.isNotEmpty() && progStop >= minTime && progStart <= maxTime) {
-                                              val list = tempById.getOrPut(progChanId) { mutableListOf() }
-                                              list.add(EpgProgram(progTitle.trim(), progDesc.trim(), progStart, progStop))
-                                              count++
-                                          }
-                                          progChanId = ""
-                                      }
-                                      currentTag = ""
-                                  }
-                              }
-                              eventType = parser.next()
-                          }
-
-                          val tempByName = HashMap<String, MutableList<EpgProgram>>()
-                          for ((id, progs) in tempById) {
-                              val names = tempIdToNames[id] ?: continue
-                              for (n in names) {
-                                  if (n.isNotEmpty()) {
-                                      tempByName[n] = progs
-                                  }
-                              }
-                          }
-
-                          runOnUiThread {
-                              epgById.clear()
-                              epgById.putAll(tempById)
-                              epgByName.clear()
-                              epgByName.putAll(tempByName)
-                              epgLoadedCount = count
-                              refreshChannelAdapter()
-                          }
-                      } catch (_: Exception) {}
-                  }
-              }
-
-              private fun parseXmltvDate(raw: String): Long {
-                  if (raw.length < 14) return 0L
-                  return try {
-                      val clean = raw.trim()
-                      val sdf = if (clean.length >= 19 && (clean.contains("+") || clean.contains("-"))) {
-                          SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US)
-                      } else {
-                          SimpleDateFormat("yyyyMMddHHmmss", Locale.US).apply {
-                              timeZone = TimeZone.getTimeZone("GMT+3")
-                          }
-                      }
-                      sdf.parse(clean)?.time ?: 0L
-                  } catch (_: Exception) {
-                      0L
-                  }
-              }
-
-              private fun updateStreamInfoText() {
-                  val p = player ?: return
-                  val ch = currentChannel
-                  val vFormat = p.videoFormat
-                  val aFormat = p.audioFormat
-
-                  val width = vFormat?.width ?: p.videoSize.width
-                  val height = vFormat?.height ?: p.videoSize.height
-                  val fps = if (vFormat != null && vFormat.frameRate > 0) String.format(Locale.US, "%.0f fps", vFormat.frameRate) else ""
-                  val vCodec = vFormat?.sampleMimeType?.substringAfter("/")?.uppercase() ?: "Анализ..."
-
-                  val vBitrate = if (vFormat != null && vFormat.bitrate > 0) {
-                      String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f)
-                  } else {
-                      "Макс. поток HLS"
-                  }
-
-                  val aCodec = aFormat?.sampleMimeType?.substringAfter("/")?.uppercase() ?: "Авто"
-                  val aChannels = if (aFormat != null && aFormat.channelCount > 0) aFormat.channelCount.toString() + " кан." else ""
-                  val aSampleRate = if (aFormat != null && aFormat.sampleRate > 0) aFormat.sampleRate.toString() + " Гц" else ""
-                  val aLang = aFormat?.language?.uppercase() ?: "RU/EN"
-                  val bufSec = p.totalBufferedDuration / 1000L
-
-                  val epg = getCurrentEpg(ch)
-                  val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-                  val epgLine = if (epg != null) {
-                      val range = timeFmt.format(Date(epg.startMs)) + "–" + timeFmt.format(Date(epg.stopMs))
-                      "🎬 Сейчас в эфире (" + range + "):\n" + epg.title + (if (epg.desc.isNotEmpty()) "\nОписание: " + epg.desc.take(140) else "")
-                  } else {
-                      "🎬 Телепрограмма: " + (if (epgLoadedCount > 0) "Передача не указана" else "Загрузка базы EPG...")
-                  }
-
-                  infoTextView.text = "📺 Канал: " + (ch?.name ?: "-") + "\n" +
-                      "📂 Категория: " + (ch?.category ?: "-") + "\n\n" +
-                      "🖥 Видео: " + width + "x" + height + " " + fps + " (" + vCodec + ")\n" +
-                      "📊 Битрейт: " + vBitrate + " (Запас буфера: " + bufSec + " с)\n" +
-                      "🔊 Аудиодорожка: " + aCodec + " " + aChannels + " " + aSampleRate + " [" + aLang + "]\n" +
-                      "⚙ Декодер: " + decoderName() + " | Буфер: " + bufferName() + "\n\n" +
-                      epgLine
-              }
-
-              private fun mapToTenCategories(rawGroup: String, name: String): String {
-                  val text = (rawGroup + " " + name).lowercase()
-                  return when {
-                      text.contains("взросл") || text.contains("18+") || text.contains("adult") || text.contains("xxx") || text.contains("erot") -> "Прочее"
-                      text.contains("кино") || text.contains("фильм") || text.contains("сериал") || text.contains("movie") || text.contains("cinema") || text.contains("film") || text.contains("bcu") || text.contains("cineman") || text.contains("viju") || text.contains("amedia") -> "Кино и сериалы"
-                      text.contains("спорт") || text.contains("футбол") || text.contains("матч") || text.contains("sport") || text.contains("khl") || text.contains("ufc") || text.contains("mma") || text.contains("бокс") -> "Спорт"
-                      text.contains("детск") || text.contains("мульт") || text.contains("kids") || text.contains("ani") || text.contains("карусель") || text.contains("disney") || text.contains("nickelodeon") -> "Детские"
-                      text.contains("наук") || text.contains("док") || text.contains("познав") || text.contains("science") || text.contains("doc") || text.contains("history") || text.contains("discovery") || text.contains("nat geo") || text.contains("animal") || text.contains("планет") || text.contains("охот") -> "Познавательные"
-                      text.contains("муз") || text.contains("music") || text.contains("hit") || text.contains("rock") || text.contains("pop") || text.contains("шансон") || text.contains("mtv") || text.contains("bridge") || text.contains("mezzo") -> "Музыка"
-                      text.contains("новост") || text.contains("общ") || text.contains("инфо") || text.contains("news") || text.contains("general") || text.contains("россия") || text.contains("первый") || text.contains("нтв") || text.contains("рбк") || text.contains("псков") -> "Новости и общие"
-                      text.contains("развлеч") || text.contains("юмор") || text.contains("шоу") || text.contains("entertain") || text.contains("comedy") || text.contains("тнт") || text.contains("стс") || text.contains("пятница") -> "Развлечения"
-                      else -> "Прочее"
-                  }
-              }
-
-              private fun isHighQualityChannel(extInfLine: String, name: String): Boolean {
-                  val lower = (extInfLine + " " + name).lowercase()
-                  val lowRes = listOf("576p", "540p", "480p", "360p", "240p", "(sd)")
-                  for (tag in lowRes) {
-                      if (lower.contains(tag)) return false
-                  }
-                  return lower.contains("1080") || lower.contains("fhd") || lower.contains("hd") || lower.contains("4k") || lower.contains("uhd") || lower.contains("50")
-              }
-
-              private fun parseM3uLines(lines: List<String>, onlyStrict1080: Boolean): List<Channel> {
-                  val strictList = mutableListOf<Channel>()
-                  val allFallback = mutableListOf<Channel>()
-                  val seenUrls = HashSet<String>()
-                  var currentName = "Канал"
-                  var currentExtInf = ""
-                  var currentGroup = ""
-                  var currentTvgId = ""
-                  val quote = 34.toChar().toString()
-
-                  for (line in lines) {
-                      val trimmed = line.trim()
-                      if (trimmed.startsWith("#EXTINF:")) {
-                          currentExtInf = trimmed
-                          currentName = trimmed.substringAfterLast(",").trim()
-                          val groupPrefix = "group-title=" + quote
-                          currentGroup = if (trimmed.contains(groupPrefix)) {
-                              trimmed.substringAfter(groupPrefix).substringBefore(quote)
-                          } else ""
-                          val idPrefix = "tvg-id=" + quote
-                          currentTvgId = if (trimmed.contains(idPrefix)) {
-                              trimmed.substringAfter(idPrefix).substringBefore(quote)
-                          } else ""
-                      } else if (trimmed.startsWith("#EXTGRP:")) {
-                          // Поддержка тега #EXTGRP: из файла пользователя
-                          currentGroup = trimmed.substringAfter("#EXTGRP:").trim()
-                      } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-                          if (seenUrls.add(trimmed)) {
-                              val cat = mapToTenCategories(currentGroup, currentName)
-                              val ch = Channel(currentName, trimmed, cat, currentTvgId)
-                              allFallback.add(ch)
-                              if (isHighQualityChannel(currentExtInf, currentName)) {
-                                  strictList.add(ch)
-                              }
-                          }
-                      }
-                  }
-                  return if (onlyStrict1080 && strictList.isNotEmpty()) strictList else allFallback
-              }
-
-              private fun ensureDefaultPlaylists() {
-                  if (playlists.isEmpty()) {
-                      playlists.add(PlaylistEntry("1. Открытые RU + Sport/Music EN", "BUILTIN_OPEN_RU", false))
-                      playlists.add(PlaylistEntry("2. VIP Провайдер (Кинозалы + Спорт + 18+)", "BUILTIN_VIP_PROVIDER", false))
-                  } else {
-                      if (playlists.none { it.source == "BUILTIN_OPEN_RU" }) {
-                          playlists.add(0, PlaylistEntry("1. Открытые RU + Sport/Music EN", "BUILTIN_OPEN_RU", false))
-                      }
-                      if (playlists.none { it.source == "BUILTIN_VIP_PROVIDER" }) {
-                          playlists.add(1, PlaylistEntry("2. VIP Провайдер (Кинозалы + Спорт + 18+)", "BUILTIN_VIP_PROVIDER", false))
-                      }
-                  }
-              }
-
-              private fun loadActivePlaylist() {
-                  ensureDefaultPlaylists()
-                  if (activePlaylistIndex !in playlists.indices) activePlaylistIndex = 0
-                  val entry = playlists[activePlaylistIndex]
-                  updateTopLabel()
-
-                  Toast.makeText(this, "Загрузка: " + entry.title, Toast.LENGTH_SHORT).show()
-
-                  thread {
-                      try {
-                          val finalChannels: List<Channel> = when {
-                              entry.source == "BUILTIN_VIP_PROVIDER" -> {
-                                  BuiltinCatalog.buildVipChannels(vipToken)
-                              }
-                              entry.source == "BUILTIN_OPEN_RU" -> {
-                                  val combinedLines = mutableListOf<String>()
-                                  for (srcUrl in openRusSources) {
-                                      try {
-                                          val conn = URL(srcUrl).openConnection() as HttpURLConnection
-                                          conn.connectTimeout = 8000
-                                          conn.readTimeout = 10000
-                                          combinedLines.addAll(conn.inputStream.bufferedReader().readLines())
-                                      } catch (_: Exception) {}
-                                  }
-                                  val parsed = parseM3uLines(combinedLines, true).toMutableList()
-                                  parsed.addAll(BuiltinCatalog.extraOpenStreams)
-                                  parsed
-                              }
-                              entry.isLocal -> {
-                                  val lines = if (entry.source.startsWith("content://")) {
-                                      contentResolver.openInputStream(Uri.parse(entry.source))?.bufferedReader()?.readLines() ?: emptyList()
-                                  } else {
-                                      File(entry.source).readLines()
-                                  }
-                                  parseM3uLines(lines, false)
-                              }
-                              else -> {
-                                  val conn = URL(entry.source).openConnection() as HttpURLConnection
-                                  conn.connectTimeout = 10000
-                                  conn.readTimeout = 12000
-                                  val lines = conn.inputStream.bufferedReader().readLines()
-                                  parseM3uLines(lines, false)
-                              }
-                          }
-
-                          runOnUiThread {
-                              allChannels.clear()
-                              allChannels.addAll(finalChannels)
-                              updateCategoriesList()
-                              selectCategory(1)
-                              if (displayedChannels.isNotEmpty()) {
-                                  playChannelObj(displayedChannels[0])
-                              } else {
-                                  Toast.makeText(this, "Каналы не найдены", Toast.LENGTH_LONG).show()
-                              }
-                          }
-                      } catch (e: Exception) {
-                          runOnUiThread {
-                              Toast.makeText(this, "Ошибка плейлиста: " + e.message, Toast.LENGTH_LONG).show()
-                          }
-                      }
-                  }
-              }
-
-              private fun updateTopLabel() {
-                  if (playlists.isNotEmpty() && activePlaylistIndex in playlists.indices) {
-                      activePlaylistLabel.text = playlists[activePlaylistIndex].title + " | Буфер: " + bufferName()
-                  }
-              }
-
-              private fun updateCategoriesList() {
-                  val counts = categories.map { cat ->
-                      val count = when (cat) {
-                          "★ Избранное" -> allChannels.count { favoriteUrls.contains(it.url) }
-                          "Все каналы" -> allChannels.size
-                          else -> allChannels.count { it.category == cat }
-                      }
-                      cat + " (" + count + ")"
-                  }
-                  categoryAdapter.clear()
-                  categoryAdapter.addAll(counts)
-                  categoryAdapter.notifyDataSetChanged()
-              }
-
-              private fun selectCategory(index: Int) {
-                  if (index !in categories.indices) return
-                  currentCategoryIndex = index
-                  categoryListView.setItemChecked(index, true)
-                  val catName = categories[index]
-
-                  displayedChannels.clear()
-                  when (catName) {
-                      "★ Избранное" -> displayedChannels.addAll(allChannels.filter { favoriteUrls.contains(it.url) })
-                      "Все каналы" -> displayedChannels.addAll(allChannels)
-                      else -> displayedChannels.addAll(allChannels.filter { it.category == catName })
-                  }
-
-                  refreshChannelAdapter()
-              }
-
-              private fun refreshChannelAdapter() {
-                  channelAdapter.clear()
-                  channelAdapter.addAll(displayedChannels.mapIndexed { i, ch ->
-                      val star = if (favoriteUrls.contains(ch.url)) "★ " else ""
-                      val epg = getCurrentEpg(ch)
-                      val epgSuffix = if (epg != null) " • " + epg.title else ""
-                      (i + 1).toString() + ". " + star + ch.name + epgSuffix
-                  })
-                  channelAdapter.notifyDataSetChanged()
-              }
-
-              private fun toggleFavorite(ch: Channel) {
-                  if (favoriteUrls.contains(ch.url)) {
-                      favoriteUrls.remove(ch.url)
-                      Toast.makeText(this, "Удалено из избранного: " + ch.name, Toast.LENGTH_SHORT).show()
-                  } else {
-                      favoriteUrls.add(ch.url)
-                      Toast.makeText(this, "Добавлено в ★ Избранное: " + ch.name, Toast.LENGTH_SHORT).show()
-                  }
-                  saveState()
-                  updateCategoriesList()
-                  selectCategory(currentCategoryIndex)
-              }
-
-              private fun playChannelObj(channel: Channel) {
-                  currentChannel = channel
-                  player?.setMediaItem(MediaItem.fromUri(channel.url))
-                  player?.prepare()
-                  player?.play()
-                  val star = if (favoriteUrls.contains(channel.url)) "★ " else ""
-                  val epg = getCurrentEpg(channel)
-                  val epgLine = if (epg != null) "\nСейчас: " + epg.title else ""
-                  showBanner(star + channel.name + " [" + channel.category + "]" + epgLine)
-                  updateSignalIndicator()
-                  if (infoPanel.visibility == View.VISIBLE) {
-                      updateStreamInfoText()
-                  }
-              }
-
-              private fun showBanner(text: String) {
-                  currentChannelBanner.text = text
-                  currentChannelBanner.visibility = View.VISIBLE
-                  currentChannelBanner.removeCallbacks(hideBannerRunnable)
-                  currentChannelBanner.postDelayed(hideBannerRunnable, 4500)
-              }
-
-              private val hideBannerRunnable = Runnable {
-                  currentChannelBanner.visibility = View.GONE
-              }
-
-              private fun showSidePanel() {
-                  infoPanel.visibility = View.GONE
-                  sidePanel.visibility = View.VISIBLE
-                  refreshChannelAdapter()
-                  channelListView.requestFocus()
-              }
-
-              private fun hideSidePanel() {
-                  sidePanel.visibility = View.GONE
-              }
-
-              private fun toggleInfoPanel() {
-                  if (infoPanel.visibility == View.VISIBLE) {
-                      infoPanel.visibility = View.GONE
-                  } else {
-                      sidePanel.visibility = View.GONE
-                      updateStreamInfoText()
-                      infoPanel.visibility = View.VISIBLE
-                  }
-              }
-
-              private fun showCenterActionMenu() {
-                  val ch = currentChannel ?: return
-                  val isFav = favoriteUrls.contains(ch.url)
-                  val favLabel = if (isFav) "★ Убрать из Избранного (" + ch.name + ")" else "☆ Добавить в Избранное (" + ch.name + ")"
-                  val actions = arrayOf(
-                      favLabel,
-                      "🔊 Сменить аудиодорожку (если нет звука)",
-                      "🔄 Переключить плейлист (Открытый RU / VIP Провайдер)"
-                  )
-
-                  AlertDialog.Builder(this)
-                      .setTitle(ch.name)
-                      .setItems(actions) { _, which ->
-                          when (which) {
-                              0 -> toggleFavorite(ch)
-                              1 -> showAudioTracksDialog()
-                              2 -> showPlaylistsDialog()
-                          }
-                      }
-                      .setNegativeButton("Закрыть", null)
-                      .show()
-              }
-
-              private fun showAudioTracksDialog() {
-                  val p = player ?: return
-                  val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-                  if (groups.isEmpty()) {
-                      Toast.makeText(this, "Дополнительные аудиодорожки не найдены", Toast.LENGTH_SHORT).show()
-                      return
-                  }
-                  val labels = mutableListOf<String>()
-                  val overrides = mutableListOf<TrackSelectionOverride>()
-                  for (g in groups) {
-                      for (i in 0 until g.length) {
-                          val fmt = g.getTrackFormat(i)
-                          val codec = fmt.sampleMimeType?.substringAfter("/")?.uppercase() ?: "AUDIO"
-                          val lang = fmt.language?.uppercase() ?: ("Дорожка " + (labels.size + 1))
-                          val sel = if (g.isTrackSelected(i)) "✔ " else "   "
-                          labels.add(sel + lang + " (" + codec + ", " + fmt.channelCount + " кан.)")
-                          overrides.add(TrackSelectionOverride(g.mediaTrackGroup, i))
-                      }
-                  }
-                  AlertDialog.Builder(this)
-                      .setTitle("Выбор аудиодорожки")
-                      .setItems(labels.toTypedArray()) { _, idx ->
-                          p.trackSelectionParameters = p.trackSelectionParameters
-                              .buildUpon()
-                              .setOverrideForType(overrides[idx])
-                              .build()
-                          Toast.makeText(this, "Выбрана: " + labels[idx].trim(), Toast.LENGTH_SHORT).show()
-                      }
-                      .setNegativeButton("Отмена", null)
-                      .show()
-              }
-
-              private fun bufferName(): String = when (bufferLevel) {
-                  0 -> "Маленький"
-                  2 -> "Большой"
-                  else -> "Средний"
-              }
-
-              private fun decoderName(): String = when (decoderMode) {
-                  0 -> "Аппаратный (HW)"
-                  2 -> "Программный (SW)"
-                  else -> "Авто (HW + Fallback)"
-              }
-
-              private fun showSettingsMenu() {
-                  val items = arrayOf(
-                      "1. Плейлисты (Выбор: Открытый RU / VIP Провайдер / Файл .m3u8)",
-                      "2. Буфер подкачки (текущий: " + bufferName() + ")",
-                      "3. Декодер видео и звука (текущий: " + decoderName() + ")",
-                      "4. Ключ VIP-плейлиста (Токен личного кабинета)",
-                      "5. Программа передач EPG (обновить / изменить URL)"
-                  )
-                  AlertDialog.Builder(this)
-                      .setTitle("⚙ Настройки MiBox IPTV")
-                      .setItems(items) { _, which ->
-                          when (which) {
-                              0 -> showPlaylistsDialog()
-                              1 -> showBufferDialog()
-                              2 -> showDecoderDialog()
-                              3 -> showTokenDialog()
-                              4 -> showEpgDialog()
-                          }
-                      }
-                      .setNegativeButton("Закрыть", null)
-                      .show()
-              }
-
-              private fun showTokenDialog() {
-                  val input = EditText(this).apply {
-                      setText(vipToken)
-                      setSingleLine()
-                  }
-                  AlertDialog.Builder(this)
-                      .setTitle("Ключ доступа (Токен) для VIP-плейлиста")
-                      .setView(input)
-                      .setPositiveButton("Сохранить") { _, _ ->
-                          val newTok = input.text.toString().trim()
-                          if (newTok.isNotEmpty()) {
-                              vipToken = newTok
-                              saveState()
-                              loadActivePlaylist()
-                          }
-                      }
-                      .setNegativeButton("Отмена", null)
-                      .show()
-              }
-
-              private fun showDecoderDialog() {
-                  val modes = arrayOf(
-                      "Аппаратный (HW) — основной чип приставки",
-                      "Авто (HW + SW Fallback) — рекомендуется",
-                      "Программный приоритет (SW) — если видео сыпется"
-                  )
-                  AlertDialog.Builder(this)
-                      .setTitle("Выбор декодера видео и аудио")
-                      .setSingleChoiceItems(modes, decoderMode) { dialog, which ->
-                          decoderMode = which
-                          saveState()
-                          updateTopLabel()
-                          initPlayer()
-                          Toast.makeText(this, "Декодер: " + decoderName(), Toast.LENGTH_SHORT).show()
-                          dialog.dismiss()
-                      }
-                      .setNegativeButton("Отмена", null)
-                      .show()
-              }
-
-              private fun showEpgDialog() {
-                  val input = EditText(this).apply {
-                      setText(epgUrl)
-                      setSingleLine()
-                  }
-                  AlertDialog.Builder(this)
-                      .setTitle("Ссылка на телепрограмму XMLTV (.xml.gz)")
-                      .setView(input)
-                      .setPositiveButton("Сохранить и обновить") { _, _ ->
-                          val newUrl = input.text.toString().trim()
-                          if (newUrl.isNotEmpty()) {
-                              epgUrl = newUrl
-                              saveState()
-                              Toast.makeText(this, "Обновление телепрограммы...", Toast.LENGTH_SHORT).show()
-                              loadEpgInBackground()
-                          }
-                      }
-                      .setNegativeButton("Отмена", null)
-                      .show()
-              }
-
-              private fun showPlaylistsDialog() {
-                  ensureDefaultPlaylists()
-                  val listLabels = playlists.mapIndexed { idx, p ->
-                      val mark = if (idx == activePlaylistIndex) "✔ " else "   "
-                      val type = when {
-                          p.source.startsWith("BUILTIN_") -> "[Встроенный]"
-                          p.isLocal -> "[Файл]"
-                          else -> "[URL]"
-                      }
-                      mark + p.title + " " + type
-                  }.toMutableList()
-
-                  listLabels.add("➕ Добавить плейлист по ссылке (URL)")
-                  listLabels.add("📂 Добавить файл .m3u / .m3u8 из памяти / флешки")
-                  if (playlists.size > 2) {
-                      listLabels.add("🗑 Удалить выбранный пользовательский плейлист")
-                  }
-
-                  AlertDialog.Builder(this)
-                      .setTitle("Выбор и добавление плейлистов")
-                      .setItems(listLabels.toTypedArray()) { _, which ->
-                          when {
-                              which < playlists.size -> {
-                                  activePlaylistIndex = which
-                                  saveState()
-                                  loadActivePlaylist()
-                              }
-                              which == playlists.size -> showAddUrlPlaylistDialog()
-                              which == playlists.size + 1 -> showLocalFileOptions()
-                              else -> {
-                                  if (activePlaylistIndex >= 2) {
-                                      playlists.removeAt(activePlaylistIndex)
-                                      activePlaylistIndex = 0
-                                      saveState()
-                                      loadActivePlaylist()
-                                  } else {
-                                      Toast.makeText(this, "Встроенные плейлисты удалить нельзя", Toast.LENGTH_SHORT).show()
-                                  }
-                              }
-                          }
-                      }
-                      .setNegativeButton("Назад", null)
-                      .show()
-              }
-
-              private fun showAddUrlPlaylistDialog() {
-                  val layout = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      setPadding(32, 16, 32, 16)
-                  }
-                  val nameInput = EditText(this).apply {
-                      hint = "Название (например, Мой Плейлист)"
-                      setSingleLine()
-                  }
-                  val urlInput = EditText(this).apply {
-                      hint = "http://... (.m3u или .m3u8)"
-                      setSingleLine()
-                  }
-                  layout.addView(nameInput)
-                  layout.addView(urlInput)
-
-                  AlertDialog.Builder(this)
-                      .setTitle("Добавить плейлист по ссылке")
-                      .setView(layout)
-                      .setPositiveButton("Добавить") { _, _ ->
-                          val title = nameInput.text.toString().trim().ifEmpty { "Плейлист " + (playlists.size + 1) }
-                          val url = urlInput.text.toString().trim()
-                          if (url.isNotEmpty()) {
-                              playlists.add(PlaylistEntry(title, url, false))
-                              activePlaylistIndex = playlists.size - 1
-                              saveState()
-                              loadActivePlaylist()
-                          }
-                      }
-                      .setNegativeButton("Отмена", null)
-                      .show()
-              }
-
-              private fun showLocalFileOptions() {
-                  val options = arrayOf(
-                      "Выбрать из папки Download / внутренней памяти",
-                      "Открыть системный файловый менеджер Android",
-                      "Ввести путь к файлу вручную (/sdcard/...)"
-                  )
-                  AlertDialog.Builder(this)
-                      .setTitle("Добавление файла .m3u / .m3u8")
-                      .setItems(options) { _, which ->
-                          when (which) {
-                              0 -> scanLocalM3uFiles()
-                              1 -> {
-                                  try {
-                                      val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                                          type = "*/*"
-                                          addCategory(Intent.CATEGORY_OPENABLE)
-                                      }
-                                      startActivityForResult(Intent.createChooser(intent, "Выберите .m3u / .m3u8"), FILE_PICK_CODE)
-                                  } catch (e: Exception) {
-                                      scanLocalM3uFiles()
-                                  }
-                              }
-                              2 -> showManualFilePathDialog()
-                          }
-                      }
-                      .show()
-              }
-
-              private fun scanLocalM3uFiles() {
-                  val foundFiles = mutableListOf<File>()
-                  val roots = listOf(
-                      Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                      Environment.getExternalStorageDirectory(),
-                      File("/storage")
-                  )
-                  for (r in roots) {
-                      try {
-                          r.walkTopDown().maxDepth(3).forEach { file ->
-                              if (file.isFile && (file.name.endsWith(".m3u", true) || file.name.endsWith(".m3u8", true))) {
-                                  if (!foundFiles.any { it.absolutePath == file.absolutePath }) {
-                                      foundFiles.add(file)
-                                  }
-                              }
-                          }
-                      } catch (_: Exception) {}
-                  }
-
-                  if (foundFiles.isEmpty()) {
-                      Toast.makeText(this, "Файлы .m3u/.m3u8 в памяти не найдены", Toast.LENGTH_LONG).show()
-                      showManualFilePathDialog()
-                      return
-                  }
-
-                  val names = foundFiles.map { it.name + " (" + it.parent + ")" }.toTypedArray()
-                  AlertDialog.Builder(this)
-                      .setTitle("Найденные файлы .m3u / .m3u8")
-                      .setItems(names) { _, idx ->
-                          val file = foundFiles[idx]
-                          playlists.add(PlaylistEntry(file.name, file.absolutePath, true))
-                          activePlaylistIndex = playlists.size - 1
-                          saveState()
-                          loadActivePlaylist()
-                      }
-                      .setNegativeButton("Отмена", null)
-                      .show()
-              }
-
-              private fun showManualFilePathDialog() {
-                  val input = EditText(this).apply {
-                      setText("/sdcard/Download/playlist.m3u8")
-                      setSingleLine()
-                  }
-                  AlertDialog.Builder(this)
-                      .setTitle("Путь к локальному файлу .m3u8")
-                      .setView(input)
-                      .setPositiveButton("Добавить") { _, _ ->
-                          val path = input.text.toString().trim()
-                          if (path.isNotEmpty()) {
-                              val name = path.substringAfterLast("/")
-                              playlists.add(PlaylistEntry(name, path, true))
-                              activePlaylistIndex = playlists.size - 1
-                              saveState()
-                              loadActivePlaylist()
-                          }
-                      }
-                      .setNegativeButton("Отмена", null)
-                      .show()
-              }
-
-              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-                  super.onActivityResult(requestCode, resultCode, data)
-                  if (requestCode == FILE_PICK_CODE && resultCode == RESULT_OK) {
-                      val uri = data?.data ?: return
-                      val name = uri.lastPathSegment?.substringAfterLast("/") ?: "Локальный .m3u8"
-                      playlists.add(PlaylistEntry(name, uri.toString(), true))
-                      activePlaylistIndex = playlists.size - 1
-                      saveState()
-                      loadActivePlaylist()
-                  }
-              }
-
-              private fun showBufferDialog() {
-                  val levels = arrayOf(
-                      "Маленький (3–8 сек) — быстрое переключение",
-                      "Средний (12–28 сек) — оптимально для 1080p",
-                      "Большой (28–60 сек) — максимальная стабильность"
-                  )
-                  AlertDialog.Builder(this)
-                      .setTitle("Буфер подкачки видео")
-                      .setSingleChoiceItems(levels, bufferLevel) { dialog, which ->
-                          bufferLevel = which
-                          saveState()
-                          updateTopLabel()
-                          initPlayer()
-                          Toast.makeText(this, "Буфер изменён: " + bufferName(), Toast.LENGTH_SHORT).show()
-                          dialog.dismiss()
-                      }
-                      .setNegativeButton("Отмена", null)
-                      .show()
-              }
-
-              private fun saveState() {
-                  val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
-                  val arr = JSONArray()
-                  for (p in playlists) {
-                      val obj = JSONObject()
-                      obj.put("title", p.title)
-                      obj.put("source", p.source)
-                      obj.put("isLocal", p.isLocal)
-                      arr.put(obj)
-                  }
-                  prefs.edit()
-                      .putString("playlists_json", arr.toString())
-                      .putInt("active_playlist", activePlaylistIndex)
-                      .putInt("buffer_level", bufferLevel)
-                      .putInt("decoder_mode", decoderMode)
-                      .putString("vip_token", vipToken)
-                      .putString("epg_url", epgUrl)
-                      .putStringSet("favorites", favoriteUrls.toSet())
-                      .apply()
-              }
-
-              private fun loadSavedState() {
-                  val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
-                  bufferLevel = prefs.getInt("buffer_level", 1)
-                  decoderMode = prefs.getInt("decoder_mode", 1)
-                  activePlaylistIndex = prefs.getInt("active_playlist", 0)
-                  vipToken = prefs.getString("vip_token", BuiltinCatalog.defaultToken) ?: BuiltinCatalog.defaultToken
-                  epgUrl = prefs.getString("epg_url", epgUrl) ?: epgUrl
-                  val favs = prefs.getStringSet("favorites", emptySet()) ?: emptySet()
-                  favoriteUrls.clear()
-                  favoriteUrls.addAll(favs)
-
-                  playlists.clear()
-                  val jsonStr = prefs.getString("playlists_json", null)
-                  if (!jsonStr.isNullOrEmpty()) {
-                      try {
-                          val arr = JSONArray(jsonStr)
-                          for (i in 0 until arr.length()) {
-                              val o = arr.getJSONObject(i)
-                              playlists.add(
-                                  PlaylistEntry(
-                                      o.getString("title"),
-                                      o.getString("source"),
-                                      o.getBoolean("isLocal")
-                                  )
-                              )
-                          }
-                      } catch (_: Exception) {}
-                  }
-                  ensureDefaultPlaylists()
-              }
-
-              override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-                  if (sidePanel.visibility == View.GONE) {
-                      when (keyCode) {
-                          KeyEvent.KEYCODE_DPAD_LEFT -> {
-                              showSidePanel()
-                              return true
-                          }
-                          KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                              toggleInfoPanel()
-                              return true
-                          }
-                          KeyEvent.KEYCODE_DPAD_DOWN -> {
-                              showSettingsMenu()
-                              return true
-                          }
-                          KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                              showCenterActionMenu()
-                              return true
-                          }
-                          KeyEvent.KEYCODE_DPAD_UP -> {
-                              if (displayedChannels.isNotEmpty()) {
-                                  val idx = displayedChannels.indexOfFirst { it.url == currentChannel?.url }
-                                  val next = (idx + 1) % displayedChannels.size
-                                  playChannelObj(displayedChannels[next])
-                              }
-                              return true
-                          }
-                          KeyEvent.KEYCODE_BACK -> {
-                              if (infoPanel.visibility == View.VISIBLE) {
-                                  infoPanel.visibility = View.GONE
-                                  return true
-                              }
-                          }
-                      }
-                  } else {
-                      if (keyCode == KeyEvent.KEYCODE_BACK) {
-                          hideSidePanel()
-                          return true
-                      }
-                  }
-                  return super.onKeyDown(keyCode, event)
-              }
-
-              override fun onStop() {
-                  super.onStop()
-                  player?.pause()
-              }
-
-              override fun onDestroy() {
-                  super.onDestroy()
-                  uiHandler.removeCallbacksAndMessages(null)
-                  player?.release()
-              }
-          }
-          ''')
-          PYEOF
-
-      - name: Step 3.5 - Apply Patches v2.5 Architecture & Fixes (TiViLook)
+      - name: Step 3.5 - Generate Clean Kotlin Modules & RecyclerView v2.6
         run: |
           python3 - << 'PYEOF'
           import os, re, glob
@@ -1896,10 +39,10 @@ jobs:
               g = f.read()
 
           g = re.sub(r"targetSdk\s+\d+", "targetSdk 33", g)
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "95"))
-          new_ver_code = 16000 + run_num
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "100"))
+          new_ver_code = 17000 + run_num
           g = re.sub(r"versionCode\s+\d+", f"versionCode {new_ver_code}", g)
-          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "2.5.{run_num}"', g)
+          g = re.sub(r'versionName\s+"[^"]+"', f'versionName "2.6.{run_num}"', g)
 
           signing_block = '''
               signingConfigs {
@@ -1934,15 +77,18 @@ jobs:
                   'implementation "androidx.media3:media3-exoplayer:1.2.1"',
                   'implementation "androidx.media3:media3-common:1.2.1"\n    implementation "androidx.media3:media3-datasource:1.2.1"\n    implementation "androidx.media3:media3-extractor:1.2.1"\n    implementation "androidx.media3:media3-exoplayer:1.2.1"'
               )
+          if "recyclerview" not in g:
+              g = g.replace(
+                  'implementation "androidx.appcompat:appcompat:1.6.1"',
+                  'implementation "androidx.appcompat:appcompat:1.6.1"\n    implementation "androidx.recyclerview:recyclerview:1.3.2"'
+              )
           with open("app/build.gradle", "w") as f:
               f.write(g)
 
-          # Очищаем все старые иконки во всех папках
           for old_ic in glob.glob("app/src/main/res/mipmap*/*ic_launcher*") + glob.glob("app/src/main/res/drawable*/*ic_launcher*"):
               try: os.remove(old_ic)
               except Exception: pass
 
-          # Крупная полноразмерная иконка (глаз увеличен в 1.3 раза, чтобы в Adaptive Icon и на рабочем столе он был крупным и выразительным!)
           large_eye_icon = '''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="108dp" android:height="108dp"
@@ -1969,7 +115,6 @@ jobs:
               </group>
           </vector>'''
 
-          # Широкий полноразмерный баннер 320x180dp специально для рабочего стола Android TV
           wide_tv_banner = '''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="320dp" android:height="180dp"
@@ -1999,7 +144,6 @@ jobs:
           with open("app/src/main/res/drawable/ic_launcher.xml", "w") as f: f.write(large_eye_icon)
           with open("app/src/main/res/drawable/ic_banner.xml", "w") as f: f.write(wide_tv_banner)
 
-          # Нативная Adaptive Icon для Android 8+ — чтобы иконка на рабочем столе смартфона и ТВ была крупной на 100% без полей!
           os.makedirs("app/src/main/res/mipmap-anydpi-v26", exist_ok=True)
           adaptive_xml = '''<?xml version="1.0" encoding="utf-8"?>
           <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
@@ -2009,7 +153,6 @@ jobs:
           with open("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml", "w") as f: f.write(adaptive_xml)
           with open("app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml", "w") as f: f.write(adaptive_xml)
 
-          # Аппаратный SurfaceView для основного плеера (плавные 50fps и 2K без нагрева GPU) и TextureView для лёгкого PiP
           os.makedirs("app/src/main/res/layout", exist_ok=True)
           with open("app/src/main/res/layout/player_surface_view.xml", "w") as f:
               f.write('''<?xml version="1.0" encoding="utf-8"?>
@@ -2029,51 +172,6 @@ jobs:
               app:use_controller="false"
               app:surface_type="texture_view" />
           ''')
-
-          with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "r") as f:
-              cat = f.read()
-
-          extra_ru_pack = '''Channel("ТНТ", "https://sc.id-tv.kz/TNT_HD.m3u8", "Развлечения", ""),
-                  Channel("ТНТ4", "https://sc.id-tv.kz/TNT4.m3u8", "Развлечения", ""),
-                  Channel("СТС", "https://sc.id-tv.kz/STS_HD.m3u8", "Развлечения", ""),
-                  Channel("СТС Love", "https://sc.id-tv.kz/STS_Love.m3u8", "Развлечения", ""),
-                  Channel("Пятница!", "https://sc.id-tv.kz/Pyatnica.m3u8", "Развлечения", ""),
-                  Channel("Суббота!", "https://sc.id-tv.kz/Subbota.m3u8", "Развлечения", ""),
-                  Channel("Ю ТВ", "https://sc.id-tv.kz/Yu.m3u8", "Развлечения", ""),
-                  Channel("Че!", "https://sc.id-tv.kz/Che.m3u8", "Развлечения", ""),
-                  Channel("2x2", "https://sc.id-tv.kz/2x2.m3u8", "Развлечения", ""),
-                  Channel("КВН ТВ", "https://sc.id-tv.kz/KVN_TV.m3u8", "Развлечения", ""),
-                  Channel("Сарафан", "https://sc.id-tv.kz/Sarafan.m3u8", "Развлечения", ""),
-                  Channel("Анекдот ТВ", "https://sc.id-tv.kz/Anekdot_TV.m3u8", "Развлечения", ""),
-                  Channel("Мосфильм. Золотая коллекция", "https://ott-cdn.ucom.am/s48/index.m3u8", "Кино и сериалы", ""),
-                  Channel("Киносемья", "https://sc.id-tv.kz/Kinosemya.m3u8", "Кино и сериалы", ""),
-                  Channel("Кинохит", "https://sc.id-tv.kz/Kinohit.m3u8", "Кино и сериалы", ""),
-                  Channel("Киносвидание", "https://sc.id-tv.kz/Kinosvidanie.m3u8", "Кино и сериалы", ""),
-                  Channel("Мужское Кино", "https://sc.id-tv.kz/Muzhskoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Наше Новое Кино", "https://sc.id-tv.kz/Nashe_novoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Кинокомедия", "https://sc.id-tv.kz/Kinokomediya.m3u8", "Кино и сериалы", ""),
-                  Channel("Киномикс", "https://sc.id-tv.kz/Kinomiks.m3u8", "Кино и сериалы", ""),
-                  Channel("Индийское Кино", "https://sc.id-tv.kz/Indiyskoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Родное Кино", "https://sc.id-tv.kz/Rodnoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Дом Кино Премиум", "https://sc.id-tv.kz/Dom_kino_premium.m3u8", "Кино и сериалы", ""),
-                  Channel("Дом Кино", "https://sc.id-tv.kz/Dom_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Русский Иллюзион", "https://sc.id-tv.kz/Russkiy_illyuzion.m3u8", "Кино и сериалы", ""),
-                  Channel("Русский Бестселлер", "https://sc.id-tv.kz/Russkiy_bestseller.m3u8", "Кино и сериалы", ""),
-                  Channel("Русский Роман", "https://sc.id-tv.kz/Russkiy_roman.m3u8", "Кино и сериалы", ""),
-                  Channel("Русский Детектив", "https://sc.id-tv.kz/Russkiy_detektiv.m3u8", "Кино и сериалы", ""),
-                  Channel("Комедия", "https://sc.id-tv.kz/Komediya.m3u8", "Кино и сериалы", ""),
-                  Channel("НСТ (Страшное кино)", "https://sc.id-tv.kz/NST.m3u8", "Кино и сериалы", ""),
-                  Channel("Синема", "https://sc.id-tv.kz/Cinema.m3u8", "Кино и сериалы", ""),
-                  Channel("Еврокино", "https://sc.id-tv.kz/Evrokino.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000 Русское Кино", "https://sc.id-tv.kz/TV1000_Russkoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000", "https://sc.id-tv.kz/TV1000.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000 Action", "https://sc.id-tv.kz/TV1000_Action.m3u8", "Кино и сериалы", ""),
-                  Channel("Остросюжетное", "https://sc.id-tv.kz/Ostrosyuzhetnoe_HD.m3u8", "Кино и сериалы", ""),'''
-
-          if "Суббота!" not in cat:
-              cat = cat.replace("val extraOpenStreams = listOf(", "val extraOpenStreams = listOf(\n        " + extra_ru_pack)
-          with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "w") as f:
-              f.write(cat)
 
           with open("app/src/main/AndroidManifest.xml", "w") as f:
               f.write('''<?xml version="1.0" encoding="utf-8"?>
@@ -2105,7 +203,7 @@ jobs:
               </application>
           </manifest>''')
 
-          # МОДУЛЬ 1: CustomViews.kt — Графика, 11 тем, уникальные стилизованные иконки и векторные сферы GraphicOrbSpan
+          # МОДУЛЬ 1: CustomViews.kt
           with open("app/src/main/java/com/example/miboxiptv/CustomViews.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -2141,29 +239,20 @@ jobs:
               override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int = 34
 
               override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, textPaint: Paint) {
-                  val cy = (top + bottom) / 2f
-                  val cx = x + 15f
-                  val r = 10.5f
-
+                  val cy = (top + bottom) / 2f; val cx = x + 15f; val r = 10.5f
                   val mainColor = when (orbType) {
                       1 -> Color.parseColor("#00E676")
                       2 -> Color.parseColor("#FF5252")
                       else -> Color.parseColor("#FFD740")
                   }
-
                   paint.style = Paint.Style.FILL
                   paint.color = Color.argb(65, Color.red(mainColor), Color.green(mainColor), Color.blue(mainColor))
                   canvas.drawCircle(cx, cy, r * 1.32f, paint)
-
-                  paint.color = mainColor
-                  canvas.drawCircle(cx, cy, r, paint)
-
+                  paint.color = mainColor; canvas.drawCircle(cx, cy, r, paint)
                   paint.color = Color.argb(130, 255, 255, 255)
                   canvas.drawCircle(cx - r * 0.3f, cy - r * 0.3f, r * 0.32f, paint)
 
-                  paint.style = Paint.Style.STROKE
-                  paint.strokeWidth = 2.4f
-                  paint.strokeCap = Paint.Cap.ROUND
+                  paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.4f; paint.strokeCap = Paint.Cap.ROUND
                   paint.color = Color.parseColor("#101418")
                   if (orbType == 1) {
                       canvas.drawLine(cx - 4.2f, cy + 0.5f, cx - 1.0f, cy + 3.8f, paint)
@@ -2392,8 +481,7 @@ jobs:
                       else -> minDim * 0.22f
                   }
 
-                  paint.style = Paint.Style.FILL
-                  paint.color = mainColor
+                  paint.style = Paint.Style.FILL; paint.color = mainColor
                   rect.set(pad, pad, w - pad, h - pad)
                   canvas.drawRoundRect(rect, corner, corner, paint)
 
@@ -2623,7 +711,7 @@ jobs:
           }
           ''')
 
-          # МОДУЛЬ 2: CoreEngines.kt — Настоящий DoH-резолвер Cloudflare 1.1.1.1, потоковый парсер M3U и компактный потоковый кэш EPG без переполнения ОЗУ!
+          # МОДУЛЬ 2: CoreEngines.kt
           with open("app/src/main/java/com/example/miboxiptv/CoreEngines.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -2653,7 +741,6 @@ jobs:
                   "Lavf/60.3.100"
               )
 
-              // Настоящий DNS-over-HTTPS резолвер через Cloudflare (1.1.1.1) при сбое провайдерского DNS
               fun resolveHostViaCloudflareDoH(host: String): String? {
                   dohCache[host]?.let { return it }
                   return try {
@@ -2694,8 +781,7 @@ jobs:
                               setRequestProperty("Accept", "*/*")
                               setRequestProperty("Connection", "keep-alive")
                               instanceFollowRedirects = true
-                              connectTimeout = timeoutMs
-                              readTimeout = timeoutMs
+                              connectTimeout = timeoutMs; readTimeout = timeoutMs
                           }
                       } catch (e: Exception) {
                           if (dohEnabled) {
@@ -2724,10 +810,7 @@ jobs:
 
                       if (code in 300..308) {
                           val loc = conn.getHeaderField("Location")
-                          if (!loc.isNullOrEmpty()) {
-                              currentUrl = loc
-                              continue
-                          }
+                          if (!loc.isNullOrEmpty()) { currentUrl = loc; continue }
                       }
                       if (code in 200..299) return conn.inputStream
                       throw Exception("HTTP $code")
@@ -2795,7 +878,6 @@ jobs:
                   }
               }
 
-              // Потоковый парсинг M3U без загрузки всего файла в память (защита от OOM)
               fun parseM3uReaderIntoMap(
                   reader: BufferedReader,
                   targetMap: LinkedHashMap<String, Channel>,
@@ -2830,7 +912,6 @@ jobs:
                   }
               }
 
-              // Построчное сохранение кэша EPG (JSON Lines) — 0 нагрузки на RAM!
               fun saveEpgToStreamCache(file: File, byName: Map<String, List<EpgProgram>>) {
                   try {
                       BufferedWriter(FileWriter(file)).use { writer ->
@@ -2894,6 +975,195 @@ jobs:
               }
           }
           ''')
+
+          # МОДУЛЬ 3 (НОВЫЙ): ChannelRvAdapter.kt — Нативный RecyclerView + DiffUtil для списка каналов без раздвоений курсора и прыжков скролла!
+          with open("app/src/main/java/com/example/miboxiptv/ChannelRvAdapter.kt", "w") as f:
+              f.write(r'''package com.example.miboxiptv
+
+          import android.graphics.Color
+          import android.graphics.drawable.GradientDrawable
+          import android.util.TypedValue
+          import android.view.KeyEvent
+          import android.view.View
+          import android.view.ViewGroup
+          import androidx.recyclerview.widget.DiffUtil
+          import androidx.recyclerview.widget.RecyclerView
+          import kotlin.math.abs
+
+          class ChannelRvAdapter(
+              private val getTheme: () -> AppThemeStyle,
+              private val isTopUrl: (String) -> Boolean,
+              private val isFavUrl: (String) -> Boolean,
+              private val getPlayingUrl: () -> String?,
+              private val onChannelFocused: (Int) -> Unit,
+              private val onChannelClicked: (Int, Channel) -> Unit,
+              private val onChannelLongClicked: (Int, Channel) -> Unit,
+              private val onLeftPressedToGroups: () -> Unit
+          ) : RecyclerView.Adapter<ChannelRvAdapter.ChannelVH>() {
+
+              private val items = ArrayList<Channel>()
+              var focusedPos: Int = 0
+                  private set
+
+              init {
+                  setHasStableIds(true)
+              }
+
+              override fun getItemId(position: Int): Long {
+                  return items[position].url.hashCode().toLong()
+              }
+
+              fun submitChannels(newList: List<Channel>, initialFocusPos: Int) {
+                  val oldList = ArrayList(items)
+                  val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+                      override fun getOldListSize(): Int = oldList.size
+                      override fun getNewListSize(): Int = newList.size
+                      override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean =
+                          oldList[oldPos].url == newList[newPos].url
+                      override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean =
+                          oldList[oldPos] == newList[newPos]
+                  })
+                  items.clear()
+                  items.addAll(newList)
+                  focusedPos = initialFocusPos.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+                  diff.dispatchUpdatesTo(this)
+              }
+
+              fun updateFocusedPosition(newPos: Int) {
+                  if (items.isEmpty()) return
+                  val bounded = newPos.coerceIn(0, items.lastIndex)
+                  val prev = focusedPos
+                  focusedPos = bounded
+                  if (prev in items.indices && prev != bounded) notifyItemChanged(prev)
+                  notifyItemChanged(bounded)
+                  onChannelFocused(bounded)
+              }
+
+              private fun extractMonogram(name: String): String {
+                  val words = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+                  if (words.size >= 2) return (words[0].take(1) + words[1].take(1)).uppercase()
+                  return name.take(2).uppercase()
+              }
+
+              private fun monogramColorFor(name: String): Int {
+                  val palette = listOf("#1E88E5", "#00897B", "#8E24AA", "#D81B60", "#F4511E", "#3949AB", "#43A047")
+                  return Color.parseColor(palette[abs(name.hashCode()) % palette.size])
+              }
+
+              class ChannelVH(val row: ChannelRowView) : RecyclerView.ViewHolder(row)
+
+              override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelVH {
+                  val row = ChannelRowView(parent.context).apply {
+                      isFocusable = true
+                      isFocusableInTouchMode = false
+                      isClickable = true
+                      layoutParams = RecyclerView.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT,
+                          ViewGroup.LayoutParams.WRAP_CONTENT
+                      ).apply { setMargins(0, 2, 0, 2) }
+                  }
+                  return ChannelVH(row)
+              }
+
+              override fun getItemCount(): Int = items.size
+
+              override fun onBindViewHolder(holder: ChannelVH, position: Int) {
+                  val ch = items[position]
+                  val t = getTheme()
+                  val highlighted = (position == focusedPos)
+
+                  val topBadge = if (isTopUrl(ch.url)) "▲ " else ""
+                  val starBadge = if (isFavUrl(ch.url)) "★ " else ""
+                  holder.row.titleView.text = "${position + 1}. $topBadge$starBadge${ch.name}"
+                  holder.row.titleView.typeface = if (highlighted) t.boldFont else t.normalFont
+                  holder.row.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+                  holder.row.titleView.forceMarqueeActive = highlighted
+
+                  holder.row.badgeView.text = extractMonogram(ch.name)
+                  holder.row.badgeView.background = GradientDrawable().apply {
+                      setColor(monogramColorFor(ch.name))
+                      cornerRadius = 12f
+                  }
+
+                  if (getPlayingUrl() == ch.url) {
+                      holder.row.eqView.barColor = if (highlighted) t.textOnAccent else Color.parseColor("#00E676")
+                      holder.row.eqView.visibility = View.VISIBLE
+                      holder.row.eqView.invalidate()
+                  } else {
+                      holder.row.eqView.visibility = View.GONE
+                  }
+
+                  if (highlighted) {
+                      holder.row.titleView.setTextColor(t.textOnAccent)
+                      holder.row.background = GradientDrawable().apply {
+                          setColor(t.accentColor)
+                          cornerRadius = 20f
+                          setStroke(2, Color.WHITE)
+                      }
+                  } else {
+                      holder.row.titleView.setTextColor(t.textPrimaryColor)
+                      holder.row.background = null
+                  }
+
+                  holder.row.setOnFocusChangeListener { _, hasFocus ->
+                      if (hasFocus) {
+                          val adapterPos = holder.bindingAdapterPosition
+                          if (adapterPos != RecyclerView.NO_POSITION && adapterPos != focusedPos) {
+                              val old = focusedPos
+                              focusedPos = adapterPos
+                              holder.row.post {
+                                  if (old in items.indices) notifyItemChanged(old)
+                                  notifyItemChanged(adapterPos)
+                              }
+                              onChannelFocused(adapterPos)
+                          }
+                      }
+                  }
+
+                  holder.row.setOnClickListener {
+                      val adapterPos = holder.bindingAdapterPosition
+                      if (adapterPos != RecyclerView.NO_POSITION && adapterPos in items.indices) {
+                          updateFocusedPosition(adapterPos)
+                          onChannelClicked(adapterPos, items[adapterPos])
+                      }
+                  }
+
+                  holder.row.setOnLongClickListener {
+                      val adapterPos = holder.bindingAdapterPosition
+                      if (adapterPos != RecyclerView.NO_POSITION && adapterPos in items.indices) {
+                          updateFocusedPosition(adapterPos)
+                          onChannelLongClicked(adapterPos, items[adapterPos])
+                      }
+                      true
+                  }
+
+                  holder.row.setOnKeyListener { v, keyCode, event ->
+                      if (event.action == KeyEvent.ACTION_DOWN) {
+                          val adapterPos = holder.bindingAdapterPosition
+                          if (adapterPos == RecyclerView.NO_POSITION) return@setOnKeyListener false
+                          val rv = v.parent as? RecyclerView
+                          if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                              onLeftPressedToGroups()
+                              return@setOnKeyListener true
+                          } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP && adapterPos == 0 && items.size > 1) {
+                              val lastIdx = items.lastIndex
+                              updateFocusedPosition(lastIdx)
+                              rv?.scrollToPosition(lastIdx)
+                              rv?.post { rv.findViewHolderForAdapterPosition(lastIdx)?.itemView?.requestFocus() }
+                              return@setOnKeyListener true
+                          } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && adapterPos == items.lastIndex && items.size > 1) {
+                              updateFocusedPosition(0)
+                              rv?.scrollToPosition(0)
+                              rv?.post { rv.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
+                              return@setOnKeyListener true
+                          }
+                      }
+                      false
+                  }
+              }
+          }
+          ''')
+          # МОДУЛЬ 4: MainActivity.kt (на базе RecyclerView + DiffUtil)
           with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -2947,6 +1217,8 @@ jobs:
           import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
           import androidx.media3.ui.AspectRatioFrameLayout
           import androidx.media3.ui.PlayerView
+          import androidx.recyclerview.widget.LinearLayoutManager
+          import androidx.recyclerview.widget.RecyclerView
           import org.json.JSONArray
           import org.json.JSONObject
           import org.xmlpull.v1.XmlPullParser
@@ -2985,7 +1257,9 @@ jobs:
               private lateinit var morphTransitionOverlay: FrameLayout
               private lateinit var nightDimOverlay: View
               private lateinit var categoryListView: ListView
-              private lateinit var channelListView: ListView
+              private lateinit var channelRecyclerView: RecyclerView
+              private lateinit var channelLayoutManager: LinearLayoutManager
+              private lateinit var channelRvAdapter: ChannelRvAdapter
 
               private lateinit var sidePanel: LinearLayout
               private lateinit var leftIconRail: LinearLayout
@@ -3115,7 +1389,6 @@ jobs:
               @Volatile private var epgLoadedCount = 0
 
               private lateinit var categoryAdapter: ArrayAdapter<String>
-              private lateinit var channelAdapter: ArrayAdapter<String>
 
               private var currentCategoryIndex = 1
               private var currentChannel: Channel? = null
@@ -3246,7 +1519,6 @@ jobs:
                   }
               }
 
-              // Захват кадра с аппаратного SurfaceView через системный PixelCopy (API 24+) без нагрузки на GPU и отключением во время теста каналов!
               private fun sampleVideoFrameColorIfPossible() {
                   if (ambilightMode != 3 || isAnalyzerRunning || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
                   try {
@@ -3418,7 +1690,7 @@ jobs:
                   subModalOverlay.background = makeThemedPanelBg()
                   fullEpgOverlay.background = makeThemedPanelBg()
                   categoryListView.background = makeThemedSubBg()
-                  channelListView.background = makeThemedSubBg()
+                  channelRecyclerView.background = makeThemedSubBg()
                   subModalList.background = makeThemedSubBg()
                   fullEpgListView.background = makeThemedSubBg()
 
@@ -3569,7 +1841,6 @@ jobs:
                       layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
                   }
 
-                  // Основной плеер теперь работает на аппаратном SurfaceView (Zero-Copy, 50fps и 2K без нагрузки на GPU!)
                   playerView = (LayoutInflater.from(this).inflate(R.layout.player_surface_view, playerContainerFrame, false) as PlayerView).apply {
                       useController = false
                       isFocusable = false
@@ -3578,13 +1849,9 @@ jobs:
                   playerContainerFrame.addView(playerView)
                   root.addView(playerContainerFrame)
 
-                  // ИСПРАВЛЕН БАГ №3: dualStreamContainer больше НЕ забирает фокус пульта (isFocusable = false, isClickable = false),
-                  // поэтому кнопка OK и долгое нажатие OK всегда открывают меню, а не переключают каналы!
                   dualStreamContainer = FrameLayout(this).apply {
                       visibility = View.GONE
-                      isFocusable = false
-                      isFocusableInTouchMode = false
-                      isClickable = false
+                      isFocusable = false; isFocusableInTouchMode = false; isClickable = false
                       background = GradientDrawable().apply {
                           setColor(Color.BLACK); cornerRadius = 16f; setStroke(2, Color.parseColor("#00E5FF"))
                       }
@@ -3592,9 +1859,7 @@ jobs:
                       layoutParams = FrameLayout.LayoutParams(420, 236, Gravity.TOP or Gravity.END).apply { setMargins(0, 68, 22, 0) }
                   }
                   dualPlayerView = (LayoutInflater.from(this).inflate(R.layout.player_texture_view, dualStreamContainer, false) as PlayerView).apply {
-                      useController = false
-                      isFocusable = false
-                      isClickable = false
+                      useController = false; isFocusable = false; isClickable = false
                       resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                   }
                   dualStreamLabel = TextView(this).apply {
@@ -3605,8 +1870,7 @@ jobs:
                   }
                   dualCloseBtn = TextView(this).apply {
                       text = "✖"; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f); typeface = Typeface.DEFAULT_BOLD
-                      gravity = Gravity.CENTER
-                      isFocusable = false; isFocusableInTouchMode = false; isClickable = true
+                      gravity = Gravity.CENTER; isFocusable = false; isFocusableInTouchMode = false; isClickable = true
                       background = GradientDrawable().apply { setColor(Color.parseColor("#CCFF1744")); cornerRadius = 14f }
                       setPadding(10, 2, 10, 2)
                       layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(4, 4, 4, 4) }
@@ -3706,16 +1970,47 @@ jobs:
                       layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
                   }
 
-                  channelListView = ListView(this).apply {
-                      choiceMode = ListView.CHOICE_MODE_NONE; divider = null; dividerHeight = 0
-                      overScrollMode = View.OVER_SCROLL_NEVER; isScrollingCacheEnabled = false
-                      selector = ColorDrawable(Color.TRANSPARENT); isSmoothScrollbarEnabled = true
-                      background = makeThemedSubBg(); setPadding(10, 8, 10, 8); visibility = View.VISIBLE
+                  // Пункт 4: Нативный RecyclerView вместо старого ListView!
+                  channelLayoutManager = LinearLayoutManager(this)
+                  channelRvAdapter = ChannelRvAdapter(
+                      getTheme = { currentTheme() },
+                      isTopUrl = { url -> topUrls.contains(url) },
+                      isFavUrl = { url -> favoriteUrls.contains(url) },
+                      getPlayingUrl = { currentChannel?.url },
+                      onChannelFocused = { pos ->
+                          focusedChannelPos = pos
+                          resetMenuInactivityTimer()
+                      },
+                      onChannelClicked = { pos, ch ->
+                          focusedChannelPos = pos
+                          resetMenuInactivityTimer()
+                          playChannelObj(ch, immediate = true)
+                          if (controlMode != 1) closeAllMenus()
+                      },
+                      onChannelLongClicked = { pos, ch ->
+                          focusedChannelPos = pos
+                          resetMenuInactivityTimer()
+                          toggleFavorite(ch)
+                      },
+                      onLeftPressedToGroups = {
+                          resetMenuInactivityTimer()
+                          showSideGroupsMode()
+                      }
+                  )
+                  channelRecyclerView = RecyclerView(this).apply {
+                      layoutManager = channelLayoutManager
+                      adapter = channelRvAdapter
+                      itemAnimator = null
+                      overScrollMode = View.OVER_SCROLL_NEVER
+                      background = makeThemedSubBg()
+                      setPadding(10, 8, 10, 8)
+                      clipToPadding = false
+                      visibility = View.VISIBLE
                       layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
                   }
 
                   singleColumnFrame.addView(categoryListView)
-                  singleColumnFrame.addView(channelListView)
+                  singleColumnFrame.addView(channelRecyclerView)
                   sidePanel.addView(singleColumnFrame)
                   root.addView(sidePanel)
 
@@ -4052,9 +2347,6 @@ jobs:
                   categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17.5f, true) { pos -> !isSideShowingChannels && !isLeftRailVisible && pos == focusedCategoryPos }
                   categoryListView.adapter = categoryAdapter
 
-                  channelAdapter = createRichChannelAdapter(mutableListOf())
-                  channelListView.adapter = channelAdapter
-
                   categoryListView.setOnItemClickListener { _, _, position, _ ->
                       resetMenuInactivityTimer(); focusedCategoryPos = position; selectCategory(position)
                       showSideChannelsMode(focusCurrentChannelIfSameGroup = true)
@@ -4092,48 +2384,6 @@ jobs:
                       false
                   }
 
-                  channelListView.setOnKeyListener { _, keyCode, event ->
-                      if (event.action == KeyEvent.ACTION_DOWN) {
-                          resetMenuInactivityTimer()
-                          val count = displayedChannels.size
-                          if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                              showSideGroupsMode(); return@setOnKeyListener true
-                          } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP && count > 0 && focusedChannelPos <= 0) {
-                              val lastIdx = count - 1; focusedChannelPos = lastIdx
-                              channelListView.setSelection(lastIdx)
-                              refreshChannelListHighlightInPlace(lastIdx)
-                              return@setOnKeyListener true
-                          } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && count > 0 && focusedChannelPos >= count - 1) {
-                              focusedChannelPos = 0
-                              channelListView.setSelection(0)
-                              refreshChannelListHighlightInPlace(0)
-                              return@setOnKeyListener true
-                          }
-                      }
-                      false
-                  }
-                  channelListView.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                      override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                          resetMenuInactivityTimer(); focusedChannelPos = position
-                          refreshChannelListHighlightInPlace(position)
-                      }
-                      override fun onNothingSelected(parent: AdapterView<*>?) {}
-                  }
-                  channelListView.setOnItemClickListener { _, _, position, _ ->
-                      val list = displayedChannels.toList()
-                      if (position in list.indices) {
-                          focusedChannelPos = position
-                          refreshChannelListHighlightInPlace(position)
-                          playChannelObj(list[position], immediate = true)
-                          if (controlMode != 1) closeAllMenus()
-                      }
-                  }
-                  channelListView.setOnItemLongClickListener { _, _, position, _ ->
-                      val list = displayedChannels.toList()
-                      if (position in list.indices) toggleFavorite(list[position])
-                      true
-                  }
-
                   applyCurrentThemeToAllPanels()
                   loadActivePlaylist(autoPlayLast = true)
                   loadEpgOncePerDayInBackground(forceRefresh = false)
@@ -4153,77 +2403,6 @@ jobs:
                   leftIconRail.visibility = View.GONE
                   categoryListView.requestFocus()
                   refreshSimpleListHighlightInPlace(categoryListView, focusedCategoryPos)
-              }
-
-              private fun extractMonogram(name: String): String {
-                  val words = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-                  if (words.size >= 2) return (words[0].take(1) + words[1].take(1)).uppercase()
-                  return name.take(2).uppercase()
-              }
-
-              private fun monogramColorFor(name: String): Int {
-                  val palette = listOf("#1E88E5", "#00897B", "#8E24AA", "#D81B60", "#F4511E", "#3949AB", "#43A047")
-                  return Color.parseColor(palette[abs(name.hashCode()) % palette.size])
-              }
-
-              private fun createRichChannelAdapter(items: MutableList<String>): ArrayAdapter<String> {
-                  return object : ArrayAdapter<String>(this@MainActivity, 0, items) {
-                      override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                          val row = (convertView as? ChannelRowView) ?: ChannelRowView(this@MainActivity).apply {
-                              layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                          }
-                          val ch = displayedChannels.getOrNull(position)
-                          val t = currentTheme()
-                          val highlighted = (isSideShowingChannels && position == focusedChannelPos)
-
-                          row.titleView.text = getItem(position) ?: ""
-                          row.titleView.typeface = if (highlighted) t.boldFont else t.normalFont
-                          row.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-                          row.titleView.forceMarqueeActive = highlighted
-
-                          if (ch != null) {
-                              row.badgeView.text = extractMonogram(ch.name)
-                              row.badgeView.background = GradientDrawable().apply { setColor(monogramColorFor(ch.name)); cornerRadius = 12f }
-                              if (currentChannel?.url == ch.url) {
-                                  row.eqView.barColor = if (highlighted) t.textOnAccent else Color.parseColor("#00E676")
-                                  row.eqView.visibility = View.VISIBLE; row.eqView.invalidate()
-                              } else row.eqView.visibility = View.GONE
-                          }
-
-                          if (highlighted) {
-                              row.titleView.setTextColor(t.textOnAccent)
-                              row.background = GradientDrawable().apply { setColor(t.accentColor); cornerRadius = 20f; setStroke(2, Color.WHITE) }
-                          } else {
-                              row.titleView.setTextColor(t.textPrimaryColor)
-                              row.background = null
-                          }
-                          return row
-                      }
-                  }
-              }
-
-              private fun refreshChannelListHighlightInPlace(activeAdapterPos: Int) {
-                  val t = currentTheme()
-                  val firstVis = channelListView.firstVisiblePosition
-                  for (i in 0 until channelListView.childCount) {
-                      val row = channelListView.getChildAt(i) as? ChannelRowView ?: continue
-                      val itemPos = firstVis + i
-                      val isHighlighted = (itemPos == activeAdapterPos)
-                      val ch = displayedChannels.getOrNull(itemPos)
-                      row.titleView.typeface = if (isHighlighted) t.boldFont else t.normalFont
-                      row.titleView.forceMarqueeActive = isHighlighted
-                      if (ch != null && currentChannel?.url == ch.url) {
-                          row.eqView.barColor = if (isHighlighted) t.textOnAccent else Color.parseColor("#00E676")
-                          row.eqView.visibility = View.VISIBLE; row.eqView.invalidate()
-                      } else row.eqView.visibility = View.GONE
-                      if (isHighlighted) {
-                          row.titleView.setTextColor(t.textOnAccent)
-                          row.background = GradientDrawable().apply { setColor(t.accentColor); cornerRadius = 20f; setStroke(2, Color.WHITE) }
-                      } else {
-                          row.titleView.setTextColor(t.textPrimaryColor)
-                          row.background = null
-                      }
-                  }
               }
 
               private fun refreshSimpleListHighlightInPlace(listView: ListView, activeAdapterPos: Int) {
@@ -4318,7 +2497,7 @@ jobs:
                       layoutParams = FrameLayout.LayoutParams(880, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
                   }
                   val title = TextView(this).apply {
-                      text = "TiViLook 2.5 — Выберите режим управления"
+                      text = "TiViLook 2.6 — Выберите режим управления"
                       setTextColor(currentTheme().textPrimaryColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
                       typeface = themeBoldFont(); gravity = Gravity.CENTER
                   }
@@ -4377,7 +2556,6 @@ jobs:
                       override fun onDown(e: MotionEvent): Boolean = false
                       override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                           if (firstRunModeOverlay.visibility == View.VISIBLE) return false
-                          // На смартфоне нажатие по самому мини-окну 2-го эфира меняет каналы местами (без захвата фокуса пульта!)
                           if (isDualStreamActive && isPointInsideVisibleView(e.rawX, e.rawY, dualStreamContainer) && !isPointInsideVisibleView(e.rawX, e.rawY, dualCloseBtn)) {
                               swapMainAndDualStream()
                               return true
@@ -4450,12 +2628,13 @@ jobs:
                   })
               }
 
+              // Пункт 4 и 6: Включение списка каналов на базе RecyclerView (с позиционированием на активном канале или в начале списка)
               private fun showSideChannelsMode(focusCurrentChannelIfSameGroup: Boolean = true) {
                   isSideShowingChannels = true
                   isLeftRailVisible = false
                   leftIconRail.visibility = View.GONE
                   categoryListView.visibility = View.GONE
-                  channelListView.visibility = View.VISIBLE
+                  channelRecyclerView.visibility = View.VISIBLE
 
                   if (displayedChannels.isNotEmpty()) {
                       val activeIdxInGroup = if (focusCurrentChannelIfSameGroup) {
@@ -4464,16 +2643,19 @@ jobs:
                       val targetPos = if (activeIdxInGroup >= 0) activeIdxInGroup else 0
 
                       focusedChannelPos = targetPos
-                      refreshChannelAdapter()
-                      channelListView.requestFocus()
-                      channelListView.post {
-                          channelListView.setSelectionFromTop(targetPos, (channelListView.height / 3).coerceAtLeast(0))
-                          channelListView.setSelection(targetPos)
-                          refreshChannelListHighlightInPlace(targetPos)
+                      channelRvAdapter.submitChannels(displayedChannels.toList(), targetPos)
+                      channelLayoutManager.scrollToPositionWithOffset(targetPos, (channelRecyclerView.height / 3).coerceAtLeast(80))
+                      channelRecyclerView.post {
+                          val vh = channelRecyclerView.findViewHolderForAdapterPosition(targetPos)
+                          if (vh != null) {
+                              vh.itemView.requestFocus()
+                          } else {
+                              channelRecyclerView.requestFocus()
+                          }
                       }
                   } else {
                       focusedChannelPos = 0
-                      refreshChannelAdapter()
+                      channelRvAdapter.submitChannels(emptyList(), 0)
                   }
               }
 
@@ -4483,7 +2665,7 @@ jobs:
                   leftIconRail.visibility = View.GONE
                   focusedCategoryPos = currentCategoryIndex
                   updateCategoriesList()
-                  channelListView.visibility = View.GONE
+                  channelRecyclerView.visibility = View.GONE
                   categoryListView.visibility = View.VISIBLE
                   categoryListView.setSelection(currentCategoryIndex)
                   categoryListView.requestFocus()
@@ -4660,7 +2842,6 @@ jobs:
                   p.seekTo(target)
               }
 
-              // ИСПРАВЛЕН БАГ №3: Полностью убраны всплывающие Toast-оповещения при включении/выключении/обмене каналов в режиме Картинка-в-картинке!
               private fun stopDualStreamMode() {
                   isDualStreamActive = false
                   try { dualPipPlayer?.stop(); dualPipPlayer?.release() } catch (_: Exception) {}
@@ -5581,7 +3762,6 @@ jobs:
                   if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
               }
 
-              // ИСПРАВЛЕН БАГ №2: Атомарные счётчики O(1) и ограничение частоты обновления UI раз в 2500мс — никаких зависаний при одновременном листании!
               private fun startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>) {
                   val targetChannels = rawTargetChannels.filter { !manualDisabledUrls.contains(it.url) }
                   if (isAnalyzerRunning || targetChannels.isEmpty()) return
@@ -5771,7 +3951,6 @@ jobs:
                   return !manualDisabledUrls.contains(ch.url) && !autoDisabledUrls.contains(ch.url) && !disabledCategories.contains(effectiveCategory(ch))
               }
 
-              // Потоковая загрузка плейлистов с контролем поколений (отменяет устаревшие потоки при быстром переключении)
               private fun loadActivePlaylist(autoPlayLast: Boolean) {
                   ensureDefaultPlaylists()
                   val entry = playlists[activePlaylistIndex]
@@ -5880,14 +4059,9 @@ jobs:
               }
 
               private fun refreshChannelAdapter() {
-                  val snapshot = displayedChannels.toList()
-                  channelAdapter.clear()
-                  channelAdapter.addAll(snapshot.mapIndexed { i, ch ->
-                      val topBadge = if (topUrls.contains(ch.url)) "▲ " else ""
-                      val starBadge = if (favoriteUrls.contains(ch.url)) "★ " else ""
-                      "${i + 1}. $topBadge$starBadge${ch.name}"
-                  })
-                  channelAdapter.notifyDataSetChanged()
+                  if (::channelRvAdapter.isInitialized) {
+                      channelRvAdapter.submitChannels(displayedChannels.toList(), focusedChannelPos)
+                  }
               }
 
               private fun toggleTopChannel(ch: Channel) {
@@ -5906,7 +4080,6 @@ jobs:
                   }.start()
               }
 
-              // ИСПРАВЛЕН БАГ №2: Debounce (160мс) для быстрого перелистывания каналов — ExoPlayer.prepare() вызывается только когда вы остановились на канале!
               private val executeDebouncedPlayRunnable = Runnable {
                   val target = pendingDebouncedChannel ?: return@Runnable
                   try {
@@ -5919,7 +4092,8 @@ jobs:
               }
 
               private fun playChannelObj(channel: Channel, immediate: Boolean = false, silentSwap: Boolean = false) {
-                  if (!silentSwap && currentChannel != null && currentChannel?.url != channel.url) {
+                  val prevPlayingUrl = currentChannel?.url
+                  if (!silentSwap && currentChannel != null && prevPlayingUrl != channel.url) {
                       previousChannel = currentChannel
                   }
                   currentChannel = channel
@@ -5928,6 +4102,13 @@ jobs:
                   lowSignalStuckSeconds = 0
                   consecutiveDropFailures = 0
                   saveState()
+
+                  if (::channelRvAdapter.isInitialized) {
+                      val oldIdx = displayedChannels.indexOfFirst { it.url == prevPlayingUrl }
+                      val newIdx = displayedChannels.indexOfFirst { it.url == channel.url }
+                      if (oldIdx >= 0) channelRvAdapter.notifyItemChanged(oldIdx)
+                      if (newIdx >= 0) channelRvAdapter.notifyItemChanged(newIdx)
+                  }
 
                   uiHandler.removeCallbacks(hideMorphFallbackRunnable)
                   morphTransitionOverlay.visibility = View.VISIBLE
@@ -6186,7 +4367,7 @@ jobs:
           path: app/permanent_key.jks
           key: mibox-iptv-immutable-signing-jks-v1
 
-      - name: Step 4 - Ensure Keystore Exists and Compile TiViLook v2.5 APK
+      - name: Step 4 - Ensure Keystore Exists and Compile TiViLook v2.6 APK
         run: |
           mkdir -p ~/.android
           if [ ! -f app/permanent_key.jks ]; then
@@ -6200,10 +4381,90 @@ jobs:
           fi
           cp app/permanent_key.jks ~/.android/debug.keystore || true
           gradle assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk TiViLook-v2.5.${GITHUB_RUN_NUMBER}.apk
+          cp app/build/outputs/apk/release/app-release.apk TiViLook-v2.6.${GITHUB_RUN_NUMBER}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: TiViLook-v2.5.${{ github.run_number }}
-          path: TiViLook-v2.5.${{ github.run_number }}.apk
+          name: TiViLook-v2.6.${{ github.run_number }}
+          path: TiViLook-v2.6.${{ github.run_number }}.apk
+
+      - name: Step 5 - Auto-Commit Clean Kotlin Files & Slim Down Workflow (Пункт 1)
+        run: |
+          cat << 'SLIM_YML' > .github/workflows/build_apk.yml
+          name: Build TiViLook APK
+
+          on:
+            push:
+              branches: [ main, master ]
+            workflow_dispatch:
+
+          permissions:
+            contents: write
+
+          concurrency:
+            group: tivilook-build-${{ github.ref }}
+            cancel-in-progress: true
+
+          jobs:
+            build:
+              runs-on: ubuntu-latest
+              steps:
+                - name: Checkout repository
+                  uses: actions/checkout@v4
+
+                - name: Set up JDK 17
+                  uses: actions/setup-java@v4
+                  with:
+                    java-version: '17'
+                    distribution: 'temurin'
+
+                - name: Setup Gradle
+                  uses: gradle/actions/setup-gradle@v3
+
+                - name: Bump Version Number
+                  run: |
+                    python3 -c '
+                    import os, re
+                    with open("app/build.gradle", "r") as f: g = f.read()
+                    run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "105"))
+                    g = re.sub(r"versionCode\s+\d+", f"versionCode {17000 + run_num}", g)
+                    g = re.sub(r"versionName\s+\"[^\"]+\"", f"versionName \"2.6.{run_num}\"", g)
+                    with open("app/build.gradle", "w") as f: f.write(g)
+                    '
+
+                - name: Lock Permanent Signing Keystore in Cache
+                  uses: actions/cache@v4
+                  with:
+                    path: app/permanent_key.jks
+                    key: mibox-iptv-immutable-signing-jks-v1
+
+                - name: Compile TiViLook APK
+                  run: |
+                    mkdir -p ~/.android
+                    if [ ! -f app/permanent_key.jks ]; then
+                      keytool -genkeypair -v \
+                        -keystore app/permanent_key.jks \
+                        -storetype JKS \
+                        -keyalg RSA -keysize 2048 -validity 10000 \
+                        -alias androiddebugkey \
+                        -storepass android -keypass android \
+                        -dname "CN=Android Debug,O=Android,C=US"
+                    fi
+                    cp app/permanent_key.jks ~/.android/debug.keystore || true
+                    gradle assembleRelease
+                    cp app/build/outputs/apk/release/app-release.apk TiViLook-v2.6.${GITHUB_RUN_NUMBER}.apk
+
+                - name: Upload APK
+                  uses: actions/upload-artifact@v4
+                  with:
+                    name: TiViLook-v2.6.${{ github.run_number }}
+                    path: TiViLook-v2.6.${{ github.run_number }}.apk
+          SLIM_YML
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/ .github/workflows/build_apk.yml
+          git reset app/permanent_key.jks || true
+          git commit -m "chore: migrate to clean modular Kotlin files and RecyclerView v2.6 [skip ci]" || true
+          git push || true
