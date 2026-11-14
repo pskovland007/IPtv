@@ -6,7 +6,6 @@ import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
-import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import kotlin.math.abs
 
@@ -21,141 +20,125 @@ class ChannelRvAdapter(
     private val onChannelLongClicked: (Int, Channel) -> Unit,
     private val onLeftPressedToGroups: () -> Unit,
     private val onRightPressedCloseMenu: () -> Unit
-) : RecyclerView.Adapter<ChannelRvAdapter.ChannelVH>() {
+) : RecyclerView.Adapter<ChannelRvAdapter.VH>() {
 
     private val items = ArrayList<Channel>()
-    var focusedPos: Int = 0
-        private set
+    var highlightedPos: Int = 0
 
-    init {
-        setHasStableIds(true)
-    }
+    class VH(val row: ChannelRowView) : RecyclerView.ViewHolder(row)
 
-    override fun getItemId(position: Int): Long {
-        return items[position].url.hashCode().toLong()
-    }
-
-    fun submitChannels(newList: List<Channel>, initialFocusPos: Int) {
-        val oldList = ArrayList(items)
-        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
-            override fun getOldListSize(): Int = oldList.size
-            override fun getNewListSize(): Int = newList.size
-            override fun areItemsTheSame(oldPos: Int, newPos: Int): Boolean =
-                oldList[oldPos].url == newList[newPos].url
-            override fun areContentsTheSame(oldPos: Int, newPos: Int): Boolean =
-                oldList[oldPos] == newList[newPos]
-        })
+    fun submitChannels(newList: List<Channel>, focusPos: Int) {
         items.clear()
         items.addAll(newList)
-        focusedPos = initialFocusPos.coerceIn(0, (items.size - 1).coerceAtLeast(0))
-        diff.dispatchUpdatesTo(this)
-    }
-
-    fun updateFocusedPosition(newPos: Int) {
-        if (items.isEmpty()) return
-        val bounded = newPos.coerceIn(0, items.lastIndex)
-        val prev = focusedPos
-        focusedPos = bounded
-        if (prev in items.indices && prev != bounded) notifyItemChanged(prev)
-        notifyItemChanged(bounded)
-        onChannelFocused(bounded)
-    }
-
-    private fun extractMonogram(name: String): String {
-        val words = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-        if (words.size >= 2) return (words[0].take(1) + words[1].take(1)).uppercase()
-        return name.take(2).uppercase()
-    }
-
-    private fun monogramColorFor(name: String): Int {
-        val palette = listOf("#1E88E5", "#00897B", "#8E24AA", "#D81B60", "#F4511E", "#3949AB", "#43A047")
-        return Color.parseColor(palette[abs(name.hashCode()) % palette.size])
-    }
-
-    class ChannelVH(val row: ChannelRowView) : RecyclerView.ViewHolder(row)
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelVH {
-        val row = ChannelRowView(parent.context).apply {
-            isFocusable = true
-            isFocusableInTouchMode = false
-            isClickable = true
-            layoutParams = RecyclerView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 3, 0, 3) }
-        }
-        return ChannelVH(row)
+        highlightedPos = focusPos.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+        notifyDataSetChanged()
     }
 
     override fun getItemCount(): Int = items.size
 
-    override fun onBindViewHolder(holder: ChannelVH, position: Int) {
-        val ch = items[position]
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+        val row = ChannelRowView(parent.context).apply {
+            layoutParams = RecyclerView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 2, 0, 2) }
+            isFocusable = true
+            isFocusableInTouchMode = false
+            isClickable = true
+        }
+        return VH(row)
+    }
+
+    private fun styleRow(row: ChannelRowView, ch: Channel?, isSelected: Boolean, isPlaying: Boolean) {
         val t = getTheme()
         val scale = getUiScaleFactor()
-        val highlighted = (position == focusedPos)
+        val padV = (11 * scale).toInt()
+        row.setPadding(6, padV, 6, padV)
 
-        val topBadge = if (isTopUrl(ch.url)) "▲ " else ""
-        val starBadge = if (isFavUrl(ch.url)) "★ " else ""
-        holder.row.titleView.text = "${position + 1}. $topBadge$starBadge${ch.name}"
-        holder.row.titleView.typeface = if (highlighted) t.boldFont else t.normalFont
-        holder.row.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f * scale)
-        holder.row.titleView.forceMarqueeActive = highlighted
+        row.titleView.setSingleLine(true)
+        row.titleView.maxLines = 1
+        row.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.5f * scale)
+        row.titleView.typeface = if (isSelected || isPlaying) t.boldFont else t.normalFont
+        row.titleView.forceMarqueeActive = isSelected
 
-        holder.row.badgeView.text = extractMonogram(ch.name)
-        holder.row.badgeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f * scale)
-        holder.row.badgeView.setBackgroundDrawable(GradientDrawable().apply {
-            setColor(monogramColorFor(ch.name))
-            cornerRadius = 12f
-        })
-
-        if (getPlayingUrl() == ch.url) {
-            holder.row.eqView.barColor = if (highlighted) t.textOnAccent else Color.parseColor("#00E676")
-            holder.row.eqView.visibility = View.VISIBLE
-            holder.row.eqView.invalidate()
-        } else {
-            holder.row.eqView.visibility = View.GONE
-        }
-
-        if (highlighted) {
-            holder.row.titleView.setTextColor(t.textOnAccent)
-            holder.row.setBackgroundDrawable(GradientDrawable().apply {
+        if (isSelected) {
+            row.titleView.setTextColor(t.textOnAccent)
+            row.setBackgroundDrawable(GradientDrawable().apply {
                 setColor(t.accentColor)
                 cornerRadius = 20f
                 setStroke(2, Color.WHITE)
             })
+        } else if (isPlaying) {
+            row.titleView.setTextColor(t.accentColor)
+            row.setBackgroundDrawable(GradientDrawable().apply {
+                setColor(Color.argb(65, Color.red(t.accentColor), Color.green(t.accentColor), Color.blue(t.accentColor)))
+                cornerRadius = 18f
+                setStroke(1, t.accentColor)
+            })
         } else {
-            holder.row.titleView.setTextColor(t.textPrimaryColor)
-            holder.row.setBackgroundDrawable(null)
+            row.titleView.setTextColor(t.textPrimaryColor)
+            row.setBackgroundDrawable(null)
         }
 
+        if (ch != null) {
+            val isTop = isTopUrl(ch.url)
+            val isFav = isFavUrl(ch.url)
+            val prefix = (if (isTop) "▲ " else "") + (if (isFav) "★ " else "")
+            row.titleView.text = prefix + ch.name
+
+            val letters = ch.name.filter { it.isLetterOrDigit() }.take(2).uppercase().ifEmpty { "TV" }
+            row.badgeView.text = letters
+            val hue = (abs(ch.name.hashCode()) % 360).toFloat()
+            val badgeBgColor = Color.HSVToColor(floatArrayOf(hue, 0.65f, 0.78f))
+            row.badgeView.setBackgroundDrawable(GradientDrawable().apply {
+                setColor(badgeBgColor)
+                cornerRadius = 13f
+                setStroke(1, Color.argb(110, 255, 255, 255))
+            })
+        }
+
+        if (isPlaying) {
+            row.eqView.visibility = View.VISIBLE
+            row.eqView.barColor = if (isSelected) t.textOnAccent else t.accentColor
+        } else {
+            row.eqView.visibility = View.GONE
+        }
+    }
+
+    override fun onBindViewHolder(holder: VH, position: Int) {
+        val ch = items.getOrNull(position) ?: return
+        val isPlaying = (ch.url == getPlayingUrl())
+        val isSelected = (holder.itemView.hasFocus() || position == highlightedPos)
+
+        styleRow(holder.row, ch, isSelected, isPlaying)
+
         holder.row.setOnFocusChangeListener { _, hasFocus ->
+            val adapterPos = holder.bindingAdapterPosition
+            if (adapterPos == RecyclerView.NO_POSITION) return@setOnFocusChangeListener
+            val curCh = items.getOrNull(adapterPos)
             if (hasFocus) {
-                val adapterPos = holder.bindingAdapterPosition
-                if (adapterPos != RecyclerView.NO_POSITION && adapterPos != focusedPos) {
-                    val old = focusedPos
-                    focusedPos = adapterPos
-                    holder.row.post {
-                        if (old in items.indices) notifyItemChanged(old)
-                        notifyItemChanged(adapterPos)
-                    }
-                    onChannelFocused(adapterPos)
+                val prev = highlightedPos
+                highlightedPos = adapterPos
+                onChannelFocused(adapterPos)
+                if (prev != adapterPos && prev in 0 until items.size) {
+                    notifyItemChanged(prev)
                 }
             }
+            styleRow(holder.row, curCh, hasFocus, curCh?.url == getPlayingUrl())
         }
 
         holder.row.setOnClickListener {
             val adapterPos = holder.bindingAdapterPosition
-            if (adapterPos != RecyclerView.NO_POSITION && adapterPos in items.indices) {
-                updateFocusedPosition(adapterPos)
+            if (adapterPos in items.indices) {
+                highlightedPos = adapterPos
                 onChannelClicked(adapterPos, items[adapterPos])
             }
         }
 
         holder.row.setOnLongClickListener {
             val adapterPos = holder.bindingAdapterPosition
-            if (adapterPos != RecyclerView.NO_POSITION && adapterPos in items.indices) {
-                updateFocusedPosition(adapterPos)
+            if (adapterPos in items.indices) {
+                highlightedPos = adapterPos
                 onChannelLongClicked(adapterPos, items[adapterPos])
             }
             true
@@ -164,25 +147,29 @@ class ChannelRvAdapter(
         holder.row.setOnKeyListener { v, keyCode, event ->
             if (event.action == KeyEvent.ACTION_DOWN) {
                 val adapterPos = holder.bindingAdapterPosition
-                if (adapterPos == RecyclerView.NO_POSITION) return@setOnKeyListener false
                 val rv = v.parent as? RecyclerView
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    onLeftPressedToGroups()
-                    return@setOnKeyListener true
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    onRightPressedCloseMenu()
-                    return@setOnKeyListener true
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP && adapterPos == 0 && items.size > 1) {
-                    val lastIdx = items.lastIndex
-                    updateFocusedPosition(lastIdx)
-                    rv?.scrollToPosition(lastIdx)
-                    rv?.post { rv.findViewHolderForAdapterPosition(lastIdx)?.itemView?.requestFocus() }
-                    return@setOnKeyListener true
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && adapterPos == items.lastIndex && items.size > 1) {
-                    updateFocusedPosition(0)
-                    rv?.scrollToPosition(0)
-                    rv?.post { rv.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
-                    return@setOnKeyListener true
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        onLeftPressedToGroups()
+                        return@setOnKeyListener true
+                    }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        onRightPressedCloseMenu()
+                        return@setOnKeyListener true
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> if (adapterPos == 0 && items.size > 1) {
+                        val lastIdx = items.size - 1
+                        highlightedPos = lastIdx
+                        rv?.scrollToPosition(lastIdx)
+                        rv?.post { rv.findViewHolderForAdapterPosition(lastIdx)?.itemView?.requestFocus() }
+                        return@setOnKeyListener true
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> if (adapterPos == items.size - 1 && items.size > 1) {
+                        highlightedPos = 0
+                        rv?.scrollToPosition(0)
+                        rv?.post { rv.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() }
+                        return@setOnKeyListener true
+                    }
                 }
             }
             false
