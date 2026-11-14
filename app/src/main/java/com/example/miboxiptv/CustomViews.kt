@@ -152,56 +152,59 @@ class LiveEqualizerView(context: Context) : View(context) {
             rect.set(left, h - barH, left + barW, h)
             canvas.drawRoundRect(rect, 3f, 3f, paint)
         }
-        postInvalidateDelayed(85L)
+        postInvalidateDelayed(110L)
     }
 }
 
 class MarqueeRowTextView(context: Context) : TextView(context) {
-    init {
-        setSingleLine(true)
-        maxLines = 1
-        ellipsize = TextUtils.TruncateAt.END
-    }
-
     var forceMarqueeActive: Boolean = false
         set(value) {
+            if (field == value) return
             field = value
+            isSelected = value
             setSingleLine(true)
             maxLines = 1
             if (value) {
                 ellipsize = TextUtils.TruncateAt.MARQUEE
                 marqueeRepeatLimit = -1
                 setHorizontallyScrolling(true)
-                isSelected = true
             } else {
-                isSelected = false
                 ellipsize = TextUtils.TruncateAt.END
             }
         }
 
+    init {
+        setSingleLine(true)
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+    }
+
     override fun isFocused(): Boolean = forceMarqueeActive || super.isFocused()
 }
 
+// Пункт 1: Строка канала теперь имеет точно такую же высоту и вертикальные отступы, как строка группы
 class ChannelRowView(context: Context) : FrameLayout(context) {
     val badgeView = TextView(context).apply {
-        gravity = Gravity.CENTER; setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-        setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
-        setSingleLine(true); maxLines = 1
-        layoutParams = LayoutParams(44, 44, Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = 14 }
+        gravity = Gravity.CENTER
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        setTextColor(Color.WHITE)
+        typeface = Typeface.DEFAULT_BOLD
+        setSingleLine(true)
+        layoutParams = LayoutParams(42, 34, Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = 14 }
     }
     val titleView = MarqueeRowTextView(context).apply {
-        setSingleLine(true); maxLines = 1
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL).apply {
-            leftMargin = 70; rightMargin = 54
+            leftMargin = 66; rightMargin = 48
         }
     }
     val eqView = LiveEqualizerView(context).apply {
         visibility = View.GONE
-        layoutParams = LayoutParams(34, 24, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = 14 }
+        layoutParams = LayoutParams(30, 20, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = 12 }
     }
     init {
-        setPadding(4, 10, 4, 10)
-        addView(badgeView); addView(titleView); addView(eqView)
+        addView(badgeView)
+        addView(titleView)
+        addView(eqView)
     }
 }
 
@@ -263,6 +266,7 @@ class RealisticEyeSplashView(context: Context) : View(context) {
     }
 }
 
+// Пункт 5: Иконки главного меню в точном соответствии с 6 темами со скриншотов
 class ThemedTileView(
     context: Context, private val iconType: String,
     private val baseColorHex: String, private val accentColorHex: String
@@ -280,198 +284,404 @@ class ThemedTileView(
         super.onDraw(canvas)
         val w = width.toFloat(); val h = height.toFloat()
         val minDim = min(w, h)
-        val pad = if (isTileFocused) minDim * 0.04f else minDim * 0.08f
-
-        val mainColor = when (themeStyleId) {
-            0 -> Color.parseColor(if (isTileFocused) "#1E3A8A" else "#2B2D30")
-            1 -> Color.parseColor("#100D22")
-            2 -> Color.parseColor("#050505")
-            3 -> Color.parseColor("#242933")
-            4 -> Color.parseColor("#2D1A12")
-            5 -> Color.parseColor(if (isTileFocused) "#3F3F46" else "#18181B")
-            6 -> Color.parseColor(if (isTileFocused) "#DBEAFE" else "#F1F5F9")
-            7 -> Color.parseColor("#1E052E")
-            8 -> Color.parseColor("#021202")
-            9 -> Color.parseColor("#1A1308")
-            else -> Color.parseColor(baseColorHex)
-        }
-        val badgeColor = when (themeStyleId) {
-            0 -> Color.parseColor("#A8C7FA")
-            1 -> Color.parseColor("#00E5FF")
-            2 -> Color.parseColor("#00E676")
-            3 -> Color.parseColor("#88C0D0")
-            4 -> Color.parseColor("#FFB300")
-            5 -> Color.parseColor("#E4E4E7")
-            6 -> Color.parseColor("#2563EB")
-            7 -> Color.parseColor("#FF2A85")
-            8 -> Color.parseColor("#00FF66")
-            9 -> Color.parseColor("#FFD700")
-            else -> Color.parseColor(accentColorHex)
-        }
-
         val cx = w / 2f; val cy = h / 2f
-        val r = (minDim - pad * 2) * 0.34f
-        val corner = when (themeStyleId) {
-            0 -> minDim * 0.34f
-            2, 5 -> minDim * 0.12f
-            8 -> 4f
-            else -> minDim * 0.22f
+        val pad = minDim * 0.08f
+        val r = (minDim - pad * 2) * 0.38f
+
+        paint.shader = null
+        paint.style = Paint.Style.FILL
+
+        // 1. ОТРИСОВКА ПОДЛОЖКИ / ФОНА ПЛИТКИ ПО СТИЛЮ ТЕМЫ:
+        // ID 0: Материал Дизайн (плоские яркие фигуры без квадратной подложки, мягкое кольцо при фокусе)
+        // ID 1: Неон (без подложки, радужный неоновый градиент на чёрном)
+        // ID 2: Амолед Блэк (без подложки, тонкие белые линии на чёрном)
+        // ID 3: Монохром (светло-серый строгий квадрат с тонкой рамкой)
+        // ID 4: Ретро (винтажные матовые скруглённые карточки с тёплой тенью)
+        // ID 5: Карусель (3D круглая фишка-монетка с белой прослойкой и цветным дном)
+
+        when (themeStyleId) {
+            0 -> {
+                // Материал Дизайн: мягкий круглый ореол только при наведении фокуса
+                if (isTileFocused) {
+                    paint.color = Color.parseColor("#222563EB")
+                    canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 3f
+                    paint.color = Color.parseColor("#2563EB")
+                    canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
+                }
+            }
+            1 -> {
+                // Неон: без квадратных коробок, только неоновый ореол вокруг активной иконки
+                if (isTileFocused) {
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 2.5f
+                    paint.shader = LinearGradient(
+                        0f, 0f, w, h,
+                        intArrayOf(Color.parseColor("#FF7597"), Color.parseColor("#FFE082"), Color.parseColor("#64FFDA")),
+                        null, Shader.TileMode.CLAMP
+                    )
+                    canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
+                    paint.shader = null
+                }
+            }
+            2 -> {
+                // Амолед Блэк: чисто чёрный фон без коробок, тонкое белое кольцо только при фокусе
+                if (isTileFocused) {
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 2f
+                    paint.color = Color.WHITE
+                    canvas.drawCircle(cx, cy, minDim * 0.45f, paint)
+                }
+            }
+            3 -> {
+                // Монохром: светло-серая квадратная плитка как на скриншоте
+                rect.set(pad, pad, w - pad, h - pad)
+                paint.style = Paint.Style.FILL
+                paint.color = if (isTileFocused) Color.parseColor("#E4E4E7") else Color.parseColor("#F4F4F5")
+                canvas.drawRect(rect, paint)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (isTileFocused) 3.5f else 1.5f
+                paint.color = if (isTileFocused) Color.parseColor("#27272A") else Color.parseColor("#D4D4D8")
+                canvas.drawRect(rect, paint)
+            }
+            4 -> {
+                // Ретро: матовые винтажные квадраты с мягкими углами и глубокой тенью снизу
+                val retroTileColor = when (iconType) {
+                    "PLAYLISTS", "EPG_GRID", "AUDIO" -> Color.parseColor("#277A68") // Винтажный изумрудно-зелёный
+                    "EDITOR", "BUFFER", "FAVORITES" -> Color.parseColor("#9C513B") // Терракотово-коричневый
+                    "THEMES", "TOP_CHANNELS", "MORE" -> Color.parseColor("#D4892A") // Тёплый горчично-рыжий
+                    else -> Color.parseColor("#4D4948") // Тёплый винтажный графит
+                }
+                val corner = minDim * 0.16f
+                // Тень снизу
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#88090706")
+                rect.set(pad + 2f, pad + 7f, w - pad + 2f, h - pad + 7f)
+                canvas.drawRoundRect(rect, corner, corner, paint)
+                // Сама карточка
+                paint.color = retroTileColor
+                rect.set(pad, pad, w - pad, h - pad)
+                canvas.drawRoundRect(rect, corner, corner, paint)
+                if (isTileFocused) {
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 4f
+                    paint.color = Color.parseColor("#F5E6CC")
+                    canvas.drawRoundRect(rect, corner, corner, paint)
+                }
+            }
+            else -> {
+                // ID 5: Карусель — круглая 3D-фишка (шайба с цветным ребром и белой прослойкой как на скриншоте)
+                val discColor = Color.parseColor(baseColorHex)
+                val darkEdgeColor = Color.rgb(
+                    (Color.red(discColor) * 0.68f).toInt(),
+                    (Color.green(discColor) * 0.68f).toInt(),
+                    (Color.blue(discColor) * 0.68f).toInt()
+                )
+                val discR = minDim * 0.41f
+                val topCy = cy - minDim * 0.04f
+                // 1) Нижняя тень
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#66000000")
+                canvas.drawCircle(cx, topCy + minDim * 0.12f, discR, paint)
+                // 2) Нижнее 3D-ребро в цвет шайбы
+                paint.color = darkEdgeColor
+                canvas.drawCircle(cx, topCy + minDim * 0.085f, discR, paint)
+                // 3) Белая фирменная прослойка
+                paint.color = Color.parseColor("#F1F5F9")
+                canvas.drawCircle(cx, topCy + minDim * 0.042f, discR, paint)
+                // 4) Верхняя цветная крышка шайбы
+                paint.color = discColor
+                canvas.drawCircle(cx, topCy, discR, paint)
+                if (isTileFocused) {
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 3.5f
+                    paint.color = Color.WHITE
+                    canvas.drawCircle(cx, topCy, discR, paint)
+                }
+            }
         }
 
-        paint.style = Paint.Style.FILL; paint.color = mainColor
-        rect.set(pad, pad, w - pad, h - pad)
-        canvas.drawRoundRect(rect, corner, corner, paint)
-
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = if (isTileFocused) 4.5f else 2f
-        paint.color = if (isTileFocused) (if (themeStyleId == 6) Color.parseColor("#1D4ED8") else Color.WHITE) else badgeColor
-        rect.set(pad, pad, w - pad, h - pad)
-        canvas.drawRoundRect(rect, corner, corner, paint)
-
-        val fgColor = when (themeStyleId) {
-            5 -> Color.parseColor("#F4F4F5")
-            6 -> Color.parseColor("#0F172A")
-            8 -> Color.parseColor("#00FF66")
-            9 -> Color.parseColor("#FFF8DC")
-            else -> Color.WHITE
+        // 2. НАСТРОЙКА КИСТИ ДЛЯ САМОГО СИМВОЛА ИКОНКИ:
+        val symbolCy = if (themeStyleId == 5) cy - minDim * 0.04f else cy
+        val iconR = when (themeStyleId) {
+            0 -> r * 1.15f // В Материал Дизайне сама фигура крупная
+            5 -> r * 0.78f // Внутри 3D-шайбы символ аккуратный по центру
+            else -> r
         }
 
-        val isWireframeTheme = themeStyleId in listOf(1, 2, 8)
-        paint.strokeCap = Paint.Cap.ROUND; paint.strokeJoin = Paint.Join.ROUND
+        // Вспомогательная настройка стиля для контурных/залитых тем
+        fun setupSymbolPaint(isSecondaryAccent: Boolean = false) {
+            paint.shader = null
+            paint.strokeCap = Paint.Cap.ROUND
+            paint.strokeJoin = Paint.Join.ROUND
+            when (themeStyleId) {
+                0 -> {
+                    // Материал Дизайн: сочные плоские заливки
+                    paint.style = Paint.Style.FILL
+                    paint.color = Color.parseColor(if (isSecondaryAccent) accentColorHex else baseColorHex)
+                }
+                1 -> {
+                    // Неон: градиентный неоновый контур (розовый -> жёлтый -> бирюзовый)
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 4.2f
+                    val c1 = if (isSecondaryAccent) Color.parseColor("#64FFDA") else Color.parseColor("#FF7597")
+                    val c2 = Color.parseColor("#FFE082")
+                    val c3 = if (isSecondaryAccent) Color.parseColor("#FF80AB") else Color.parseColor("#00E5FF")
+                    paint.shader = LinearGradient(cx - iconR, symbolCy - iconR, cx + iconR, symbolCy + iconR, intArrayOf(c1, c2, c3), null, Shader.TileMode.CLAMP)
+                }
+                2 -> {
+                    // Амолед Блэк: тонкие чисто белые контуры
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 2.4f
+                    paint.color = Color.WHITE
+                }
+                3 -> {
+                    // Монохром: тёмно-серый строгий силуэт (#52525B)
+                    paint.style = Paint.Style.FILL
+                    paint.color = Color.parseColor(if (isSecondaryAccent) "#3F3F46" else "#64646E")
+                }
+                4 -> {
+                    // Ретро: тёплый кремово-бежевый символ (#F5E6CC) и горчичный акцент (#F4A261)
+                    paint.style = Paint.Style.FILL
+                    paint.color = Color.parseColor(if (isSecondaryAccent) "#F4A261" else "#F5E6CC")
+                }
+                else -> {
+                    // Карусель 3D: белые символы на ярких круглых фишках
+                    paint.style = Paint.Style.FILL
+                    paint.color = if (isSecondaryAccent) Color.parseColor("#FFE082") else Color.WHITE
+                }
+            }
+        }
 
+        val isOutlineOnly = (themeStyleId == 1 || themeStyleId == 2)
+
+        // В Материал Дизайне (ID 0) рисуем фирменную плоскую цветную подложку-значок для каждого типа иконки
+        if (themeStyleId == 0) {
+            paint.style = Paint.Style.FILL
+            paint.color = Color.parseColor(baseColorHex)
+            when (iconType) {
+                "PLAYLISTS", "BUFFER", "AUDIO", "CONTROL_MODE" -> canvas.drawCircle(cx, symbolCy, iconR * 1.05f, paint)
+                else -> {
+                    rect.set(cx - iconR * 1.02f, symbolCy - iconR * 0.88f, cx + iconR * 1.02f, symbolCy + iconR * 0.88f)
+                    canvas.drawRoundRect(rect, 18f, 18f, paint)
+                }
+            }
+            // Полупрозрачный диагональный блик Material Design
+            paint.color = Color.argb(38, 255, 255, 255)
+            rect.set(cx - iconR * 1.02f, symbolCy - iconR * 0.88f, cx + iconR * 1.02f, symbolCy)
+            canvas.drawRoundRect(rect, 18f, 18f, paint)
+        }
+
+        // 3. ОТРИСОВКА КОНКРЕТНОЙ ИКОНКИ:
         when (iconType) {
             "PLAYLISTS" -> {
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
                 for (i in -1..1) {
-                    val ly = cy + i * (r * 0.52f)
-                    paint.color = if (i == 0) badgeColor else fgColor
-                    paint.style = Paint.Style.FILL
-                    canvas.drawCircle(cx - r * 0.56f, ly, r * 0.13f, paint)
-                    paint.style = if (isWireframeTheme) Paint.Style.STROKE else Paint.Style.FILL
-                    paint.strokeWidth = 2.5f
-                    rect.set(cx - r * 0.26f, ly - r * 0.11f, cx + r * 0.68f, ly + r * 0.11f)
-                    canvas.drawRoundRect(rect, 5f, 5f, paint)
+                    val ly = symbolCy + i * (iconR * 0.48f)
+                    if (isOutlineOnly) {
+                        canvas.drawCircle(cx - iconR * 0.56f, ly, iconR * 0.10f, paint)
+                        canvas.drawLine(cx - iconR * 0.25f, ly, cx + iconR * 0.65f, ly, paint)
+                    } else {
+                        canvas.drawCircle(cx - iconR * 0.54f, ly, iconR * 0.13f, paint)
+                        rect.set(cx - iconR * 0.24f, ly - iconR * 0.10f, cx + iconR * 0.66f, ly + iconR * 0.10f)
+                        canvas.drawRoundRect(rect, 6f, 6f, paint)
+                    }
                 }
             }
             "EDITOR" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f; paint.color = fgColor
-                canvas.drawLine(cx - r * 0.62f, cy - r * 0.42f, cx + r * 0.10f, cy - r * 0.42f, paint)
-                canvas.drawLine(cx - r * 0.62f, cy, cx - r * 0.08f, cy, paint)
-                canvas.drawLine(cx - r * 0.62f, cy + r * 0.42f, cx - r * 0.22f, cy + r * 0.42f, paint)
-                paint.color = badgeColor
-                canvas.drawLine(cx + r * 0.05f, cy + r * 0.45f, cx + r * 0.62f, cy - r * 0.35f, paint)
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 4f
+                canvas.drawLine(cx - iconR * 0.60f, symbolCy - iconR * 0.40f, cx + iconR * 0.15f, symbolCy - iconR * 0.40f, paint)
+                canvas.drawLine(cx - iconR * 0.60f, symbolCy, cx - iconR * 0.05f, symbolCy, paint)
+                canvas.drawLine(cx - iconR * 0.60f, symbolCy + iconR * 0.40f, cx - iconR * 0.20f, symbolCy + iconR * 0.40f, paint)
+                setupSymbolPaint(true)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.6f else 4.8f
+                canvas.drawLine(cx + iconR * 0.05f, symbolCy + iconR * 0.45f, cx + iconR * 0.60f, symbolCy - iconR * 0.35f, paint)
             }
             "ANALYZER" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.2f
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 3.8f
                 for (ring in 1..3) {
-                    val rad = r * (0.32f * ring)
-                    paint.color = if (ring == 3) badgeColor else fgColor
-                    rect.set(cx - rad, cy - rad + r * 0.2f, cx + rad, cy + rad + r * 0.2f)
+                    val rad = iconR * (0.28f * ring)
+                    rect.set(cx - rad, symbolCy - rad + iconR * 0.22f, cx + rad, symbolCy + rad + iconR * 0.22f)
                     canvas.drawArc(rect, 210f, 120f, false, paint)
                 }
-                paint.style = Paint.Style.FILL; paint.color = badgeColor
-                canvas.drawCircle(cx, cy + r * 0.34f, r * 0.16f, paint)
+                setupSymbolPaint(true)
+                if (!isOutlineOnly) paint.style = Paint.Style.FILL
+                canvas.drawCircle(cx, symbolCy + iconR * 0.34f, iconR * 0.14f, paint)
             }
             "THEMES" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f; paint.color = fgColor
-                canvas.drawCircle(cx, cy, r * 0.78f, paint)
-                paint.style = Paint.Style.FILL
-                paint.color = badgeColor; canvas.drawCircle(cx - r * 0.30f, cy - r * 0.22f, r * 0.17f, paint)
-                paint.color = Color.parseColor("#00E5FF"); canvas.drawCircle(cx + r * 0.26f, cy - r * 0.26f, r * 0.17f, paint)
-                paint.color = Color.parseColor("#FFD740"); canvas.drawCircle(cx + r * 0.30f, cy + r * 0.24f, r * 0.17f, paint)
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 3.8f
+                canvas.drawCircle(cx, symbolCy, iconR * 0.72f, paint)
+                setupSymbolPaint(true)
+                if (!isOutlineOnly) paint.style = Paint.Style.FILL
+                canvas.drawCircle(cx - iconR * 0.26f, symbolCy - iconR * 0.18f, iconR * 0.15f, paint)
+                canvas.drawCircle(cx + iconR * 0.24f, symbolCy - iconR * 0.22f, iconR * 0.15f, paint)
+                canvas.drawCircle(cx + iconR * 0.22f, symbolCy + iconR * 0.24f, iconR * 0.15f, paint)
             }
             "BUFFER" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f; paint.color = fgColor
-                rect.set(cx - r * 0.78f, cy - r * 0.78f, cx + r * 0.78f, cy + r * 0.78f)
-                canvas.drawArc(rect, 150f, 240f, false, paint)
-                paint.style = if (isWireframeTheme) Paint.Style.STROKE else Paint.Style.FILL; paint.color = badgeColor
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 3.6f
+                rect.set(cx - iconR * 0.72f, symbolCy - iconR * 0.72f, cx + iconR * 0.72f, symbolCy + iconR * 0.72f)
+                canvas.drawArc(rect, 145f, 250f, false, paint)
+                setupSymbolPaint(true)
+                if (!isOutlineOnly) paint.style = Paint.Style.FILL
                 path.reset()
-                path.moveTo(cx + r * 0.10f, cy - r * 0.56f); path.lineTo(cx - r * 0.34f, cy + r * 0.04f)
-                path.lineTo(cx + r * 0.02f, cy + r * 0.04f); path.lineTo(cx - r * 0.12f, cy + r * 0.56f)
-                path.lineTo(cx + r * 0.36f, cy - r * 0.06f); path.lineTo(cx + r * 0.02f, cy - r * 0.06f); path.close()
+                path.moveTo(cx + iconR * 0.08f, symbolCy - iconR * 0.50f)
+                path.lineTo(cx - iconR * 0.30f, symbolCy + iconR * 0.04f)
+                path.lineTo(cx + iconR * 0.02f, symbolCy + iconR * 0.04f)
+                path.lineTo(cx - iconR * 0.10f, symbolCy + iconR * 0.50f)
+                path.lineTo(cx + iconR * 0.32f, symbolCy - iconR * 0.05f)
+                path.lineTo(cx + iconR * 0.02f, symbolCy - iconR * 0.05f)
+                path.close()
                 canvas.drawPath(path, paint)
             }
             "DECODER" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f; paint.color = fgColor
-                rect.set(cx - r * 0.52f, cy - r * 0.52f, cx + r * 0.52f, cy + r * 0.52f)
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 3.4f
+                rect.set(cx - iconR * 0.52f, symbolCy - iconR * 0.52f, cx + iconR * 0.52f, symbolCy + iconR * 0.52f)
                 canvas.drawRoundRect(rect, 8f, 8f, paint)
-                paint.style = if (isWireframeTheme) Paint.Style.STROKE else Paint.Style.FILL; paint.color = badgeColor
-                rect.set(cx - r * 0.24f, cy - r * 0.24f, cx + r * 0.24f, cy + r * 0.24f)
+                // Ножки микросхемы (как CPU-Z на скриншоте AMOLED)
+                for (k in -1..1) {
+                    val off = k * iconR * 0.28f
+                    canvas.drawLine(cx + off, symbolCy - iconR * 0.74f, cx + off, symbolCy - iconR * 0.52f, paint)
+                    canvas.drawLine(cx + off, symbolCy + iconR * 0.52f, cx + off, symbolCy + iconR * 0.74f, paint)
+                    canvas.drawLine(cx - iconR * 0.74f, symbolCy + off, cx - iconR * 0.52f, symbolCy + off, paint)
+                    canvas.drawLine(cx + iconR * 0.52f, symbolCy + off, cx + iconR * 0.74f, symbolCy + off, paint)
+                }
+                setupSymbolPaint(true)
+                if (!isOutlineOnly) paint.style = Paint.Style.FILL
+                rect.set(cx - iconR * 0.22f, symbolCy - iconR * 0.22f, cx + iconR * 0.22f, symbolCy + iconR * 0.22f)
                 canvas.drawRoundRect(rect, 4f, 4f, paint)
             }
             "EPG_GRID" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f; paint.color = fgColor
-                rect.set(cx - r * 0.72f, cy - r * 0.62f, cx + r * 0.72f, cy + r * 0.68f)
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 3.4f
+                rect.set(cx - iconR * 0.66f, symbolCy - iconR * 0.58f, cx + iconR * 0.66f, symbolCy + iconR * 0.62f)
                 canvas.drawRoundRect(rect, 10f, 10f, paint)
-                canvas.drawLine(cx - r * 0.72f, cy - r * 0.18f, cx + r * 0.72f, cy - r * 0.18f, paint)
-                paint.style = Paint.Style.FILL; paint.color = badgeColor
-                canvas.drawCircle(cx - r * 0.32f, cy + r * 0.18f, r * 0.13f, paint)
-                canvas.drawCircle(cx, cy + r * 0.18f, r * 0.13f, paint)
-                canvas.drawCircle(cx + r * 0.32f, cy + r * 0.18f, r * 0.13f, paint)
+                canvas.drawLine(cx - iconR * 0.66f, symbolCy - iconR * 0.16f, cx + iconR * 0.66f, symbolCy - iconR * 0.16f, paint)
+                setupSymbolPaint(true)
+                if (!isOutlineOnly) paint.style = Paint.Style.FILL
+                canvas.drawCircle(cx - iconR * 0.28f, symbolCy + iconR * 0.18f, iconR * 0.11f, paint)
+                canvas.drawCircle(cx, symbolCy + iconR * 0.18f, iconR * 0.11f, paint)
+                canvas.drawCircle(cx + iconR * 0.28f, symbolCy + iconR * 0.18f, iconR * 0.11f, paint)
             }
             "TOP_CHANNELS" -> {
-                paint.style = if (isWireframeTheme) Paint.Style.STROKE else Paint.Style.FILL
-                paint.strokeWidth = 3.2f; paint.color = badgeColor
+                setupSymbolPaint(true)
+                if (themeStyleId == 0) paint.color = Color.parseColor("#FFD54F")
+                if (!isOutlineOnly) paint.style = Paint.Style.FILL else paint.style = Paint.Style.STROKE
                 path.reset()
-                path.moveTo(cx - r * 0.66f, cy + r * 0.48f); path.lineTo(cx - r * 0.74f, cy - r * 0.36f)
-                path.lineTo(cx - r * 0.26f, cy + r * 0.06f); path.lineTo(cx, cy - r * 0.56f)
-                path.lineTo(cx + r * 0.26f, cy + r * 0.06f); path.lineTo(cx + r * 0.74f, cy - r * 0.36f)
-                path.lineTo(cx + r * 0.66f, cy + r * 0.48f); path.close()
+                path.moveTo(cx - iconR * 0.62f, symbolCy + iconR * 0.44f)
+                path.lineTo(cx - iconR * 0.70f, symbolCy - iconR * 0.32f)
+                path.lineTo(cx - iconR * 0.24f, symbolCy + iconR * 0.06f)
+                path.lineTo(cx, symbolCy - iconR * 0.52f)
+                path.lineTo(cx + iconR * 0.24f, symbolCy + iconR * 0.06f)
+                path.lineTo(cx + iconR * 0.70f, symbolCy - iconR * 0.32f)
+                path.lineTo(cx + iconR * 0.62f, symbolCy + iconR * 0.44f)
+                path.close()
                 canvas.drawPath(path, paint)
             }
             "FAVORITES" -> {
-                paint.style = if (isWireframeTheme) Paint.Style.STROKE else Paint.Style.FILL
-                paint.strokeWidth = 3f; paint.color = badgeColor
+                setupSymbolPaint(true)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                if (!isOutlineOnly) paint.style = Paint.Style.FILL else paint.style = Paint.Style.STROKE
                 path.reset()
                 for (i in 0 until 10) {
                     val a = Math.toRadians(-90.0 + i * 36.0)
-                    val rad = if (i % 2 == 0) r * 0.78f else r * 0.34f
-                    val sx = cx + (rad * cos(a)).toFloat(); val sy = cy + (rad * sin(a)).toFloat()
+                    val rad = if (i % 2 == 0) iconR * 0.74f else iconR * 0.32f
+                    val sx = cx + (rad * cos(a)).toFloat(); val sy = symbolCy + (rad * sin(a)).toFloat()
                     if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
                 }
-                path.close(); canvas.drawPath(path, paint)
+                path.close()
+                canvas.drawPath(path, paint)
             }
             "AUDIO" -> {
-                val pos = listOf(-0.52f, 0f, 0.52f); val hts = listOf(0.45f, 0.76f, 0.58f)
-                paint.style = Paint.Style.FILL
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                val pos = listOf(-0.48f, -0.16f, 0.16f, 0.48f)
+                val hts = listOf(0.38f, 0.72f, 0.52f, 0.30f)
                 for (i in pos.indices) {
-                    paint.color = if (i == 1) badgeColor else fgColor
-                    rect.set(cx + pos[i] * r - 5.5f, cy - hts[i] * r, cx + pos[i] * r + 5.5f, cy + hts[i] * r)
-                    canvas.drawRoundRect(rect, 5f, 5f, paint)
+                    if (i == 1) setupSymbolPaint(true).also { if (themeStyleId == 0) paint.color = Color.WHITE }
+                    else setupSymbolPaint(false).also { if (themeStyleId == 0) paint.color = Color.WHITE }
+                    if (isOutlineOnly) {
+                        paint.style = Paint.Style.STROKE
+                        canvas.drawLine(cx + pos[i] * iconR, symbolCy - hts[i] * iconR, cx + pos[i] * iconR, symbolCy + hts[i] * iconR, paint)
+                    } else {
+                        paint.style = Paint.Style.FILL
+                        rect.set(cx + pos[i] * iconR - 4.5f, symbolCy - hts[i] * iconR, cx + pos[i] * iconR + 4.5f, symbolCy + hts[i] * iconR)
+                        canvas.drawRoundRect(rect, 4f, 4f, paint)
+                    }
                 }
             }
             "CONTROL_MODE" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.2f; paint.color = fgColor
-                rect.set(cx - r * 0.48f, cy - r * 0.80f, cx + r * 0.48f, cy + r * 0.80f)
-                canvas.drawRoundRect(rect, 14f, 14f, paint)
-                canvas.drawCircle(cx, cy - r * 0.22f, r * 0.24f, paint)
-                paint.style = Paint.Style.FILL; paint.color = badgeColor
-                canvas.drawCircle(cx, cy - r * 0.22f, r * 0.10f, paint)
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 3.4f
+                rect.set(cx - iconR * 0.44f, symbolCy - iconR * 0.72f, cx + iconR * 0.44f, symbolCy + iconR * 0.72f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                setupSymbolPaint(true)
+                if (!isOutlineOnly) paint.style = Paint.Style.FILL
+                canvas.drawCircle(cx, symbolCy - iconR * 0.20f, iconR * 0.16f, paint)
             }
             "SETTINGS_GEAR" -> {
-                paint.style = Paint.Style.FILL; paint.color = fgColor
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 3.6f
+                canvas.drawCircle(cx, symbolCy, iconR * 0.52f, paint)
                 for (deg in 0 until 360 step 45) {
                     val rad = Math.toRadians(deg.toDouble())
-                    canvas.drawCircle(cx + (r * 0.70f * cos(rad)).toFloat(), cy + (r * 0.70f * sin(rad)).toFloat(), r * 0.18f, paint)
+                    canvas.drawLine(
+                        cx + (iconR * 0.52f * cos(rad)).toFloat(), symbolCy + (iconR * 0.52f * sin(rad)).toFloat(),
+                        cx + (iconR * 0.74f * cos(rad)).toFloat(), symbolCy + (iconR * 0.74f * sin(rad)).toFloat(),
+                        paint
+                    )
                 }
-                canvas.drawCircle(cx, cy, r * 0.64f, paint)
-                paint.color = mainColor; canvas.drawCircle(cx, cy, r * 0.28f, paint)
             }
             "SWAP_GROUPS" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = fgColor
-                canvas.drawLine(cx - r * 0.60f, cy - r * 0.26f, cx + r * 0.60f, cy - r * 0.26f, paint)
-                canvas.drawLine(cx + r * 0.24f, cy - r * 0.54f, cx + r * 0.60f, cy - r * 0.26f, paint)
-                paint.color = badgeColor
-                canvas.drawLine(cx - r * 0.60f, cy + r * 0.26f, cx + r * 0.60f, cy + r * 0.26f, paint)
-                canvas.drawLine(cx - r * 0.24f, cy + r * 0.54f, cx - r * 0.60f, cy + r * 0.26f, paint)
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 3.6f
+                canvas.drawLine(cx - iconR * 0.56f, symbolCy - iconR * 0.24f, cx + iconR * 0.56f, symbolCy - iconR * 0.24f, paint)
+                canvas.drawLine(cx + iconR * 0.22f, symbolCy - iconR * 0.50f, cx + iconR * 0.56f, symbolCy - iconR * 0.24f, paint)
+                setupSymbolPaint(true)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 3.6f
+                canvas.drawLine(cx - iconR * 0.56f, symbolCy + iconR * 0.24f, cx + iconR * 0.56f, symbolCy + iconR * 0.24f, paint)
+                canvas.drawLine(cx - iconR * 0.22f, symbolCy + iconR * 0.50f, cx - iconR * 0.56f, symbolCy + iconR * 0.24f, paint)
             }
             else -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.2f; paint.color = fgColor
-                rect.set(cx - r * 0.76f, cy - r * 0.56f, cx + r * 0.76f, cy + r * 0.42f)
+                // Иконка «Вид» (Монитор / Экран с глазом)
+                setupSymbolPaint(false)
+                if (themeStyleId == 0) paint.color = Color.WHITE
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = if (themeStyleId == 2) 2.4f else 3.4f
+                rect.set(cx - iconR * 0.70f, symbolCy - iconR * 0.52f, cx + iconR * 0.70f, symbolCy + iconR * 0.38f)
                 canvas.drawRoundRect(rect, 10f, 10f, paint)
-                canvas.drawLine(cx - r * 0.36f, cy + r * 0.68f, cx + r * 0.36f, cy + r * 0.68f, paint)
-                paint.style = Paint.Style.FILL; paint.color = badgeColor
-                canvas.drawCircle(cx, cy - r * 0.08f, r * 0.24f, paint)
+                canvas.drawLine(cx - iconR * 0.34f, symbolCy + iconR * 0.62f, cx + iconR * 0.34f, symbolCy + iconR * 0.62f, paint)
+                setupSymbolPaint(true)
+                if (!isOutlineOnly) paint.style = Paint.Style.FILL
+                canvas.drawCircle(cx, symbolCy - iconR * 0.07f, iconR * 0.20f, paint)
             }
         }
+        paint.shader = null
     }
 }
