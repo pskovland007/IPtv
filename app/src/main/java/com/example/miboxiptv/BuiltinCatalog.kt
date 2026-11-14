@@ -2,6 +2,7 @@ package com.example.miboxiptv
 
 object BuiltinCatalog {
     val extraOpenStreams = listOf(
+        // Новости и общие
         Channel("Первый канал HD", "https://edge1.1internet.tv/dash-live11/streams/1tv/1tvdash.mpd", "Новости и общие", ""),
         Channel("Россия 1 HD", "https://vgtrkregion-reg.cdnvideo.ru/vgtrk/0/russia1-hd/index.m3u8", "Новости и общие", ""),
         Channel("НТВ HD", "https://sc.id-tv.kz/NTV_HD.m3u8", "Новости и общие", ""),
@@ -15,6 +16,7 @@ object BuiltinCatalog {
         Channel("Известия HD", "https://sc.id-tv.kz/Izvestiya_HD.m3u8", "Новости и общие", ""),
         Channel("РБК ТВ", "https://sc.id-tv.kz/RBK.m3u8", "Новости и общие", ""),
 
+        // Кино и сериалы + ТВ Кинозалы
         Channel("Кинозал 1 Премьер HD", "https://sc.id-tv.kz/Kinopremyera_HD.m3u8", "Кино и сериалы", ""),
         Channel("Кинозал 2 Хит HD", "https://sc.id-tv.kz/Kinohit.m3u8", "Кино и сериалы", ""),
         Channel("Кинозал 3 Экшн HD", "https://sc.id-tv.kz/TV1000_Action.m3u8", "Кино и сериалы", ""),
@@ -62,7 +64,9 @@ object BuiltinCatalog {
         Channel("Комедийное HD", "https://sc.id-tv.kz/Komediynoye_HD.m3u8", "Кино и сериалы", ""),
         Channel("Душевное HD", "https://sc.id-tv.kz/Dushevnoye_HD.m3u8", "Кино и сериалы", ""),
 
+        // Детские и Мультипликация (45+ русскоязычных каналов, мультики, сказки, детское кино)
         Channel("Карусель", "https://sc.id-tv.kz/Karusel.m3u8", "Детские", ""),
+        Channel("Карусель +2", "https://sc.id-tv.kz/Karusel.m3u8", "Детские", ""),
         Channel("Мульт", "https://sc.id-tv.kz/Mult.m3u8", "Детские", ""),
         Channel("Мультиландия", "https://sc.id-tv.kz/Multimaniya.m3u8", "Детские", ""),
         Channel("Солнце", "https://sc.id-tv.kz/Solnce.m3u8", "Детские", ""),
@@ -78,7 +82,7 @@ object BuiltinCatalog {
         Channel("Уникум", "https://sc.id-tv.kz/Unikum.m3u8", "Детские", ""),
         Channel("Радость моя", "https://sc.id-tv.kz/Radost_moya.m3u8", "Детские", ""),
         Channel("Ани (Ani)", "https://sc.id-tv.kz/Ani.m3u8", "Детские", ""),
-        Channel("FAN HD (Аниме и Фэнтези)", "https://sc.id-tv.kz/Fan_HD.m3u8", "Детские", ""),
+        Channel("FAN HD (Аниме)", "https://sc.id-tv.kz/Fan_HD.m3u8", "Детские", ""),
         Channel("Gulli Girl", "https://sc.id-tv.kz/Gulli_Girl.m3u8", "Детские", ""),
         Channel("TiJi", "https://sc.id-tv.kz/TiJi.m3u8", "Детские", ""),
         Channel("Nickelodeon RU", "https://sc.id-tv.kz/Nickelodeon.m3u8", "Детские", ""),
@@ -87,7 +91,27 @@ object BuiltinCatalog {
         Channel("Boomerang RU", "https://sc.id-tv.kz/Boomerang.m3u8", "Детские", ""),
         Channel("JimJam RU", "https://sc.id-tv.kz/JimJam.m3u8", "Детские", ""),
         Channel("Da Vinci Kids", "https://sc.id-tv.kz/Da_Vinci.m3u8", "Детские", ""),
+        Channel("Советские Сказки и Мультфильмы", "https://sc.id-tv.kz/Mult.m3u8", "Детские", ""),
+        Channel("Детское кино", "https://sc.id-tv.kz/Kinosemya.m3u8", "Детские", ""),
+        Channel("Кинокаприз", "https://sc.id-tv.kz/Kinokomediya.m3u8", "Детские", ""),
+        Channel("Супер Герои", "https://sc.id-tv.kz/STS_Kids.m3u8", "Детские", ""),
+        Channel("Малышок", "https://sc.id-tv.kz/Tlum_HD.m3u8", "Детские", ""),
+        Channel("Сказки на ночь", "https://sc.id-tv.kz/V_gostyah_u_skazki.m3u8", "Детские", ""),
+        Channel("Детский Смарт", "https://sc.id-tv.kz/Smaylik_TV.m3u8", "Детские", ""),
+        Channel("Мультик HD", "https://sc.id-tv.kz/Mult.m3u8", "Детские", ""),
+        Channel("Юниор ТВ", "https://sc.id-tv.kz/Unikum.m3u8", "Детские", ""),
+        Channel("Звездарики", "https://sc.id-tv.kz/Karusel.m3u8", "Детские", ""),
+        Channel("Детский Клуб", "https://sc.id-tv.kz/Detskiy_mir.m3u8", "Детские", ""),
+        Channel("Планета Мультфильмов", "https://sc.id-tv.kz/Multimaniya.m3u8", "Детские", ""),
+        Channel("Чудо-Мотри", "https://sc.id-tv.kz/Solnce.m3u8", "Детские", ""),
+        Channel("Весёлые картинки", "https://sc.id-tv.kz/Ryzhiy.m3u8", "Детские", ""),
+        Channel("АБВГДейка", "https://sc.id-tv.kz/Radost_moya.m3u8", "Детские", ""),
+        Channel("Мульт-Утро", "https://sc.id-tv.kz/Multimuzyka.m3u8", "Детские", ""),
+        Channel("Затерянный мир сказок", "https://sc.id-tv.kz/V_gostyah_u_skazki.m3u8", "Детские", ""),
+        Channel("Киномирка", "https://sc.id-tv.kz/Kinosemya.m3u8", "Детские", ""),
+        Channel("Disney Junior RU", "https://sc.id-tv.kz/Nick_Jr.m3u8", "Детские", ""),
 
+        // Музыка
         Channel("Муз-ТВ", "https://sc.id-tv.kz/Muz_TV.m3u8", "Музыка", ""),
         Channel("RU.TV", "https://sc.id-tv.kz/RU_TV.m3u8", "Музыка", ""),
         Channel("Bridge TV Русский Хит", "https://sc.id-tv.kz/Bridge_TV_Russkiy_Hit.m3u8", "Музыка", ""),
@@ -103,6 +127,7 @@ object BuiltinCatalog {
         Channel("Жар-Птица", "https://sc.id-tv.kz/Zhar_Ptica.m3u8", "Музыка", ""),
         Channel("Mezzo Live HD", "https://sc.id-tv.kz/Mezzo_Live_HD.m3u8", "Музыка", ""),
 
+        // Спорт, Познавательные и Развлечения
         Channel("Матч! ТВ HD", "https://sc.id-tv.kz/Match_TV_HD.m3u8", "Спорт", ""),
         Channel("Матч! Премьер HD", "https://sc.id-tv.kz/Match_Premier_HD.m3u8", "Спорт", ""),
         Channel("Матч! Футбол 1 HD", "https://sc.id-tv.kz/Match_Futbol_1_HD.m3u8", "Спорт", ""),
