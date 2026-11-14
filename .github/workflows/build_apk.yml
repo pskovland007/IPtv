@@ -2364,7 +2364,7 @@ jobs:
                   btnOsdRewind = makeModernButton("⏪ -20с") { rewindLiveBufferSeconds(20) }
                   btnOsdEpgList = makeModernButton("▤ Гид") { navigateToMenu("FULL_EPG") }
                   btnOsdSettings = makeModernButton("⚙ Меню") { navigateToMenu("SETTINGS") }
-                  btnOsdNightMode = makeModernButton("🌙 $brightnessPercent%") { navigateToMenu("BRIGHTNESS_MENU") }
+                  btnOsdNightMode = makeModernButton("🌙 $brightnessPercent%" ) { navigateToMenu("BRIGHTNESS_MENU") }
                   btnOsdChannelActions = makeModernButton("✎ Канал") { navigateToMenu("CHANNEL_ACTIONS") }
                   btnOsdPowerRedCircle = RedPowerIconButton(this) { navigateToMenu("POWER_AND_SLEEP_MENU") }.apply {
                       layoutParams = LinearLayout.LayoutParams(54, 54).apply { setMargins(10, 2, 4, 2) }
@@ -4842,82 +4842,16 @@ jobs:
 
       - name: Step 3 - Auto-Commit Clean Modular Files to Repository
         run: |
-          cat << 'SLIM_YML' > .github/workflows/build_apk.yml
-          name: Build TiViLook APK
-
-          on:
-            push:
-              branches: [ main, master ]
-            workflow_dispatch:
-
-          permissions:
-            contents: write
-
-          concurrency:
-            group: tivilook-build-${{ github.ref }}
-            cancel-in-progress: true
-
-          jobs:
-            build:
-              runs-on: ubuntu-latest
-              steps:
-                - name: Checkout repository
-                  uses: actions/checkout@v4
-
-                - name: Set up JDK 17
-                  uses: actions/setup-java@v4
-                  with:
-                    java-version: '17'
-                    distribution: 'temurin'
-
-                - name: Setup Gradle 8.5
-                  uses: gradle/actions/setup-gradle@v3
-                  with:
-                    gradle-version: '8.5'
-
-                - name: Bump Version Number
-                  run: |
-                    python3 -c '
-                    import os, re
-                    with open("app/build.gradle", "r") as f: g = f.read()
-                    run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "125"))
-                    g = re.sub(r"versionCode\s+\d+", f"versionCode {17200 + run_num}", g)
-                    g = re.sub(r"versionName\s+\"[^\"]+\"", f"versionName \"2.7.{run_num}\"", g)
-                    with open("app/build.gradle", "w") as f: f.write(g)
-                    '
-
-                - name: Lock Permanent Signing Keystore in Cache
-                  uses: actions/cache@v4
-                  with:
-                    path: app/permanent_key.jks
-                    key: mibox-iptv-immutable-signing-jks-v1
-
-                - name: Compile TiViLook APK
-                  run: |
-                    mkdir -p ~/.android
-                    if [ ! -f app/permanent_key.jks ]; then
-                      keytool -genkeypair -v \
-                        -keystore app/permanent_key.jks \
-                        -storetype JKS \
-                        -keyalg RSA -keysize 2048 -validity 10000 \
-                        -alias androiddebugkey \
-                        -storepass android -keypass android \
-                        -dname "CN=Android Debug,O=Android,C=US"
-                    fi
-                    cp app/permanent_key.jks ~/.android/debug.keystore || true
-                    gradle assembleRelease
-                    cp app/build/outputs/apk/release/app-release.apk TiViLook-v2.7.${GITHUB_RUN_NUMBER}.apk
-
-                - name: Upload APK
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: TiViLook-v2.7.${{ github.run_number }}
-                    path: TiViLook-v2.7.${{ github.run_number }}.apk
-          SLIM_YML
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git reset app/permanent_key.jks TiViLook-*.apk || true
+          git reset .github/workflows/build_apk.yml app/permanent_key.jks TiViLook-*.apk || true
           git commit -m "feat: TiViLook v2.7.2 modular architecture & expanded RU cinema/kids [skip ci]" || true
-          git push --force origin HEAD:main
+          git push origin HEAD:main
+
+      - name: Step 4 - Publish APK to GitHub Releases for In-App Auto-Update
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.7.${{ github.run_number }}
+          name: TiViLook v2.7.${{ github.run_number }}
+          files: TiViLook-v2.7.${{ github.run_number }}.apk
