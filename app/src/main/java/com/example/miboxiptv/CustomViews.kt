@@ -189,14 +189,14 @@ class ChannelRowView(context: Context) : FrameLayout(context) {
         setTextColor(Color.WHITE)
         typeface = Typeface.DEFAULT_BOLD
         setSingleLine(true)
-        layoutParams = LayoutParams(42, 34, Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = 14 }
+        layoutParams = LayoutParams(42, 36, Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = 14 }
     }
     val titleView = MarqueeRowTextView(context).apply {
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL).apply {
-            leftMargin = 66; rightMargin = 48
+            leftMargin = 68; rightMargin = 48
         }
     }
-    val eqView = LiveEqualizerView(context: Context).apply {
+    val eqView = LiveEqualizerView(context).apply {
         visibility = View.GONE
         layoutParams = LayoutParams(30, 20, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = 12 }
     }
@@ -265,7 +265,6 @@ class RealisticEyeSplashView(context: Context) : View(context) {
     }
 }
 
-// 6 ОТДЕЛЬНЫХ НАБОРОВ ИКОНОК ПОД КАЖДУЮ ТЕМУ СО СКРИНШОТОВ
 class ThemedTileView(
     context: Context, private val iconType: String,
     private val baseColorHex: String, private val accentColorHex: String
@@ -301,9 +300,6 @@ class ThemedTileView(
         paint.shader = null
     }
 
-    // =========================================================================
-    // ТЕМА 0: МАТЕРИАЛ ДИЗАЙН (Плоские разноцветные фигурные иконки со скриншота)
-    // =========================================================================
     private fun drawMaterialThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val r = minDim * 0.36f
         if (isTileFocused) {
@@ -318,7 +314,6 @@ class ThemedTileView(
         paint.style = Paint.Style.FILL
         when (iconType) {
             "PLAYLISTS" -> {
-                // Жёлтая плоская папка Material
                 paint.color = Color.parseColor("#F59E0B")
                 path.reset()
                 path.moveTo(cx - r * 0.85f, cy - r * 0.55f)
@@ -334,7 +329,6 @@ class ThemedTileView(
                 canvas.drawRoundRect(rect, 10f, 10f, paint)
             }
             "EDITOR" -> {
-                // Ножницы с синими кольцами и серебристыми лезвиями
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 7f
                 paint.color = Color.parseColor("#94A3B8")
                 canvas.drawLine(cx - r * 0.35f, cy + r * 0.35f, cx + r * 0.72f, cy - r * 0.62f, paint)
@@ -345,7 +339,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx - r * 0.48f, cy + r * 0.42f, r * 0.30f, paint)
             }
             "ANALYZER" -> {
-                // Бирюзовый прицел-мишень с 4 секторами
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#BAE6FD")
                 canvas.drawCircle(cx, cy, r * 0.74f, paint)
@@ -362,7 +355,6 @@ class ThemedTileView(
                 canvas.drawLine(cx + r * 0.56f, cy, cx + r * 0.96f, cy, paint)
             }
             "THEMES" -> {
-                // Оранжевая палитра художника с цветными красками
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#F59E0B")
                 canvas.drawCircle(cx, cy, r * 0.82f, paint)
@@ -374,7 +366,6 @@ class ThemedTileView(
                 paint.color = Color.parseColor("#10B981"); canvas.drawCircle(cx - r * 0.32f, cy + r * 0.28f, r * 0.14f, paint)
             }
             "BUFFER" -> {
-                // Мятно-голубое облако со стрелкой загрузки
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#67E8F9")
                 canvas.drawCircle(cx - r * 0.38f, cy + r * 0.08f, r * 0.42f, paint)
@@ -393,7 +384,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "DECODER" -> {
-                // Тёмная виниловая пластинка с голубым яблоком
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#1E293B")
                 canvas.drawCircle(cx, cy, r * 0.84f, paint)
@@ -406,7 +396,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx, cy, r * 0.10f, paint)
             }
             "EPG_GRID" -> {
-                // Отрывной календарь с малиновой шапкой и кружком в углу
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#D6D3D1")
                 rect.set(cx - r * 0.72f, cy - r * 0.65f, cx + r * 0.72f, cy + r * 0.68f)
@@ -420,7 +409,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx + r * 0.42f, cy + r * 0.38f, r * 0.18f, paint)
             }
             "TOP_CHANNELS" -> {
-                // Красный развивающийся флажок на коричневом древке
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#EF4444")
                 rect.set(cx - r * 0.50f, cy - r * 0.68f, cx + r * 0.25f, cy - r * 0.02f)
@@ -433,7 +421,6 @@ class ThemedTileView(
                 canvas.drawLine(cx - r * 0.50f, cy - r * 0.72f, cx - r * 0.50f, cy + r * 0.75f, paint)
             }
             "FAVORITES" -> {
-                // Розовое сердце с белой линией пульса ЭКГ
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#EC4899")
                 canvas.drawCircle(cx - r * 0.36f, cy - r * 0.22f, r * 0.44f, paint)
@@ -455,7 +442,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "AUDIO" -> {
-                // Сине-фиолетовый квадрат с белой звуковой синусоидой (верхний правый значок со скрина Material)
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#6366F1")
                 rect.set(cx - r * 0.76f, cy - r * 0.62f, cx + r * 0.76f, cy + r * 0.62f)
@@ -468,7 +454,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "CONTROL_MODE" -> {
-                // Серо-синий калькулятор/пульт с экраном и сеткой кнопок
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#64748B")
                 rect.set(cx - r * 0.62f, cy - r * 0.80f, cx + r * 0.62f, cy + r * 0.80f)
@@ -483,7 +468,6 @@ class ThemedTileView(
                 }
             }
             else -> {
-                // Солнце с лучами за голубым облаком (правый нижний значок со скрина Material)
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#F59E0B")
                 canvas.drawCircle(cx + r * 0.22f, cy - r * 0.18f, r * 0.38f, paint)
@@ -505,9 +489,6 @@ class ThemedTileView(
         }
     }
 
-    // =========================================================================
-    // ТЕМА 1: НЕОН (Радужные контурные неоновые иконки на чёрном со скриншота)
-    // =========================================================================
     private fun drawNeonThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val r = minDim * 0.35f
         val grad = LinearGradient(
@@ -527,7 +508,6 @@ class ThemedTileView(
 
         when (iconType) {
             "PLAYLISTS" -> {
-                // Треугольник Play с внутренними лучами как Google Play на скрине Неон
                 path.reset()
                 path.moveTo(cx - r * 0.55f, cy - r * 0.72f)
                 path.lineTo(cx + r * 0.68f, cy)
@@ -538,7 +518,6 @@ class ThemedTileView(
                 canvas.drawLine(cx - r * 0.55f, cy + r * 0.72f, cx + r * 0.15f, cy - r * 0.30f, paint)
             }
             "EDITOR" -> {
-                // Горизонтальные строки и поверх диагональный карандаш (нижний ряд по центру на скрине Неон)
                 for (i in -1..1) {
                     val y = cy + i * r * 0.38f
                     canvas.drawLine(cx - r * 0.68f, y, cx + r * 0.55f, y, paint)
@@ -553,12 +532,10 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "ANALYZER" -> {
-                // Неоновая лупа (левый нижний угол на скрине Неон)
                 canvas.drawCircle(cx - r * 0.15f, cy - r * 0.15f, r * 0.52f, paint)
                 canvas.drawLine(cx + r * 0.22f, cy + r * 0.22f, cx + r * 0.72f, cy + r * 0.72f, paint)
             }
             "THEMES" -> {
-                // 4 скруглённые фигуры 2x2 (квадраты + круг, средний ряд на скрине Неон)
                 rect.set(cx - r * 0.66f, cy - r * 0.66f, cx - r * 0.10f, cy - r * 0.10f)
                 canvas.drawRoundRect(rect, 10f, 10f, paint)
                 rect.set(cx + r * 0.10f, cy - r * 0.66f, cx + r * 0.66f, cy - r * 0.10f)
@@ -568,7 +545,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx + r * 0.38f, cy + r * 0.38f, r * 0.28f, paint)
             }
             "BUFFER" -> {
-                // Неоновый фонарик (нижний ряд, 2-я иконка на скрине Неон)
                 rect.set(cx - r * 0.32f, cy - r * 0.72f, cx + r * 0.32f, cy - r * 0.38f)
                 canvas.drawRoundRect(rect, 6f, 6f, paint)
                 rect.set(cx - r * 0.20f, cy - r * 0.38f, cx + r * 0.20f, cy + r * 0.72f)
@@ -576,7 +552,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx, cy + r * 0.10f, r * 0.08f, paint)
             }
             "DECODER" -> {
-                // Прямоугольный чип/купюра с кругом внутри (средний ряд справа на скрине Неон)
                 rect.set(cx - r * 0.75f, cy - r * 0.46f, cx + r * 0.75f, cy + r * 0.46f)
                 canvas.drawRoundRect(rect, 8f, 8f, paint)
                 canvas.drawCircle(cx, cy, r * 0.24f, paint)
@@ -584,13 +559,11 @@ class ThemedTileView(
                 canvas.drawLine(cx + r * 0.42f, cy + r * 0.18f, cx + r * 0.75f, cy + r * 0.18f, paint)
             }
             "EPG_GRID" -> {
-                // Неоновые круглые часы со стрелками (верхний ряд по центру на скрине Неон)
                 canvas.drawCircle(cx, cy, r * 0.74f, paint)
                 canvas.drawLine(cx, cy - r * 0.46f, cx, cy, paint)
                 canvas.drawLine(cx, cy, cx + r * 0.34f, cy + r * 0.26f, paint)
             }
             "TOP_CHANNELS" -> {
-                // Ромбовидная стрелка компаса (верхний ряд, 6-я иконка на скрине Неон)
                 path.reset()
                 path.moveTo(cx + r * 0.62f, cy - r * 0.62f)
                 path.lineTo(cx + r * 0.16f, cy + r * 0.16f)
@@ -601,7 +574,6 @@ class ThemedTileView(
                 canvas.drawLine(cx - r * 0.16f, cy - r * 0.16f, cx + r * 0.16f, cy + r * 0.16f, paint)
             }
             "FAVORITES" -> {
-                // Неоновый глобус с меридианами и параллелями (левый верхний угол на скрине Неон)
                 canvas.drawCircle(cx, cy, r * 0.74f, paint)
                 rect.set(cx - r * 0.36f, cy - r * 0.74f, cx + r * 0.36f, cy + r * 0.74f)
                 canvas.drawOval(rect, paint)
@@ -609,7 +581,6 @@ class ThemedTileView(
                 canvas.drawLine(cx - r * 0.70f, cy + r * 0.22f, cx + r * 0.70f, cy + r * 0.22f, paint)
             }
             "AUDIO" -> {
-                // Неоновая музыкальная нота с флажком (верхний ряд, 5-я иконка на скрине Неон)
                 canvas.drawCircle(cx - r * 0.18f, cy + r * 0.38f, r * 0.32f, paint)
                 canvas.drawLine(cx + r * 0.14f, cy + r * 0.38f, cx + r * 0.14f, cy - r * 0.68f, paint)
                 path.reset()
@@ -618,7 +589,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "CONTROL_MODE" -> {
-                // Неоновая телефонная трубка (средний ряд слева на скрине Неон)
                 path.reset()
                 path.moveTo(cx - r * 0.45f, cy - r * 0.65f)
                 path.quadTo(cx - r * 0.80f, cy + r * 0.15f, cx + r * 0.35f, cy + r * 0.70f)
@@ -631,7 +601,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             else -> {
-                // Неоновая зубчатая шестерёнка (нижний ряд, 5-я иконка на скрине Неон)
                 canvas.drawCircle(cx, cy, r * 0.26f, paint)
                 canvas.drawCircle(cx, cy, r * 0.58f, paint)
                 for (deg in 0 until 360 step 45) {
@@ -645,9 +614,6 @@ class ThemedTileView(
         }
     }
 
-    // =========================================================================
-    // ТЕМА 2: АМОЛЕД БЛЭК (Тонкие белые чертежи на чёрном со скриншота)
-    // =========================================================================
     private fun drawAmoledThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val r = minDim * 0.36f
         if (isTileFocused) {
@@ -662,7 +628,6 @@ class ThemedTileView(
 
         when (iconType) {
             "PLAYLISTS" -> {
-                // Двойной контурный Play (нижний док слева на скрине AMOLED)
                 path.reset()
                 path.moveTo(cx - r * 0.58f, cy - r * 0.65f)
                 path.lineTo(cx + r * 0.58f, cy)
@@ -676,7 +641,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "EDITOR" -> {
-                // 4 скруглённых квадрата Calculator с + и = внутри (3-й ряд слева на скрине AMOLED)
                 val s = r * 0.58f
                 rect.set(cx - r * 0.72f, cy - r * 0.72f, cx - r * 0.72f + s, cy - r * 0.72f + s)
                 canvas.drawRoundRect(rect, 10f, 10f, paint)
@@ -695,7 +659,6 @@ class ThemedTileView(
                 canvas.drawLine(rect.centerX() - 10f, rect.centerY() + 5f, rect.centerX() + 10f, rect.centerY() + 5f, paint)
             }
             "ANALYZER" -> {
-                // Молекулярное дерево SmartThings (2-й ряд слева на скрине AMOLED)
                 canvas.drawCircle(cx, cy, r * 0.16f, paint)
                 val angles = listOf(-90.0, -25.0, 45.0, 135.0, 205.0)
                 for (deg in angles) {
@@ -707,7 +670,6 @@ class ThemedTileView(
                 }
             }
             "THEMES" -> {
-                // Колесо обозрения Theme Park с кабинками (4-й ряд справа на скрине AMOLED)
                 canvas.drawCircle(cx, cy, r * 0.66f, paint)
                 canvas.drawCircle(cx, cy, r * 0.22f, paint)
                 path.reset()
@@ -721,7 +683,6 @@ class ThemedTileView(
                 canvas.drawRoundRect(rect, 6f, 6f, paint)
             }
             "BUFFER" -> {
-                // Круг AIDA64 с двойным ободом и числом 64 внутри (6-й ряд на скрине AMOLED)
                 canvas.drawCircle(cx, cy, r * 0.76f, paint)
                 paint.style = Paint.Style.FILL
                 paint.textSize = r * 0.72f
@@ -730,7 +691,6 @@ class ThemedTileView(
                 canvas.drawText("64", cx, cy + r * 0.26f, paint)
             }
             "DECODER" -> {
-                // Процессор CPU-Z с кружками-контактами внутри рамки (1-й ряд, 3-я иконка на скрине AMOLED)
                 rect.set(cx - r * 0.74f, cy - r * 0.74f, cx + r * 0.74f, cy + r * 0.74f)
                 canvas.drawRoundRect(rect, 12f, 12f, paint)
                 rect.set(cx - r * 0.38f, cy - r * 0.38f, cx + r * 0.38f, cy + r * 0.38f)
@@ -744,7 +704,6 @@ class ThemedTileView(
                 }
             }
             "EPG_GRID" -> {
-                // Календарь с числом 31 и двумя колечками сверху (2-й ряд, 2-я иконка на скрине AMOLED)
                 rect.set(cx - r * 0.70f, cy - r * 0.68f, cx + r * 0.70f, cy + r * 0.70f)
                 canvas.drawRoundRect(rect, 14f, 14f, paint)
                 canvas.drawCircle(cx - r * 0.32f, cy - r * 0.46f, r * 0.07f, paint)
@@ -756,7 +715,6 @@ class ThemedTileView(
                 canvas.drawText("31", cx, cy + r * 0.36f, paint)
             }
             "TOP_CHANNELS" -> {
-                // Буквы Z-A / вершины (4-й ряд, 3-я иконка на скрине AMOLED)
                 path.reset()
                 path.moveTo(cx - r * 0.65f, cy - r * 0.58f)
                 path.lineTo(cx + r * 0.15f, cy - r * 0.58f)
@@ -767,7 +725,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "FAVORITES" -> {
-                // Картина с горами и солнцем OneDrive (1-й ряд справа на скрине AMOLED)
                 rect.set(cx - r * 0.74f, cy - r * 0.60f, cx + r * 0.74f, cy + r * 0.60f)
                 canvas.drawRoundRect(rect, 10f, 10f, paint)
                 canvas.drawCircle(cx + r * 0.34f, cy - r * 0.22f, r * 0.16f, paint)
@@ -780,7 +737,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "AUDIO" -> {
-                // Вертикальные линии звуковой дорожки Voice Recorder (3-й ряд, 2-я иконка на скрине AMOLED)
                 val xs = listOf(-0.60f, -0.36f, -0.12f, 0.12f, 0.36f, 0.60f)
                 val hs = listOf(0.18f, 0.46f, 0.74f, 0.32f, 0.56f, 0.20f)
                 for (i in xs.indices) {
@@ -788,7 +744,6 @@ class ThemedTileView(
                 }
             }
             "CONTROL_MODE" -> {
-                // Геймпад Gaming Hub (2-й ряд, 3-я иконка на скрине AMOLED)
                 rect.set(cx - r * 0.78f, cy - r * 0.46f, cx + r * 0.78f, cy + r * 0.46f)
                 canvas.drawRoundRect(rect, 26f, 26f, paint)
                 canvas.drawCircle(cx - r * 0.36f, cy, r * 0.22f, paint)
@@ -797,7 +752,6 @@ class ThemedTileView(
                 canvas.drawLine(cx - r * 0.36f, cy - 8f, cx - r * 0.36f, cy + 8f, paint)
             }
             else -> {
-                // Камера Expert RAW с диафрагмой (2-й ряд справа на скрине AMOLED)
                 rect.set(cx - r * 0.76f, cy - r * 0.54f, cx + r * 0.76f, cy + r * 0.54f)
                 canvas.drawRoundRect(rect, 10f, 10f, paint)
                 canvas.drawCircle(cx, cy, r * 0.34f, paint)
@@ -813,9 +767,6 @@ class ThemedTileView(
         }
     }
 
-    // =========================================================================
-    // ТЕМА 3: МОНОХРОМ (Белые квадратные карточки с серыми силуэтами со скриншота)
-    // =========================================================================
     private fun drawMonochromeThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val pad = minDim * 0.08f
         val r = (minDim - pad * 2) * 0.35f
@@ -833,7 +784,6 @@ class ThemedTileView(
 
         when (iconType) {
             "PLAYLISTS" -> {
-                // 3 строгих серых горизонтальных блока с точками (2-й ряд, 7-я иконка на скрине Монохром)
                 paint.style = Paint.Style.FILL
                 for (i in -1..1) {
                     val y = cy + i * r * 0.42f
@@ -842,7 +792,6 @@ class ThemedTileView(
                 }
             }
             "EDITOR" -> {
-                // Серый диагональный карандаш (2-й ряд слева на скрине Монохром)
                 paint.style = Paint.Style.FILL
                 path.reset()
                 path.moveTo(cx + r * 0.35f, cy - r * 0.55f)
@@ -854,7 +803,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "ANALYZER" -> {
-                // Иконка волн RSS / Сигнал (4-й ряд справа на скрине Монохром)
                 paint.style = Paint.Style.FILL
                 canvas.drawCircle(cx - r * 0.42f, cy + r * 0.42f, r * 0.14f, paint)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.5f
@@ -864,7 +812,6 @@ class ThemedTileView(
                 canvas.drawArc(rect, -90f, 90f, false, paint)
             }
             "THEMES" -> {
-                // Солнце с наполовину закрашенным диском — Контраст/Тема (нижний ряд по центру на скрине Монохром)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
                 canvas.drawCircle(cx, cy, r * 0.52f, paint)
                 paint.style = Paint.Style.FILL
@@ -880,14 +827,12 @@ class ThemedTileView(
                 }
             }
             "BUFFER" -> {
-                // Две круговые стрелки перезагрузки (1-й ряд, 5-я иконка на скрине Монохром)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f
                 rect.set(cx - r * 0.56f, cy - r * 0.56f, cx + r * 0.56f, cy + r * 0.56f)
                 canvas.drawArc(rect, -150f, 130f, false, paint)
                 canvas.drawArc(rect, 30f, 130f, false, paint)
             }
             "DECODER" -> {
-                // Монохромная шестерёнка (1-й ряд, 6-я иконка на скрине Монохром)
                 paint.style = Paint.Style.FILL
                 for (deg in 0 until 360 step 45) {
                     val rad = Math.toRadians(deg.toDouble())
@@ -898,7 +843,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx, cy, r * 0.22f, paint)
             }
             "EPG_GRID" -> {
-                // Календарь с сеткой точек (2-й ряд, 4-я иконка на скрине Монохром)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f
                 rect.set(cx - r * 0.60f, cy - r * 0.56f, cx + r * 0.60f, cy + r * 0.60f)
                 canvas.drawRect(rect, paint)
@@ -911,7 +855,6 @@ class ThemedTileView(
                 }
             }
             "TOP_CHANNELS" -> {
-                // Растущие столбики сигнала/рейтинга (7-й ряд, 8-я иконка на скрине Монохром)
                 paint.style = Paint.Style.FILL
                 for (i in 0..3) {
                     val left = cx - r * 0.58f + i * r * 0.32f
@@ -921,7 +864,6 @@ class ThemedTileView(
                 }
             }
             "FAVORITES" -> {
-                // Залитая серая звезда (2-й ряд, 6-я иконка на скрине Монохром)
                 paint.style = Paint.Style.FILL
                 path.reset()
                 for (i in 0 until 10) {
@@ -934,7 +876,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "AUDIO" -> {
-                // Рупор динамика со звуковыми волнами (7-й ряд, 2-я иконка на скрине Монохром)
                 paint.style = Paint.Style.FILL
                 path.reset()
                 path.moveTo(cx - r * 0.58f, cy - r * 0.20f)
@@ -952,7 +893,6 @@ class ThemedTileView(
                 canvas.drawArc(rect, -55f, 110f, false, paint)
             }
             "CONTROL_MODE" -> {
-                // Монохромный смартфон (нижний ряд, 8-я иконка на скрине Монохром)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
                 rect.set(cx - r * 0.36f, cy - r * 0.64f, cx + r * 0.36f, cy + r * 0.64f)
                 canvas.drawRoundRect(rect, 8f, 8f, paint)
@@ -960,7 +900,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx, cy + r * 0.46f, r * 0.07f, paint)
             }
             else -> {
-                // 3 горизонтальных ползунка настроек (3-й ряд, 3-я иконка на скрине Монохром)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
                 val shifts = listOf(-0.25f, 0.25f, -0.10f)
                 for (i in -1..1) {
@@ -973,17 +912,14 @@ class ThemedTileView(
         }
     }
 
-    // =========================================================================
-    // ТЕМА 4: РЕТРО (Винтажные матовые карточки с фигурами со скриншота Ретро)
-    // =========================================================================
     private fun drawRetroThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val pad = minDim * 0.08f
         val r = (minDim - pad * 2) * 0.36f
         val cardColor = when (iconType) {
-            "PLAYLISTS", "FAVORITES", "EDITOR", "TOP_CHANNELS", "MORE" -> Color.parseColor("#2A7B69") // Изумрудный со скрина Ретро
-            "ANALYZER", "BUFFER", "AUDIO" -> Color.parseColor("#9B533F") // Терракотовый со скрина Ретро
-            "THEMES", "EPG_GRID" -> Color.parseColor("#D68928") // Горчичный со скрина Ретро
-            else -> Color.parseColor("#544F4E") // Тёмно-серый графит со скрина Ретро
+            "PLAYLISTS", "FAVORITES", "EDITOR", "TOP_CHANNELS", "MORE" -> Color.parseColor("#2A7B69")
+            "ANALYZER", "BUFFER", "AUDIO" -> Color.parseColor("#9B533F")
+            "THEMES", "EPG_GRID" -> Color.parseColor("#D68928")
+            else -> Color.parseColor("#544F4E")
         }
         val corner = minDim * 0.15f
         paint.style = Paint.Style.FILL
@@ -1005,7 +941,6 @@ class ThemedTileView(
 
         when (iconType) {
             "PLAYLISTS" -> {
-                // Ретро-папка/дискета с зелёной и синей полосками (левый нижний угол на скрине Ретро)
                 paint.style = Paint.Style.FILL; paint.color = cream
                 rect.set(cx - r * 0.72f, cy - r * 0.56f, cx + r * 0.72f, cy + r * 0.62f)
                 canvas.drawRoundRect(rect, 12f, 12f, paint)
@@ -1017,7 +952,6 @@ class ThemedTileView(
                 canvas.drawRect(rect, paint)
             }
             "EDITOR" -> {
-                // Кремовый угольник / чертёжный угол 45° (верхний ряд, 4-я иконка на скрине Ретро)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 9f; paint.color = cream
                 path.reset()
                 path.moveTo(cx + r * 0.35f, cy - r * 0.65f)
@@ -1027,7 +961,6 @@ class ThemedTileView(
                 canvas.drawLine(cx + r * 0.15f, cy + r * 0.10f, cx + r * 0.15f, cy + r * 0.45f, paint)
             }
             "ANALYZER" -> {
-                // Красно-белая круглая мишень (верхний ряд, 5-я иконка на скрине Ретро)
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#E63926")
                 canvas.drawCircle(cx, cy, r * 0.76f, paint)
@@ -1039,7 +972,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx, cy, r * 0.16f, paint)
             }
             "THEMES" -> {
-                // Горчичный квадрат с перекрестием внутри (верхний ряд справа на скрине Ретро)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f
                 paint.color = cream
                 rect.set(cx - r * 0.65f, cy - r * 0.65f, cx + r * 0.65f, cy + r * 0.65f)
@@ -1048,7 +980,6 @@ class ThemedTileView(
                 canvas.drawLine(cx + r * 0.65f, cy - r * 0.65f, cx - r * 0.65f, cy + r * 0.65f, paint)
             }
             "BUFFER" -> {
-                // Круглый диск/радар с ручкой сверху справа (верхний ряд, 3-я иконка на скрине Ретро)
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#FDE047")
                 canvas.drawCircle(cx, cy + r * 0.06f, r * 0.68f, paint)
@@ -1060,7 +991,6 @@ class ThemedTileView(
                 canvas.drawLine(cx + r * 0.35f, cy - r * 0.45f, cx + r * 0.58f, cy - r * 0.72f, paint)
             }
             "DECODER" -> {
-                // Ретро-радиоприёмник с антенной (2-й ряд, 5-я иконка на скрине Ретро)
                 paint.style = Paint.Style.FILL; paint.color = cream
                 rect.set(cx - r * 0.62f, cy - r * 0.32f, cx + r * 0.62f, cy + r * 0.62f)
                 canvas.drawRoundRect(rect, 14f, 14f, paint)
@@ -1073,7 +1003,6 @@ class ThemedTileView(
                 canvas.drawRect(rect, paint)
             }
             "EPG_GRID" -> {
-                // Вертикальный планшет/блокнот с колонкой слева (нижний ряд, 4-я иконка на скрине Ретро)
                 paint.style = Paint.Style.FILL; paint.color = cream
                 rect.set(cx - r * 0.66f, cy - r * 0.64f, cx - r * 0.36f, cy + r * 0.64f)
                 canvas.drawRect(rect, paint)
@@ -1081,7 +1010,6 @@ class ThemedTileView(
                 canvas.drawRoundRect(rect, 8f, 8f, paint)
             }
             "TOP_CHANNELS" -> {
-                // Треугольная пирамида с кругом над вершиной (2-й ряд справа на скрине Ретро)
                 paint.style = Paint.Style.FILL; paint.color = cream
                 path.reset()
                 path.moveTo(cx, cy - r * 0.12f)
@@ -1093,7 +1021,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx, cy - r * 0.48f, r * 0.16f, paint)
             }
             "FAVORITES" -> {
-                // Светильник с расходящимися вверх лучами (2-й ряд слева на скрине Ретро)
                 paint.style = Paint.Style.FILL; paint.color = cream
                 rect.set(cx - r * 0.65f, cy + r * 0.34f, cx + r * 0.65f, cy + r * 0.56f)
                 canvas.drawRect(rect, paint)
@@ -1114,7 +1041,6 @@ class ThemedTileView(
                 }
             }
             "AUDIO" -> {
-                // Трапеция динамика/корзины (нижний ряд справа на скрине Ретро)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 8f; paint.color = cream
                 path.reset()
                 path.moveTo(cx - r * 0.68f, cy - r * 0.52f)
@@ -1126,7 +1052,6 @@ class ThemedTileView(
                 canvas.drawLine(cx - r * 0.46f, cy + r * 0.12f, cx + r * 0.46f, cy + r * 0.12f, paint)
             }
             "CONTROL_MODE" -> {
-                // Трапеция с рычажком сверху (верхний левый угол на скрине Ретро)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 8f; paint.color = cream
                 path.reset()
                 path.moveTo(cx - r * 0.36f, cy - r * 0.18f)
@@ -1139,7 +1064,6 @@ class ThemedTileView(
                 canvas.drawLine(cx + r * 0.16f, cy - r * 0.36f, cx + r * 0.44f, cy - r * 0.68f, paint)
             }
             else -> {
-                // Изогнутая широкая стрелка обновления (нижний ряд, 5-я иконка на скрине Ретро)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 10f; paint.color = cream
                 rect.set(cx - r * 0.56f, cy - r * 0.48f, cx + r * 0.56f, cy + r * 0.56f)
                 canvas.drawArc(rect, 15f, 275f, false, paint)
@@ -1154,40 +1078,33 @@ class ThemedTileView(
         }
     }
 
-    // =========================================================================
-    // ТЕМА 5: КАРУСЕЛЬ 3D (Объёмные круглые шайбы-монетки со скриншота Карусель)
-    // =========================================================================
     private fun drawCarousel3DThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val discR = minDim * 0.41f
         val topCy = cy - minDim * 0.04f
         val r = discR * 0.65f
 
         val (topHex, edgeHex) = when (iconType) {
-            "PLAYLISTS" -> Pair("#EF4444", "#991B1B") // Красная шайба YouTube
-            "EDITOR" -> Pair("#65A30D", "#3F6212") // Оливково-зелёная шайба Калькулятор
-            "ANALYZER" -> Pair("#DC2626", "#7F1D1D") // Красная шайба Камера
-            "THEMES" -> Pair("#9333EA", "#D97706") // Градиентная шайба Instagram
-            "BUFFER" -> Pair("#0284C7", "#075985") // Голубая шайба Облако
-            "DECODER" -> Pair("#16A34A", "#14532D") // Мульти-шайба Chrome
-            "EPG_GRID" -> Pair("#B91C1C", "#7F1D1D") // Красная шайба Почта/@
-            "TOP_CHANNELS" -> Pair("#2563EB", "#1E3A8A") // Синяя шайба Молния Messenger
-            "FAVORITES" -> Pair("#EA580C", "#9A3412") // Оранжевая шайба Галерея с горами
-            "AUDIO" -> Pair("#0EA5E9", "#0369A1") // Голубая шайба с чёрной нотой
-            "CONTROL_MODE" -> Pair("#0284C7", "#075985") // Голубая шайба Телефон
-            else -> Pair("#0284C7", "#075985") // Синяя шайба Античный храм
+            "PLAYLISTS" -> Pair("#EF4444", "#991B1B")
+            "EDITOR" -> Pair("#65A30D", "#3F6212")
+            "ANALYZER" -> Pair("#DC2626", "#7F1D1D")
+            "THEMES" -> Pair("#9333EA", "#D97706")
+            "BUFFER" -> Pair("#0284C7", "#075985")
+            "DECODER" -> Pair("#16A34A", "#14532D")
+            "EPG_GRID" -> Pair("#B91C1C", "#7F1D1D")
+            "TOP_CHANNELS" -> Pair("#2563EB", "#1E3A8A")
+            "FAVORITES" -> Pair("#EA580C", "#9A3412")
+            "AUDIO" -> Pair("#0EA5E9", "#0369A1")
+            "CONTROL_MODE" -> Pair("#0284C7", "#075985")
+            else -> Pair("#0284C7", "#075985")
         }
 
-        // 1) Нижняя мягкая тень
         paint.style = Paint.Style.FILL
         paint.color = Color.parseColor("#66000000")
         canvas.drawCircle(cx, topCy + minDim * 0.12f, discR, paint)
-        // 2) Нижнее цветное 3D-дно шайбы
         paint.color = Color.parseColor(edgeHex)
         canvas.drawCircle(cx, topCy + minDim * 0.088f, discR, paint)
-        // 3) Белая прослойка сэндвича
         paint.color = Color.parseColor("#F1F5F9")
         canvas.drawCircle(cx, topCy + minDim * 0.044f, discR, paint)
-        // 4) Верхняя цветная крышка шайбы
         if (iconType == "THEMES") {
             paint.shader = LinearGradient(
                 cx - discR, topCy - discR, cx + discR, topCy + discR,
@@ -1205,10 +1122,8 @@ class ThemedTileView(
             canvas.drawCircle(cx, topCy, discR, paint)
         }
 
-        // 5) Уникальный рисунок внутри каждой 3D-шайбы со скриншота «карусель»
         when (iconType) {
             "PLAYLISTS" -> {
-                // Белый прямоугольник YouTube с красным треугольником внутри
                 paint.style = Paint.Style.FILL; paint.color = Color.WHITE
                 rect.set(cx - r * 0.62f, topCy - r * 0.42f, cx + r * 0.62f, topCy + r * 0.42f)
                 canvas.drawRoundRect(rect, 12f, 12f, paint)
@@ -1221,7 +1136,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "EDITOR" -> {
-                // Жёлтые знаки - × + = на зелёной шайбе (верхний ряд по центру на скрине Карусель)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f
                 paint.color = Color.parseColor("#FDE047")
                 canvas.drawLine(cx - r * 0.48f, topCy - r * 0.28f, cx - r * 0.16f, topCy - r * 0.28f, paint)
@@ -1233,7 +1147,6 @@ class ThemedTileView(
                 canvas.drawLine(cx + r * 0.16f, topCy + r * 0.36f, cx + r * 0.48f, topCy + r * 0.36f, paint)
             }
             "ANALYZER" -> {
-                // Белое кольцо объектива камеры с красным зрачком (верхний ряд по центру на скрине Карусель)
                 paint.style = Paint.Style.FILL; paint.color = Color.WHITE
                 canvas.drawCircle(cx, topCy, r * 0.56f, paint)
                 paint.color = Color.parseColor("#991B1B")
@@ -1242,7 +1155,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx - r * 0.10f, topCy - r * 0.10f, r * 0.10f, paint)
             }
             "THEMES" -> {
-                // Белый контур Instagram на градиентной шайбе (средний ряд справа на скрине Карусель)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = Color.WHITE
                 rect.set(cx - r * 0.56f, topCy - r * 0.56f, cx + r * 0.56f, topCy + r * 0.56f)
                 canvas.drawRoundRect(rect, 16f, 16f, paint)
@@ -1251,7 +1163,6 @@ class ThemedTileView(
                 canvas.drawCircle(cx + r * 0.34f, topCy - r * 0.34f, r * 0.07f, paint)
             }
             "BUFFER" -> {
-                // Белый контур облака с жёлтой стрелкой вниз (верхний ряд по центру на скрине Карусель)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = Color.WHITE
                 rect.set(cx - r * 0.62f, topCy - r * 0.32f, cx + r * 0.62f, topCy + r * 0.32f)
                 canvas.drawRoundRect(rect, 22f, 22f, paint)
@@ -1261,7 +1172,6 @@ class ThemedTileView(
                 canvas.drawLine(cx + r * 0.18f, topCy + r * 0.18f, cx, topCy + r * 0.38f, paint)
             }
             "DECODER" -> {
-                // Шайба Chrome с цветными секторами и синим ядром (верхний левый блок на скрине Карусель)
                 paint.style = Paint.Style.FILL
                 rect.set(cx - discR, topCy - discR, cx + discR, topCy + discR)
                 paint.color = Color.parseColor("#DC2626"); canvas.drawArc(rect, -150f, 120f, true, paint)
@@ -1271,7 +1181,6 @@ class ThemedTileView(
                 paint.color = Color.parseColor("#2563EB"); canvas.drawCircle(cx, topCy, r * 0.42f, paint)
             }
             "EPG_GRID" -> {
-                // Открытый конверт с белым листом и знаком @ (средний ряд по центру на скрине Карусель)
                 paint.style = Paint.Style.FILL; paint.color = Color.WHITE
                 rect.set(cx - r * 0.48f, topCy - r * 0.48f, cx + r * 0.48f, topCy + r * 0.25f)
                 canvas.drawRect(rect, paint)
@@ -1280,7 +1189,6 @@ class ThemedTileView(
                 canvas.drawText("@", cx, topCy - r * 0.04f, paint)
             }
             "TOP_CHANNELS" -> {
-                // Белая молния Messenger внутри синей шайбы (верхний правый блок на скрине Карусель)
                 paint.style = Paint.Style.FILL; paint.color = Color.WHITE
                 path.reset()
                 path.moveTo(cx - r * 0.58f, topCy + r * 0.18f)
@@ -1293,7 +1201,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "FAVORITES" -> {
-                // Оранжевая шайба с тёмными силуэтами гор и солнцем (нижний ряд по центру на скрине Карусель)
                 paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#431407")
                 canvas.drawCircle(cx - r * 0.28f, topCy - r * 0.28f, r * 0.14f, paint)
                 path.reset()
@@ -1306,7 +1213,6 @@ class ThemedTileView(
                 canvas.drawPath(path, paint)
             }
             "AUDIO" -> {
-                // Двойная чёрная музыкальная нота на голубой шайбе (нижний ряд по центру на скрине Карусель)
                 paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#0F172A")
                 canvas.drawCircle(cx - r * 0.28f, topCy + r * 0.32f, r * 0.18f, paint)
                 canvas.drawCircle(cx + r * 0.22f, topCy + r * 0.24f, r * 0.18f, paint)
@@ -1316,13 +1222,11 @@ class ThemedTileView(
                 canvas.drawLine(cx - r * 0.12f, topCy - r * 0.36f, cx + r * 0.38f, topCy - r * 0.44f, paint)
             }
             "CONTROL_MODE" -> {
-                // Белая телефонная трубка на голубой шайбе (нижний ряд по центру на скрине Карусель)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 9f; paint.color = Color.WHITE
                 rect.set(cx - r * 0.48f, topCy - r * 0.48f, cx + r * 0.48f, topCy + r * 0.48f)
                 canvas.drawArc(rect, 35f, 115f, false, paint)
             }
             else -> {
-                // Белый античный храм с колоннами и крышей (левый верхний угол на скрине Карусель)
                 paint.style = Paint.Style.FILL; paint.color = Color.WHITE
                 path.reset()
                 path.moveTo(cx, topCy - r * 0.56f)
