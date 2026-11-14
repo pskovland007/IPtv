@@ -29,10 +29,31 @@ data class AppThemeStyle(
 
 class GraphicOrbSpan(private val orbType: Int) : ReplacementSpan() {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int = 34
+    private val rect = RectF()
+
+    override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+        return if (orbType >= 10) 68 else 34
+    }
 
     override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, textPaint: Paint) {
-        val cy = (top + bottom) / 2f; val cx = x + 15f; val r = 10.5f
+        val cy = (top + bottom) / 2f
+        if (orbType == 10 || orbType == 11) {
+            val isOn = (orbType == 10)
+            val trackW = 54f; val trackH = 26f
+            val left = x + 4f; val topY = cy - trackH / 2f
+            rect.set(left, topY, left + trackW, topY + trackH)
+            paint.style = Paint.Style.FILL
+            paint.color = if (isOn) Color.parseColor("#00C853") else Color.parseColor("#455A64")
+            canvas.drawRoundRect(rect, trackH / 2f, trackH / 2f, paint)
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 1.8f
+            paint.color = if (isOn) Color.parseColor("#B9F6CA") else Color.parseColor("#90A4AE")
+            canvas.drawRoundRect(rect, trackH / 2f, trackH / 2f, paint)
+            paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+            val knobX = if (isOn) (left + trackW - trackH / 2f) else (left + trackH / 2f)
+            canvas.drawCircle(knobX, cy, trackH * 0.38f, paint)
+            return
+        }
+        val cx = x + 15f; val r = 10.5f
         val mainColor = when (orbType) {
             1 -> Color.parseColor("#00E676")
             2 -> Color.parseColor("#FF5252")
@@ -63,6 +84,8 @@ fun colorizeStatusText(raw: String): CharSequence {
     var i = 0
     while (i <= raw.length - 3) {
         when {
+            i <= raw.length - 4 && raw.startsWith("[ON]", i) -> { ss.setSpan(GraphicOrbSpan(10), i, i + 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 4 }
+            i <= raw.length - 5 && raw.startsWith("[OFF]", i) -> { ss.setSpan(GraphicOrbSpan(11), i, i + 5, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 5 }
             raw.startsWith("[+]", i) -> { ss.setSpan(GraphicOrbSpan(1), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 3 }
             raw.startsWith("[-]", i) -> { ss.setSpan(GraphicOrbSpan(2), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 3 }
             raw.startsWith("[?]", i) -> { ss.setSpan(GraphicOrbSpan(3), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 3 }
