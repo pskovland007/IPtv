@@ -250,7 +250,6 @@ class MainActivity : AppCompatActivity() {
         strength = Collator.PRIMARY
     }
 
-    // Пункт 5: Только 6 тем со скриншотов
     private val themes = listOf(
         AppThemeStyle(
             0, "Материал Дизайн",
@@ -262,7 +261,7 @@ class MainActivity : AppCompatActivity() {
         ),
         AppThemeStyle(
             1, "Неон",
-            Color.parseColor("#F006050A"), Color.parseColor("#FF12101B"),
+            Color.parseColor("#F006050A"), Color.parseColor("#FF181526"),
             Color.parseColor("#FF00E5FF"), Color.parseColor("#88FF7597"),
             Color.WHITE, Color.parseColor("#FF06050A"), 22f,
             Typeface.create("sans-serif-medium", Typeface.NORMAL),
@@ -270,7 +269,7 @@ class MainActivity : AppCompatActivity() {
         ),
         AppThemeStyle(
             2, "Амолед Блэк",
-            Color.parseColor("#F8000000"), Color.parseColor("#FF0A0A0A"),
+            Color.parseColor("#F8000000"), Color.parseColor("#FF161618"),
             Color.WHITE, Color.parseColor("#88FFFFFF"),
             Color.WHITE, Color.BLACK, 18f,
             Typeface.create("sans-serif-light", Typeface.NORMAL),
@@ -327,26 +326,28 @@ class MainActivity : AppCompatActivity() {
         return if (dynamicCategories.isNotEmpty()) dynamicCategories else defaultTenCategories
     }
 
+    // Расширенный список живых российских и тематических источников для Детских и Музыки
     private val openRusSources = listOf(
         "https://iptv-org.github.io/iptv/languages/rus.m3u",
         "https://iptv-org.github.io/iptv/countries/ru.m3u",
         "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_russia.m3u8",
         "https://raw.githubusercontent.com/smolnp/iptvru/gh-pages/playlist.m3u8",
         "https://raw.githubusercontent.com/ipstreet312/freeiptv/master/all.m3u",
+        "https://raw.githubusercontent.com/Dimonovich/IPTV/master/IPTV.m3u",
         "https://iptv-org.github.io/iptv/countries/by.m3u",
         "https://iptv-org.github.io/iptv/countries/kz.m3u",
         "https://iptv-org.github.io/iptv/countries/am.m3u",
+        "https://iptv-org.github.io/iptv/categories/kids.m3u",
+        "https://iptv-org.github.io/iptv/categories/animation.m3u",
+        "https://iptv-org.github.io/iptv/categories/family.m3u",
+        "https://iptv-org.github.io/iptv/categories/music.m3u",
         "https://iptv-org.github.io/iptv/categories/movies.m3u",
         "https://iptv-org.github.io/iptv/categories/series.m3u",
         "https://iptv-org.github.io/iptv/categories/comedy.m3u",
-        "https://iptv-org.github.io/iptv/categories/animation.m3u",
-        "https://iptv-org.github.io/iptv/categories/family.m3u",
-        "https://iptv-org.github.io/iptv/categories/kids.m3u",
         "https://iptv-org.github.io/iptv/categories/sports.m3u",
         "https://iptv-org.github.io/iptv/categories/science.m3u",
         "https://iptv-org.github.io/iptv/categories/documentary.m3u",
-        "https://iptv-org.github.io/iptv/categories/entertainment.m3u",
-        "https://iptv-org.github.io/iptv/categories/music.m3u"
+        "https://iptv-org.github.io/iptv/categories/entertainment.m3u"
     )
 
     private val epgUrls = listOf(
@@ -595,6 +596,16 @@ class MainActivity : AppCompatActivity() {
         playerView.translationY = shifts[orbiterStep].second
     }
 
+    private fun styleButtonForCurrentTheme(btn: TextView, isFocused: Boolean) {
+        val curT = currentTheme()
+        btn.setBackgroundDrawable(GradientDrawable().apply {
+            setColor(if (isFocused) curT.accentColor else curT.cardBgColor)
+            cornerRadius = 15f
+            setStroke(if (isFocused) 2 else 1, if (isFocused) Color.WHITE else curT.strokeColor)
+        })
+        btn.setTextColor(if (isFocused) curT.textOnAccent else curT.textPrimaryColor)
+    }
+
     private fun applyCurrentThemeToAllPanels() {
         val t = currentTheme()
         val scale = uiScaleFactor()
@@ -644,10 +655,11 @@ class MainActivity : AppCompatActivity() {
         btnOsdNightMode.text = "🌙 $brightnessPercent%"
         btnOsdChannelActions.text = "✎ Канал"
 
+        // Пункт 3: Обновляем и фон, и рамку, и текст кнопок OSD, чтобы они никогда не становились белыми на белом
         for (btn in listOf(btnOsdTop, btnOsdFav, btnOsdDualToggle, btnOsdRewind, btnOsdEpgList, btnOsdSettings, btnOsdNightMode, btnOsdChannelActions)) {
             btn.typeface = t.boldFont
-            btn.setTextColor(t.textPrimaryColor)
             btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f * scale)
+            styleButtonForCurrentTheme(btn, btn.hasFocus())
         }
 
         for (tile in allGridTiles) tile.themeStyleId = t.id
@@ -693,26 +705,14 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setTextSize(TypedValue.COMPLEX_UNIT_SP, (if (isIconOnly) 18f else 13.5f) * scale)
             typeface = themeBoldFont()
-            val t = currentTheme()
-            setTextColor(t.textPrimaryColor)
-            setBackgroundDrawable(GradientDrawable().apply {
-                setColor(t.cardBgColor)
-                cornerRadius = if (isIconOnly) 22f else 15f
-                setStroke(1, t.strokeColor)
-            })
+            styleButtonForCurrentTheme(this, false)
             isFocusable = true; isFocusableInTouchMode = false; isClickable = true
             setPadding((14 * scale).toInt(), (9 * scale).toInt(), (14 * scale).toInt(), (9 * scale).toInt())
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(4, 3, 4, 3)
             }
             setOnFocusChangeListener { _, hasFocus ->
-                val curT = currentTheme()
-                setBackgroundDrawable(GradientDrawable().apply {
-                    setColor(if (hasFocus) curT.accentColor else curT.cardBgColor)
-                    cornerRadius = if (isIconOnly) 22f else 15f
-                    setStroke(if (hasFocus) 2 else 1, if (hasFocus) Color.WHITE else curT.strokeColor)
-                })
-                setTextColor(if (hasFocus) curT.textOnAccent else curT.textPrimaryColor)
+                styleButtonForCurrentTheme(this, hasFocus)
                 if (hasFocus) resetMenuInactivityTimer()
             }
             setOnClickListener { resetMenuInactivityTimer(); onClick() }
@@ -754,12 +754,6 @@ class MainActivity : AppCompatActivity() {
             1 -> { playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL; player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT }
             else -> { playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM; player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING }
         }
-    }
-
-    private fun screenAspectModeName(): String = when (screenAspectMode) {
-        0 -> "По размеру экрана"
-        1 -> "Растянуть на весь экран"
-        else -> "Кинозум"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -1173,7 +1167,7 @@ class MainActivity : AppCompatActivity() {
             val cBox = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
                 isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-                id = 6000 + specIdx; scaleX = 0.82f; scaleY = 0.82f; alpha = 0.65f
+                id = 6000 + specIdx; scaleX = 0.90f; scaleY = 0.90f; alpha = 0.85f
                 layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(26, 18, 26, 18) }
                 addView(cTile); addView(cCaption)
                 setOnFocusChangeListener { v, hasFocus ->
@@ -1184,7 +1178,7 @@ class MainActivity : AppCompatActivity() {
                         val scrollX = (v.left + v.right) / 2 - carouselScrollView.width / 2
                         carouselScrollView.smoothScrollTo(scrollX.coerceAtLeast(0), 0)
                     } else {
-                        v.animate().scaleX(0.82f).scaleY(0.82f).alpha(0.62f).translationY(0f).setDuration(200L).start()
+                        v.animate().scaleX(0.90f).scaleY(0.90f).alpha(0.85f).translationY(0f).setDuration(200L).start()
                     }
                 }
                 setOnClickListener { resetMenuInactivityTimer(); spec.action() }
@@ -1278,7 +1272,6 @@ class MainActivity : AppCompatActivity() {
         applyBrightnessLevel()
         startClockAndWatchdogUpdater()
 
-        // Пункт 1: В списке групп точно такой же размер шрифта (17f), как в списке каналов
         categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17f, true) { pos -> !isSideShowingChannels && !isLeftRailVisible && pos == focusedCategoryPos }
         categoryListView.adapter = categoryAdapter
 
@@ -1534,6 +1527,11 @@ class MainActivity : AppCompatActivity() {
                 if (e1 == null || firstRunModeOverlay.visibility == View.VISIBLE) return false
                 val dx = e2.x - e1.x; val dy = e2.y - e1.y
                 val curMenu = menuHistory.lastOrNull()
+
+                // Пункт 4: Если открыта Карусель в SETTINGS или палец свайпает по карусели — не закрываем меню!
+                if (curMenu == "SETTINGS" && (currentTheme().isCarouselMenu || isPointInsideVisibleView(e1.rawX, e1.rawY, carouselScrollView))) {
+                    return false
+                }
 
                 if (abs(dx) > abs(dy) * 1.45f && abs(dx) > 95f) {
                     if (curMenu == "SIDE") {
@@ -1824,7 +1822,7 @@ class MainActivity : AppCompatActivity() {
         isDualStreamActive = true
         val dp = ExoPlayer.Builder(this).build().apply {
             volume = 0f
-            setMediaItem(MediaItem.fromUri(ch.url))
+            setMediaItem(MediaItem.fromUri(ch.url.substringBefore("#")))
             prepare()
             play()
         }
@@ -2211,7 +2209,7 @@ class MainActivity : AppCompatActivity() {
 
                         if (isFrozen || activeBars <= 1) {
                             lowSignalStuckSeconds += 2
-                            if (lowSignalStuckSeconds >= 14) {
+                            if (lowSignalStuckSeconds >= 10) {
                                 lowSignalStuckSeconds = 0
                                 consecutiveDropFailures++
                                 if (onDropBehavior == 1 && consecutiveDropFailures >= 2) {
@@ -2239,16 +2237,25 @@ class MainActivity : AppCompatActivity() {
         uiHandler.post(ticker)
     }
 
-    // Пункт 3: Бесшовное переподключение и подмена на резервный поток без остановки SurfaceView и без мигания часов/сигнала
+    // Бесшовное переподключение с умным поиском рабочего зеркала по названию канала или резервного CDN
     private fun reconnectCurrentStreamSilently() {
         val ch = currentChannel ?: return
         val p = player ?: return
         try {
             val cleanUrl = ch.url.substringBefore("#")
-            val targetUrl = if (silentFallbackAttemptedForUrl != ch.url && cleanUrl.contains("sc.id-tv.kz")) {
+            val targetUrl = if (silentFallbackAttemptedForUrl != ch.url) {
                 silentFallbackAttemptedForUrl = ch.url
-                if (effectiveCategory(ch) == "Детские") "https://ott-cdn.ucom.am/s29/index.m3u8"
-                else "https://ott-cdn.ucom.am/s48/index.m3u8"
+                val normTarget = CoreEngines.normalizeName(ch.name)
+                val mirror = allChannels.firstOrNull {
+                    it.url != ch.url && !autoDisabledUrls.contains(it.url) && CoreEngines.normalizeName(it.name) == normTarget
+                }
+                when {
+                    mirror != null -> mirror.url.substringBefore("#")
+                    effectiveCategory(ch) == "Детские" -> BuiltinCatalog.FALLBACK_KIDS_CDN_1
+                    effectiveCategory(ch) == "Музыка" -> BuiltinCatalog.FALLBACK_MUSIC_CDN_1
+                    effectiveCategory(ch) == "Кино и сериалы" -> BuiltinCatalog.FALLBACK_MOVIES_CDN_1
+                    else -> cleanUrl
+                }
             } else {
                 cleanUrl
             }
@@ -2330,12 +2337,12 @@ class MainActivity : AppCompatActivity() {
             .setUserAgent(activeAgent)
             .setDefaultRequestProperties(mapOf("Accept" to "*/*", "Connection" to "keep-alive"))
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(25000)
+            .setConnectTimeoutMs(12000)
+            .setReadTimeoutMs(20000)
 
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(httpDataSourceFactory)
-            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(8))
+            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(6))
 
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -2400,7 +2407,7 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onPlayerError(error: PlaybackException) {
                 userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
-                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 900)
+                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 700)
             }
         })
 
@@ -2809,11 +2816,6 @@ class MainActivity : AppCompatActivity() {
         if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
     }
 
-    // Пункт 2: Защита встроенных русских детских каналов от автоскрытия при быстром тесте
-    private fun isProtectedRussianKidsChannel(ch: Channel): Boolean {
-        return effectiveCategory(ch) == "Детские" && BuiltinCatalog.extraOpenStreams.any { it.url == ch.url }
-    }
-
     private fun startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>) {
         val targetChannels = rawTargetChannels.filter { !manualDisabledUrls.contains(it.url) }
         if (isAnalyzerRunning || targetChannels.isEmpty()) return
@@ -2836,8 +2838,7 @@ class MainActivity : AppCompatActivity() {
             for (ch in snapshot) {
                 pool.submit {
                     if (!isAnalyzerRunning) return@submit
-                    val isProtectedKids = isProtectedRussianKidsChannel(ch)
-                    val ok = if (isProtectedKids) true else checkStreamAliveDeep(ch.url)
+                    val ok = checkStreamAliveDeep(ch.url)
                     channelHealthMap[ch.url] = ok
                     if (ok) {
                         aliveChannelsAtomic.incrementAndGet()
@@ -2894,8 +2895,8 @@ class MainActivity : AppCompatActivity() {
                 setRequestProperty("Accept", "*/*")
                 setRequestProperty("Referer", "$origin/")
                 instanceFollowRedirects = true
-                connectTimeout = 4000
-                readTimeout = 4000
+                connectTimeout = 4200
+                readTimeout = 4200
             }
             val code = conn.responseCode
             if (code !in 200..299) {
@@ -3044,7 +3045,7 @@ class MainActivity : AppCompatActivity() {
     private fun isChannelActive(ch: Channel): Boolean {
         if (manualDisabledUrls.contains(ch.url)) return false
         if (disabledCategories.contains(effectiveCategory(ch))) return false
-        if (!isProtectedRussianKidsChannel(ch) && autoDisabledUrls.contains(ch.url)) return false
+        if (autoDisabledUrls.contains(ch.url)) return false
         return true
     }
 
@@ -3070,11 +3071,11 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                         val targetMap = LinkedHashMap<String, Channel>()
-                        val sourcesToLoad = if (strictRuOnly) openRusSources.take(14) else openRusSources
+                        val sourcesToLoad = if (strictRuOnly) openRusSources.take(15) else openRusSources
                         for (srcUrl in sourcesToLoad) {
                             if (myGen != playlistLoadGeneration) return@thread
                             try {
-                                val reader = CoreEngines.openStreamWithBypass(srcUrl, userAgentIndex, dohEnabled, 6000).bufferedReader()
+                                val reader = CoreEngines.openStreamWithBypass(srcUrl, userAgentIndex, dohEnabled, 6500).bufferedReader()
                                 CoreEngines.parseM3uReaderIntoMap(
                                     reader = reader,
                                     targetMap = targetMap,
@@ -3086,7 +3087,13 @@ class MainActivity : AppCompatActivity() {
                             } catch (_: Exception) {}
                         }
                         for (ch in targetMap.values) {
-                            if (existingKeys.add(CoreEngines.normalizeName(ch.name) + "_" + ch.category)) result.add(ch)
+                            val hostKey = try { URL(ch.url.substringBefore("#")).host.lowercase() } catch (_: Exception) { "" }
+                            val key = if (ch.category == "Детские" || ch.category == "Музыка") {
+                                CoreEngines.normalizeName(ch.name) + "_" + ch.category + "_" + hostKey
+                            } else {
+                                CoreEngines.normalizeName(ch.name) + "_" + ch.category
+                            }
+                            if (existingKeys.add(key)) result.add(ch)
                         }
                         result
                     }
@@ -3170,6 +3177,15 @@ class MainActivity : AppCompatActivity() {
         categoryAdapter.notifyDataSetChanged()
     }
 
+    private fun charAlphabetGroup(name: String): Int {
+        val firstChar = name.trim().firstOrNull { it.isLetterOrDigit() } ?: return 3
+        return when {
+            firstChar in 'а'..'я' || firstChar in 'А'..'Я' || firstChar == 'ё' || firstChar == 'Ё' -> 0 // Сначала А-Я
+            firstChar in 'a'..'z' || firstChar in 'A'..'Z' -> 1 // Затем A-Z
+            else -> 2 // Цифры (1HD, 2TV, 360) и символы в самом конце
+        }
+    }
+
     private fun selectCategory(index: Int) {
         val cats = activeCategoryList()
         if (index !in cats.indices) return
@@ -3182,9 +3198,9 @@ class MainActivity : AppCompatActivity() {
             else -> activeAll.filter { effectiveCategory(it) == catName }
         }
         val comparator = Comparator<Channel> { a, b ->
-            val aRu = a.name.any { it in 'а'..'я' || it in 'А'..'Я' }
-            val bRu = b.name.any { it in 'а'..'я' || it in 'А'..'Я' }
-            if (aRu != bRu) return@Comparator if (aRu) -1 else 1
+            val gA = charAlphabetGroup(a.name)
+            val gB = charAlphabetGroup(b.name)
+            if (gA != gB) return@Comparator gA.compareTo(gB)
             ruCollator.compare(a.name, b.name)
         }
         displayedChannels.clear()
@@ -3223,7 +3239,6 @@ class MainActivity : AppCompatActivity() {
         if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 1500L)
     }
 
-    // Пункт 3: Переключение каналов без мигания и без пропадания часов / индикатора сигнала
     private fun playChannelObj(channel: Channel, immediate: Boolean = false, silentSwap: Boolean = false) {
         val prevPlayingUrl = currentChannel?.url
         if (!silentSwap && currentChannel != null && prevPlayingUrl != channel.url) {
@@ -3318,7 +3333,7 @@ class MainActivity : AppCompatActivity() {
             .putStringSet("favorites", favoriteUrls.toSet())
             .putStringSet("top_urls", topUrls.toSet())
             .putStringSet("manual_disabled_urls_v19", manualDisabledUrls.toSet())
-            .putStringSet("auto_disabled_urls_v28", autoDisabledUrls.toSet())
+            .putStringSet("auto_disabled_urls_v29", autoDisabledUrls.toSet())
             .putStringSet("disabled_cats", disabledCategories.toSet())
             .apply()
     }
@@ -3347,11 +3362,12 @@ class MainActivity : AppCompatActivity() {
         activePlaylistIndex = prefs.getInt("active_playlist", 0)
         epgUrl = prefs.getString("epg_url", epgUrl) ?: epgUrl
         lastSavedChannelUrl = prefs.getString("last_channel_url", "") ?: ""
+        if (lastSavedChannelUrl.contains("sc.id-tv.kz")) lastSavedChannelUrl = ""
 
-        favoriteUrls.clear(); favoriteUrls.addAll(prefs.getStringSet("favorites", emptySet()) ?: emptySet())
-        topUrls.clear(); topUrls.addAll(prefs.getStringSet("top_urls", emptySet()) ?: emptySet())
+        favoriteUrls.clear(); favoriteUrls.addAll((prefs.getStringSet("favorites", emptySet()) ?: emptySet()).filterNot { it.contains("sc.id-tv.kz") })
+        topUrls.clear(); topUrls.addAll((prefs.getStringSet("top_urls", emptySet()) ?: emptySet()).filterNot { it.contains("sc.id-tv.kz") })
         manualDisabledUrls.clear(); manualDisabledUrls.addAll(prefs.getStringSet("manual_disabled_urls_v19", emptySet()) ?: emptySet())
-        autoDisabledUrls.clear(); autoDisabledUrls.addAll(prefs.getStringSet("auto_disabled_urls_v28", emptySet()) ?: emptySet())
+        autoDisabledUrls.clear(); autoDisabledUrls.addAll(prefs.getStringSet("auto_disabled_urls_v29", emptySet()) ?: emptySet())
         disabledCategories.clear(); disabledCategories.addAll(prefs.getStringSet("disabled_cats", emptySet()) ?: emptySet())
 
         customCategoryMap.clear()
