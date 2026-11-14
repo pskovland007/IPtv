@@ -117,6 +117,7 @@ class MainActivity : AppCompatActivity() {
     private val carouselCells = mutableListOf<LinearLayout>()
     private val menuHistory = mutableListOf<String>()
 
+    private var lastMenuChangeMs: Long = 0L
     private var isSideShowingChannels = true
     private var isLeftRailVisible = false
     private var openChannelsDirectlyWithCurrentFocus = true
@@ -341,11 +342,12 @@ class MainActivity : AppCompatActivity() {
             }.start()
     }
 
+    // Пункт 2: Левая панель всегда фиксированной ширины, чтобы не загромождать экран при увеличении шрифта
     private fun setPlayerMiniPreviewMode(mini: Boolean) {
         val dm = resources.displayMetrics
         if (mini) {
             val curMenu = menuHistory.lastOrNull()
-            val sideWidthPx = (720 * uiScaleFactor()).toInt().coerceAtMost((dm.widthPixels * 0.50f).toInt())
+            val sideWidthPx = 700.coerceAtMost((dm.widthPixels * 0.48f).toInt())
             val leftMenuEdgePx = if (curMenu == "SIDE") {
                 sideWidthPx + 24
             } else {
@@ -561,8 +563,9 @@ class MainActivity : AppCompatActivity() {
         val t = currentTheme()
         val scale = uiScaleFactor()
         val dm = resources.displayMetrics
+        // Пункт 2: Левая панель со списком и группами всегда фиксированной ширины (увеличивается только текст внутри неё)
         sidePanel.layoutParams = FrameLayout.LayoutParams(
-            (720 * scale).toInt().coerceAtMost((dm.widthPixels * 0.54f).toInt()),
+            700.coerceAtMost((dm.widthPixels * 0.48f).toInt()),
             FrameLayout.LayoutParams.MATCH_PARENT,
             Gravity.START
         ).apply { setMargins(16, 16, 0, 16) }
@@ -832,7 +835,7 @@ class MainActivity : AppCompatActivity() {
         sidePanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(720, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START).apply { setMargins(16, 16, 0, 16) }
+            layoutParams = FrameLayout.LayoutParams(700, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START).apply { setMargins(16, 16, 0, 16) }
             setPadding(20, 20, 20, 20)
         }
 
@@ -982,7 +985,7 @@ class MainActivity : AppCompatActivity() {
         btnOsdRewind = makeModernButton("⏪ -20с") { rewindLiveBufferSeconds(20) }
         btnOsdEpgList = makeModernButton("▤ Гид") { navigateToMenu("FULL_EPG") }
         btnOsdSettings = makeModernButton("⚙ Меню") { navigateToMenu("SETTINGS") }
-        btnOsdNightMode = makeModernButton("🌙 $brightnessPercent%" ) { navigateToMenu("BRIGHTNESS_MENU") }
+        btnOsdNightMode = makeModernButton("🌙 $brightnessPercent%") { navigateToMenu("BRIGHTNESS_MENU") }
         btnOsdChannelActions = makeModernButton("✎ Канал") { navigateToMenu("CHANNEL_ACTIONS") }
         btnOsdPowerRedCircle = RedPowerIconButton(this) { navigateToMenu("POWER_AND_SLEEP_MENU") }.apply {
             layoutParams = LinearLayout.LayoutParams(54, 54).apply { setMargins(10, 2, 4, 2) }
@@ -1049,6 +1052,7 @@ class MainActivity : AppCompatActivity() {
 
         data class GridTileSpec(val iconType: String, val baseHex: String, val accentHex: String, val shortCaption: String, val fullTitle: String, val action: () -> Unit)
 
+        // Пункт 3: Плитка называется коротко и ясно «Вид»
         val gridSpecs = listOf(
             GridTileSpec("PLAYLISTS", "#1B8A6B", "#FFB300", "Плейлисты", "Управление плейлистами (2 встроенных + свои)") { navigateToMenu("PLAYLISTS") },
             GridTileSpec("EDITOR", "#2E5B9A", "#00E676", "Редактор", "Редактор групп и каналов") { navigateToMenu("CHANNEL_EDITOR_GROUPS") },
@@ -1063,7 +1067,7 @@ class MainActivity : AppCompatActivity() {
             },
             GridTileSpec("AUDIO", "#0277BD", "#69F0AE", "Звук и DRC", "Дорожка, Ночной DRC и Усиление до 200%") { navigateToMenu("AUDIO") },
             GridTileSpec("CONTROL_MODE", "#00838F", "#FFD54F", "Управление", "Режим: Сенсор или Пульт ТВ") { showFirstRunControlPicker(forceShow = true) },
-            GridTileSpec("MORE", "#4A148C", "#FFAB00", "Вид, Сеть, Обновл.", "Масштаб ТВ, Прозрачность, Ambilight и Обновление APK") { navigateToMenu("MORE_SETTINGS") }
+            GridTileSpec("MORE", "#4A148C", "#FFAB00", "Вид", "Вид, Экран и Обновление") { navigateToMenu("MORE_SETTINGS") }
         )
 
         gridContainerLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
@@ -1174,7 +1178,7 @@ class MainActivity : AppCompatActivity() {
 
         subModalOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
-            setPadding(28, 24, 28, 24)
+            setPadding(28, 20, 28, 20)
             layoutParams = FrameLayout.LayoutParams(920, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         }
         subModalTitle = TextView(this).apply {
@@ -1442,8 +1446,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Пункт 1: Если окно только что открылось и ещё не успело вычислить свои размеры (width == 0), считаем касание внутри окна!
     private fun isPointInsideVisibleView(x: Float, y: Float, v: View): Boolean {
         if (v.visibility != View.VISIBLE) return false
+        if (v.width == 0 || v.height == 0) return true
         val loc = IntArray(2)
         v.getLocationOnScreen(loc)
         return x >= loc[0] && x <= loc[0] + v.width && y >= loc[1] && y <= loc[1] + v.height
@@ -1465,6 +1471,8 @@ class MainActivity : AppCompatActivity() {
             override fun onDown(e: MotionEvent): Boolean = false
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 if (firstRunModeOverlay.visibility == View.VISIBLE) return false
+                // Пункт 1: Защита от закрытия только что открытого на телефоне подменю (Плейлисты / Тест каналов)
+                if (System.currentTimeMillis() - lastMenuChangeMs < 500L) return true
                 if (isDualStreamActive && isPointInsideVisibleView(e.rawX, e.rawY, dualStreamContainer) && !isPointInsideVisibleView(e.rawX, e.rawY, dualCloseBtn)) {
                     swapMainAndDualStream()
                     return true
@@ -1646,12 +1654,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun navigateToMenu(menuId: String) {
+        lastMenuChangeMs = System.currentTimeMillis()
         if (menuHistory.lastOrNull() != menuId) menuHistory.add(menuId)
         renderMenuById(menuId)
         resetMenuInactivityTimer()
     }
 
     private fun navigateBackInMenu(): Boolean {
+        lastMenuChangeMs = System.currentTimeMillis()
         if (firstRunModeOverlay.visibility == View.VISIBLE && controlMode != 0) {
             firstRunModeOverlay.visibility = View.GONE
             return true
@@ -1685,6 +1695,18 @@ class MainActivity : AppCompatActivity() {
         currentChannelBanner.visibility = View.GONE
         subModalTopButtons.visibility = View.GONE
         subModalTopButtons.removeAllViews()
+
+        val dm = resources.displayMetrics
+        subModalOverlay.layoutParams = FrameLayout.LayoutParams(
+            (dm.widthPixels * 0.65f).toInt().coerceIn(760, 1120),
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        )
+        subModalList.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            (dm.heightPixels * 0.56f).toInt().coerceAtLeast(360)
+        )
+
         when (menuId) {
             "SIDE" -> {
                 setPlayerMiniPreviewMode(true)
@@ -2000,44 +2022,66 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    // Пункт 3: Меню «Вид» от верхнего до нижнего края экрана (с небольшим отступом), всё в одну строку, с графическими переключателями
     private fun openMoreSettingsSubModal() {
-        subModalTitle.text = "Масштаб ТВ, Прозрачность, Ambilight и Обновление"
+        val dm = resources.displayMetrics
+        subModalOverlay.layoutParams = FrameLayout.LayoutParams(
+            (dm.widthPixels * 0.78f).toInt().coerceIn(820, 1440),
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            Gravity.CENTER
+        ).apply { setMargins(24, 16, 24, 16) }
+
+        subModalList.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1f
+        )
+
+        subModalTitle.text = "Вид, Экран и Система"
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.VISIBLE
 
-        val scaleName = when (uiScaleStep) {
-            0 -> "Шаг 1: Обычный (для Смартфона)"
-            1 -> "Шаг 2: Крупный (для Телевизора)"
-            else -> "Шаг 3: Очень крупный (для Большого ТВ)"
+        val scaleDots = when (uiScaleStep) {
+            0 -> "● ○ ○   Обычный (Смартфон)"
+            1 -> "○ ● ○   Крупный (ТВ)"
+            else -> "○ ○ ●   Огромный (Большой ТВ)"
         }
-        val alphaName = when (uiAlphaStep) {
-            0 -> "Шаг 1: Плотный фон (96%)"
-            1 -> "Шаг 2: Средняя прозрачность (84%)"
-            else -> "Шаг 3: Высокая прозрачность / Стекло (68%)"
+        val alphaDots = when (uiAlphaStep) {
+            0 -> "● ○ ○   Плотный (96%)"
+            1 -> "○ ● ○   Средний (84%)"
+            else -> "○ ○ ●   Стекло (68%)"
         }
-        val ambiName = when (ambilightMode) {
-            0 -> "Выключен"
-            1 -> "Свой цвет у каждой группы"
-            2 -> "Плавный спектр (переливающийся)"
-            else -> "Захват кадра видео (Live PixelCopy)"
+        val ambiDots = when (ambilightMode) {
+            0 -> "[OFF]   Выключена"
+            1 -> "[ON]   Цвет группы  (● ○ ○)"
+            2 -> "[ON]   Спектр  (○ ● ○)"
+            else -> "[ON]   Кадр видео  (○ ○ ●)"
         }
-        val dropName = if (onDropBehavior == 0) "Перезапуск соединения (14с)" else "Автоперескок на следующий канал"
-        val hideName = if (showChannelBannerOnSwitch) "$menuHideDelaySec сек (Баннер ВКЛ)" else "$menuHideDelaySec сек (Баннер ВЫКЛ)"
+        val aspectDots = when (screenAspectMode) {
+            0 -> "● ○ ○   По размеру экрана"
+            1 -> "○ ● ○   На весь экран"
+            else -> "○ ○ ●   Кинозум"
+        }
+        val dropToggle = if (onDropBehavior == 0) "● ○   Перезапуск потока" else "○ ●   Следующий канал"
+        val bannerToggle = if (showChannelBannerOnSwitch) "[ON]   Показывать ($menuHideDelaySec сек)" else "[OFF]   Скрыт ($menuHideDelaySec сек)"
+        val dualToggle = if (isDualStreamActive) "[ON]   Два канала на экране" else "[OFF]   Один канал"
+        val dohToggle = if (dohEnabled) "[ON]   Cloudflare 1.1.1.1" else "[OFF]   Системный DNS"
+        val sleepInfo = if (sleepTimerMinutesLeft > 0) "[ON]   Через $sleepTimerMinutesLeft мин" else "[OFF]   Выключен"
 
         val items = listOf(
-            "🔍  Размер элементов и текста: $scaleName",
-            "💧  Прозрачность окон меню: $alphaName",
-            "🚀  Проверить и установить обновление TiViLook (GitHub)",
-            "✦   Подсветка Ambilight: $ambiName",
-            if (isDualStreamActive) "[+]  Режим «Двойной эфир»: ВКЛЮЧЕН" else "[-]  Режим «Двойной эфир»: ВЫКЛЮЧЕН",
-            "⏪  Машина времени: Отмотать эфир на -30 сек",
-            "🖥  Формат экрана: ${screenAspectModeName()}",
-            "🌙  Яркость экрана и меню: $brightnessPercent%",
-            "⏲  Выход и Таймер сна: ${if (sleepTimerMinutesLeft > 0) "$sleepTimerMinutesLeft мин" else "Выключен"}",
-            if (dohEnabled) "[+]  DNS-over-HTTPS (Cloudflare 1.1.1.1): ВКЛ" else "[-]  DNS-over-HTTPS (Cloudflare 1.1.1.1): ВЫКЛ",
-            "⚡  При обрыве потока: $dropName",
-            "⏱  Автоскрытие меню и баннера: $hideName",
-            "🔄  Обновить телепрограмму EPG сейчас"
+            "🔍  Размер текста и меню:   $scaleDots",
+            "💧  Прозрачность меню:   $alphaDots",
+            "✦   Подсветка Ambilight:   $ambiDots",
+            "🖥  Формат картинки:   $aspectDots",
+            "🌙  Яркость экрана:   $brightnessPercent%   ▸",
+            "💬  Баннер при переключении:   $bannerToggle",
+            "⧉   Двойной эфир (PiP):   $dualToggle",
+            "⏪  Машина времени:   Отмотать эфир на -30 сек",
+            "🛡  Обход блокировок DoH:   $dohToggle",
+            "⚡  При обрыве потока:   $dropToggle",
+            "⏲  Таймер сна и Выход:   $sleepInfo   ▸",
+            "🔄  Телепрограмма EPG:   Обновить расписание сейчас",
+            "🚀  Обновление TiViLook:   Проверить и установить с GitHub"
         )
         updateSubModalListItems(items)
 
@@ -2045,16 +2089,10 @@ class MainActivity : AppCompatActivity() {
             when (which) {
                 0 -> { uiScaleStep = (uiScaleStep + 1) % 3; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal() }
                 1 -> { uiAlphaStep = (uiAlphaStep + 1) % 3; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal() }
-                2 -> checkAndInstallAppUpdateFromGithub()
-                3 -> { ambilightMode = (ambilightMode + 1) % 4; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal() }
-                4 -> { toggleDualStreamWithCurrentOrNeighbor(); openMoreSettingsSubModal() }
-                5 -> { rewindLiveBufferSeconds(30); closeAllMenus() }
-                6 -> { screenAspectMode = (screenAspectMode + 1) % 3; applyScreenAspectMode(); saveState(); openMoreSettingsSubModal() }
-                7 -> navigateToMenu("BRIGHTNESS_MENU")
-                8 -> navigateToMenu("POWER_AND_SLEEP_MENU")
-                9 -> { dohEnabled = !dohEnabled; saveState(); initPlayer(); openMoreSettingsSubModal() }
-                10 -> { onDropBehavior = (onDropBehavior + 1) % 2; saveState(); openMoreSettingsSubModal() }
-                11 -> {
+                2 -> { ambilightMode = (ambilightMode + 1) % 4; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal() }
+                3 -> { screenAspectMode = (screenAspectMode + 1) % 3; applyScreenAspectMode(); saveState(); openMoreSettingsSubModal() }
+                4 -> navigateToMenu("BRIGHTNESS_MENU")
+                5 -> {
                     when (menuHideDelaySec) {
                         4 -> menuHideDelaySec = 8
                         8 -> menuHideDelaySec = 12
@@ -2062,10 +2100,17 @@ class MainActivity : AppCompatActivity() {
                     }
                     saveState(); openMoreSettingsSubModal()
                 }
-                12 -> { loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu() }
+                6 -> { toggleDualStreamWithCurrentOrNeighbor(); openMoreSettingsSubModal() }
+                7 -> { rewindLiveBufferSeconds(30); closeAllMenus() }
+                8 -> { dohEnabled = !dohEnabled; saveState(); initPlayer(); openMoreSettingsSubModal() }
+                9 -> { onDropBehavior = (onDropBehavior + 1) % 2; saveState(); openMoreSettingsSubModal() }
+                10 -> navigateToMenu("POWER_AND_SLEEP_MENU")
+                11 -> { loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu() }
+                12 -> checkAndInstallAppUpdateFromGithub()
             }
         }
-        animateMenuAppear(subModalOverlay); subModalList.requestFocus()
+        animateMenuAppear(subModalOverlay)
+        subModalList.requestFocus()
     }
 
     private fun checkAndInstallAppUpdateFromGithub() {
