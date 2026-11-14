@@ -32,7 +32,7 @@ jobs:
         with:
           gradle-version: '8.5'
 
-      - name: Step 1 - Clean Repo & Generate Modular TiViLook v2.7
+      - name: Step 1 - Clean Repo & Generate Modular TiViLook v2.7.2
         run: |
           rm -f gemini-code-* || true
 
@@ -72,7 +72,7 @@ jobs:
           python3 - << 'PYEOF'
           import os, glob
 
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "110"))
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "120"))
           new_ver_code = 17200 + run_num
 
           os.makedirs("app/src/main/java/com/example/miboxiptv", exist_ok=True)
@@ -150,7 +150,6 @@ jobs:
               try: os.remove(old_ic)
               except Exception: pass
 
-          # Пункт 6: Красочная палитра "Северное сияние и Космос" (Бирюза, Сапфир, Изумруд, Пурпур, Золото) без радуги
           aurora_eye_icon = '''<?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="108dp" android:height="108dp"
@@ -278,7 +277,7 @@ jobs:
               </application>
           </manifest>''')
 
-          # МОДУЛЬ 1: BuiltinCatalog.kt (Пункт 1: ТВ Кинозалы, русские мультфильмы, европейская/русская музыка)
+          # МОДУЛЬ 1: BuiltinCatalog.kt
           with open("app/src/main/java/com/example/miboxiptv/BuiltinCatalog.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -293,6 +292,9 @@ jobs:
                   Channel("Домашний", "https://sc.id-tv.kz/Domashniy.m3u8", "Новости и общие", ""),
                   Channel("Звезда", "https://sc.id-tv.kz/Zvezda.m3u8", "Новости и общие", ""),
                   Channel("Мир 24", "https://sc.id-tv.kz/Mir_24.m3u8", "Новости и общие", ""),
+                  Channel("Москва 24", "https://sc.id-tv.kz/Moskva_24.m3u8", "Новости и общие", ""),
+                  Channel("Известия HD", "https://sc.id-tv.kz/Izvestiya_HD.m3u8", "Новости и общие", ""),
+                  Channel("РБК ТВ", "https://sc.id-tv.kz/RBK.m3u8", "Новости и общие", ""),
 
                   Channel("Кинозал 1 Премьер HD", "https://sc.id-tv.kz/Kinopremyera_HD.m3u8", "Кино и сериалы", ""),
                   Channel("Кинозал 2 Хит HD", "https://sc.id-tv.kz/Kinohit.m3u8", "Кино и сериалы", ""),
@@ -300,17 +302,46 @@ jobs:
                   Channel("Кинозал 4 Семейный HD", "https://sc.id-tv.kz/Kinosemya.m3u8", "Кино и сериалы", ""),
                   Channel("Кинозал 5 Комедия HD", "https://sc.id-tv.kz/Kinokomediya.m3u8", "Кино и сериалы", ""),
                   Channel("Кинозал 6 Наше Кино", "https://sc.id-tv.kz/TV1000_Russkoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("Кинозал Остросюжетное HD", "https://sc.id-tv.kz/Ostrosuzhetnoe_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинозал 7 Остросюжетное HD", "https://sc.id-tv.kz/Ostrosuzhetnoe_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинозал 8 Мужское Кино HD", "https://sc.id-tv.kz/Muzhskoe_kino_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинозал 9 Наше Новое Кино", "https://sc.id-tv.kz/Nashe_novoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинозал 10 Родное Кино", "https://sc.id-tv.kz/Rodnoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинозал 11 Киноужас", "https://sc.id-tv.kz/Kinouzhas.m3u8", "Кино и сериалы", ""),
+                  Channel("Кинозал 12 Киносерия", "https://sc.id-tv.kz/Kinoseriya.m3u8", "Кино и сериалы", ""),
+                  Channel("viju+ Premiere HD", "https://sc.id-tv.kz/VIP_Premiere.m3u8", "Кино и сериалы", ""),
+                  Channel("viju+ Megahit HD", "https://sc.id-tv.kz/VIP_Megahit.m3u8", "Кино и сериалы", ""),
+                  Channel("viju+ Comedy HD", "https://sc.id-tv.kz/VIP_Comedy.m3u8", "Кино и сериалы", ""),
+                  Channel("viju+ Serial HD", "https://sc.id-tv.kz/VIP_Serial.m3u8", "Кино и сериалы", ""),
+                  Channel("viju TV1000", "https://sc.id-tv.kz/TV1000.m3u8", "Кино и сериалы", ""),
+                  Channel("viju TV1000 Action", "https://sc.id-tv.kz/TV1000_Action.m3u8", "Кино и сериалы", ""),
+                  Channel("viju TV1000 Русское", "https://sc.id-tv.kz/TV1000_Russkoe_kino.m3u8", "Кино и сериалы", ""),
                   Channel("Мосфильм. Золотая коллекция", "https://ott-cdn.ucom.am/s48/index.m3u8", "Кино и сериалы", ""),
-                  Channel("Киномикс", "https://sc.id-tv.kz/Kinomiks.m3u8", "Кино и сериалы", ""),
+                  Channel("Киномикс HD", "https://sc.id-tv.kz/Kinomiks.m3u8", "Кино и сериалы", ""),
                   Channel("Киносвидание", "https://sc.id-tv.kz/Kinosvidanie.m3u8", "Кино и сериалы", ""),
                   Channel("Дом Кино Премиум HD", "https://sc.id-tv.kz/Dom_kino_premium.m3u8", "Кино и сериалы", ""),
                   Channel("Дом Кино", "https://sc.id-tv.kz/Dom_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000 Русское Кино", "https://sc.id-tv.kz/TV1000_Russkoe_kino.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000", "https://sc.id-tv.kz/TV1000.m3u8", "Кино и сериалы", ""),
-                  Channel("TV 1000 Action", "https://sc.id-tv.kz/TV1000_Action.m3u8", "Кино и сериалы", ""),
-                  Channel("Иллюзион+", "https://sc.id-tv.kz/Illuzion_plus.m3u8", "Кино и сериалы", ""),
                   Channel("Русский Иллюзион", "https://sc.id-tv.kz/Russkiy_illuzion.m3u8", "Кино и сериалы", ""),
+                  Channel("Иллюзион+", "https://sc.id-tv.kz/Illuzion_plus.m3u8", "Кино и сериалы", ""),
+                  Channel("Еврокино HD", "https://sc.id-tv.kz/Evrokino.m3u8", "Кино и сериалы", ""),
+                  Channel("Русский Роман", "https://sc.id-tv.kz/Russkiy_roman.m3u8", "Кино и сериалы", ""),
+                  Channel("Русский Бестселлер", "https://sc.id-tv.kz/Russkiy_bestseller.m3u8", "Кино и сериалы", ""),
+                  Channel("Русский Детектив", "https://sc.id-tv.kz/Russkiy_detektiv.m3u8", "Кино и сериалы", ""),
+                  Channel("Комедия", "https://sc.id-tv.kz/Komediya.m3u8", "Кино и сериалы", ""),
+                  Channel("НСТ (Страшное ТВ)", "https://sc.id-tv.kz/NST.m3u8", "Кино и сериалы", ""),
+                  Channel("Синема / Cinema", "https://sc.id-tv.kz/Cinema.m3u8", "Кино и сериалы", ""),
+                  Channel("Любимое Кино", "https://sc.id-tv.kz/Lyubimoe_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Феникс+ Кино", "https://sc.id-tv.kz/Feniks_plus_kino.m3u8", "Кино и сериалы", ""),
+                  Channel("Amedia Premium HD", "https://sc.id-tv.kz/Amedia_Premium_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Amedia Hit HD", "https://sc.id-tv.kz/Amedia_Hit_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Amedia 1", "https://sc.id-tv.kz/Amedia_1.m3u8", "Кино и сериалы", ""),
+                  Channel("Amedia 2", "https://sc.id-tv.kz/Amedia_2.m3u8", "Кино и сериалы", ""),
+                  Channel("Hollywood HD", "https://sc.id-tv.kz/Hollywood_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("RED HD", "https://sc.id-tv.kz/Red_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("SCI-FI", "https://sc.id-tv.kz/Sci_Fi.m3u8", "Кино и сериалы", ""),
+                  Channel("Кино ТВ HD", "https://sc.id-tv.kz/Kino_TV_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Шокирующее HD", "https://sc.id-tv.kz/Shokiruyuschee_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Комедийное HD", "https://sc.id-tv.kz/Komediynoye_HD.m3u8", "Кино и сериалы", ""),
+                  Channel("Душевное HD", "https://sc.id-tv.kz/Dushevnoye_HD.m3u8", "Кино и сериалы", ""),
 
                   Channel("Карусель", "https://sc.id-tv.kz/Karusel.m3u8", "Детские", ""),
                   Channel("Мульт", "https://sc.id-tv.kz/Mult.m3u8", "Детские", ""),
@@ -319,34 +350,75 @@ jobs:
                   Channel("СТС Kids", "https://sc.id-tv.kz/STS_Kids.m3u8", "Детские", ""),
                   Channel("О!", "https://sc.id-tv.kz/O_kanal.m3u8", "Детские", ""),
                   Channel("Рыжий", "https://sc.id-tv.kz/Ryzhiy.m3u8", "Детские", ""),
+                  Channel("Мультимузыка", "https://sc.id-tv.kz/Multimuzyka.m3u8", "Детские", ""),
+                  Channel("Тлум HD", "https://sc.id-tv.kz/Tlum_HD.m3u8", "Детские", ""),
+                  Channel("В гостях у сказки", "https://sc.id-tv.kz/V_gostyah_u_skazki.m3u8", "Детские", ""),
+                  Channel("Детский мир", "https://sc.id-tv.kz/Detskiy_mir.m3u8", "Детские", ""),
+                  Channel("Капитан Фантастика", "https://sc.id-tv.kz/Kapitan_Fantastika.m3u8", "Детские", ""),
+                  Channel("Смайлик ТВ", "https://sc.id-tv.kz/Smaylik_TV.m3u8", "Детские", ""),
+                  Channel("Уникум", "https://sc.id-tv.kz/Unikum.m3u8", "Детские", ""),
+                  Channel("Радость моя", "https://sc.id-tv.kz/Radost_moya.m3u8", "Детские", ""),
+                  Channel("Ани (Ani)", "https://sc.id-tv.kz/Ani.m3u8", "Детские", ""),
+                  Channel("FAN HD (Аниме и Фэнтези)", "https://sc.id-tv.kz/Fan_HD.m3u8", "Детские", ""),
+                  Channel("Gulli Girl", "https://sc.id-tv.kz/Gulli_Girl.m3u8", "Детские", ""),
+                  Channel("TiJi", "https://sc.id-tv.kz/TiJi.m3u8", "Детские", ""),
+                  Channel("Nickelodeon RU", "https://sc.id-tv.kz/Nickelodeon.m3u8", "Детские", ""),
+                  Channel("Nick Jr. RU", "https://sc.id-tv.kz/Nick_Jr.m3u8", "Детские", ""),
+                  Channel("Cartoon Network RU", "https://sc.id-tv.kz/Cartoon_Network.m3u8", "Детские", ""),
+                  Channel("Boomerang RU", "https://sc.id-tv.kz/Boomerang.m3u8", "Детские", ""),
+                  Channel("JimJam RU", "https://sc.id-tv.kz/JimJam.m3u8", "Детские", ""),
+                  Channel("Da Vinci Kids", "https://sc.id-tv.kz/Da_Vinci.m3u8", "Детские", ""),
 
                   Channel("Муз-ТВ", "https://sc.id-tv.kz/Muz_TV.m3u8", "Музыка", ""),
                   Channel("RU.TV", "https://sc.id-tv.kz/RU_TV.m3u8", "Музыка", ""),
                   Channel("Bridge TV Русский Хит", "https://sc.id-tv.kz/Bridge_TV_Russkiy_Hit.m3u8", "Музыка", ""),
                   Channel("Bridge TV Classic", "https://sc.id-tv.kz/Bridge_TV_Classic.m3u8", "Музыка", ""),
                   Channel("Bridge TV Hits", "https://sc.id-tv.kz/Bridge_TV.m3u8", "Музыка", ""),
+                  Channel("Bridge TV Deluxe", "https://sc.id-tv.kz/Bridge_TV_Deluxe.m3u8", "Музыка", ""),
+                  Channel("Bridge TV Шлягер", "https://sc.id-tv.kz/Bridge_TV_Shlyager.m3u8", "Музыка", ""),
                   Channel("ТНТ Music", "https://sc.id-tv.kz/TNT_Music.m3u8", "Музыка", ""),
                   Channel("Европа Плюс ТВ", "https://sc.id-tv.kz/Europa_Plus_TV.m3u8", "Музыка", ""),
                   Channel("Жара ТВ", "https://sc.id-tv.kz/Zhara.m3u8", "Музыка", ""),
                   Channel("Шансон ТВ", "https://sc.id-tv.kz/Shanson_TV.m3u8", "Музыка", ""),
+                  Channel("Ля-минор ТВ", "https://sc.id-tv.kz/Lya_minor.m3u8", "Музыка", ""),
+                  Channel("Жар-Птица", "https://sc.id-tv.kz/Zhar_Ptica.m3u8", "Музыка", ""),
+                  Channel("Mezzo Live HD", "https://sc.id-tv.kz/Mezzo_Live_HD.m3u8", "Музыка", ""),
 
                   Channel("Матч! ТВ HD", "https://sc.id-tv.kz/Match_TV_HD.m3u8", "Спорт", ""),
                   Channel("Матч! Премьер HD", "https://sc.id-tv.kz/Match_Premier_HD.m3u8", "Спорт", ""),
                   Channel("Матч! Футбол 1 HD", "https://sc.id-tv.kz/Match_Futbol_1_HD.m3u8", "Спорт", ""),
+                  Channel("Матч! Футбол 2 HD", "https://sc.id-tv.kz/Match_Futbol_2_HD.m3u8", "Спорт", ""),
+                  Channel("Матч! Футбол 3 HD", "https://sc.id-tv.kz/Match_Futbol_3_HD.m3u8", "Спорт", ""),
+                  Channel("Матч! Боец", "https://sc.id-tv.kz/Match_Boec.m3u8", "Спорт", ""),
+                  Channel("Матч! Игра HD", "https://sc.id-tv.kz/Match_Igra_HD.m3u8", "Спорт", ""),
+                  Channel("Матч! Арена HD", "https://sc.id-tv.kz/Match_Arena_HD.m3u8", "Спорт", ""),
                   Channel("КХЛ Prime HD", "https://sc.id-tv.kz/KHL_HD.m3u8", "Спорт", ""),
                   Channel("ТНТ HD", "https://sc.id-tv.kz/TNT_HD.m3u8", "Развлечения", ""),
+                  Channel("ТНТ4", "https://sc.id-tv.kz/TNT4.m3u8", "Развлечения", ""),
                   Channel("СТС HD", "https://sc.id-tv.kz/STS_HD.m3u8", "Развлечения", ""),
+                  Channel("СТС Love", "https://sc.id-tv.kz/STS_Love.m3u8", "Развлечения", ""),
                   Channel("Пятница!", "https://sc.id-tv.kz/Pyatnica.m3u8", "Развлечения", ""),
                   Channel("Суббота!", "https://sc.id-tv.kz/Subbota.m3u8", "Развлечения", ""),
                   Channel("Ю ТВ", "https://sc.id-tv.kz/Yu.m3u8", "Развлечения", ""),
                   Channel("Че!", "https://sc.id-tv.kz/Che.m3u8", "Развлечения", ""),
                   Channel("2x2", "https://sc.id-tv.kz/2x2.m3u8", "Развлечения", ""),
-                  Channel("КВН ТВ", "https://sc.id-tv.kz/KVN_TV.m3u8", "Развлечения", "")
+                  Channel("КВН ТВ", "https://sc.id-tv.kz/KVN_TV.m3u8", "Развлечения", ""),
+                  Channel("Сарафан", "https://sc.id-tv.kz/Sarafan.m3u8", "Развлечения", ""),
+                  Channel("Моя Планета", "https://sc.id-tv.kz/Moya_planeta.m3u8", "Познавательные", ""),
+                  Channel("Наука", "https://sc.id-tv.kz/Nauka.m3u8", "Познавательные", ""),
+                  Channel("История", "https://sc.id-tv.kz/Istoriya.m3u8", "Познавательные", ""),
+                  Channel("Живая Планета", "https://sc.id-tv.kz/Zhivaya_planeta.m3u8", "Познавательные", ""),
+                  Channel("Техно 24", "https://sc.id-tv.kz/Tehno_24.m3u8", "Познавательные", ""),
+                  Channel("Оружие", "https://sc.id-tv.kz/Oruzhie.m3u8", "Познавательные", ""),
+                  Channel("Авто Плюс", "https://sc.id-tv.kz/Avto_plyus.m3u8", "Познавательные", ""),
+                  Channel("Охота и рыбалка", "https://sc.id-tv.kz/Ohota_i_rybalka.m3u8", "Познавательные", ""),
+                  Channel("Кухня ТВ", "https://sc.id-tv.kz/Kuhnya_TV.m3u8", "Развлечения", ""),
+                  Channel("Еда Премиум", "https://sc.id-tv.kz/Eda_HD.m3u8", "Развлечения", "")
               )
           }
           ''')
 
-          # МОДУЛЬ 2: CustomViews.kt (с палитрой Северное сияние без радуги)
+          # МОДУЛЬ 2: CustomViews.kt
           with open("app/src/main/java/com/example/miboxiptv/CustomViews.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -958,13 +1030,19 @@ jobs:
                   return false
               }
 
-              fun isStrictlyRussianChannel(name: String, url: String): Boolean {
+              fun isStrictlyRussianChannel(name: String, url: String, group: String = ""): Boolean {
                   if (name.any { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }) return true
-                  val l = "$name $url".lowercase()
+                  val l = "$name $group $url".lowercase()
+                  val foreignBlock = listOf("english", "espanol", "spanish", "french", "deutsch", "german", "italiano", "polski", "turk", "latino", "brasil", "portugues", "arabic", "farsi", "kurd", "uk ", "usa ", "us ")
+                  if (foreignBlock.any { l.contains(it) }) return false
+
                   val ruMarkers = listOf(
-                      ".ru/", ".su/", "vgtrk", "1tv", "ntv", "tnt", "sts", "muz-tv", "ru.tv", "bridge tv",
-                      "tv1000", "tv 1000", "viasat", "amedia", "kinoprem", "kinohit", "kinomiks", "dom kino",
-                      "bcu ", "kion", "okko", "premier", "wink", "smotrim", "match", "khl", "karusel", "mult"
+                      ".ru/", ".su/", ".kz/", ".by/", "vgtrk", "1tv", "ntv", "tnt", "sts", "muz-tv", "ru.tv", "bridge",
+                      "tv1000", "tv 1000", "viju", "vip ", "viasat", "amedia", "kinoprem", "kinohit", "kinomiks", "dom kino",
+                      "kinozal", "cineman", "bcu", "kion", "okko", "premier", "wink", "smotrim", "match", "khl", "karusel", "mult",
+                      "hollywood", "red ", "sci-fi", "scifi", "sony", "fox", "paramount", "comedy", "trash", "fan ", "eurokino",
+                      "illuzion", "feniks", "cinema", "film", "nickelodeon", "nick jr", "nickjr", "cartoon", "boomerang",
+                      "gulli", "tiji", "jimjam", "jim jam", "da vinci", "davinci", "disney", "ani ", "tlum", "2x2"
                   )
                   return ruMarkers.any { l.contains(it) }
               }
@@ -982,10 +1060,10 @@ jobs:
                       text.contains("2k") || text.contains("qhd") || text.contains("quadhd") || text.contains("1440p") || text.contains("2160p") || text.contains("uhd") || text.contains("4k") -> "2K"
                       text.contains("взросл") || text.contains("18+") || text.contains("adult") || text.contains("xxx") -> "Прочее"
                       text.contains("спорт") || text.contains("футбол") || text.contains("матч") || text.contains("сетанта") || text.contains("setanta") || text.contains("sport") || text.contains("khl") || text.contains("кхл") || text.contains("ufc") || text.contains("бокс") -> "Спорт"
-                      text.contains("кино") || text.contains("фильм") || text.contains("сериал") || text.contains("кинозал") || text.contains("bcu") || text.contains("movie") || text.contains("cinema") || text.contains("film") || text.contains("tv1000") || text.contains("tv 1000") || text.contains("иллюзион") || text.contains("комедия") || text.contains("детектив") -> "Кино и сериалы"
-                      text.contains("детск") || text.contains("мульт") || text.contains("kids") || text.contains("карусель") || text.contains("nickelodeon") || text.contains("cartoon") || text.contains("disney") -> "Детские"
-                      text.contains("наук") || text.contains("док") || text.contains("познав") || text.contains("science") || text.contains("discovery") || text.contains("nat geo") || text.contains("animal") || text.contains("планет") || text.contains("viasat") || text.contains("история") -> "Познавательные"
-                      text.contains("муз") || text.contains("music") || text.contains("mtv") || text.contains("bridge") || text.contains("stingray") || text.contains("муз-тв") || text.contains("ru.tv") || text.contains("шансон") -> "Музыка"
+                      text.contains("детск") || text.contains("мульт") || text.contains("kids") || text.contains("карусель") || text.contains("nickelodeon") || text.contains("nick jr") || text.contains("cartoon") || text.contains("boomerang") || text.contains("gulli") || text.contains("tiji") || text.contains("jimjam") || text.contains("disney") || text.contains("тлум") || text.contains("смайлик") || text.contains("рыжий") || text.contains("мульти") || text.contains("сказк") -> "Детские"
+                      text.contains("кино") || text.contains("фильм") || text.contains("сериал") || text.contains("кинозал") || text.contains("cineman") || text.contains("bcu") || text.contains("viju") || text.contains("vip ") || text.contains("amedia") || text.contains("movie") || text.contains("cinema") || text.contains("film") || text.contains("tv1000") || text.contains("tv 1000") || text.contains("иллюзион") || text.contains("комедия") || text.contains("детектив") || text.contains("бестселлер") || text.contains("роман") || text.contains("нст") || text.contains("ужас") || text.contains("триллер") || text.contains("боевик") || text.contains("фантаст") || text.contains("hollywood") || text.contains("мосфильм") -> "Кино и сериалы"
+                      text.contains("наук") || text.contains("док") || text.contains("познав") || text.contains("science") || text.contains("discovery") || text.contains("nat geo") || text.contains("animal") || text.contains("планет") || text.contains("viasat") || text.contains("история") || text.contains("техно") || text.contains("оружие") || text.contains("охота") -> "Познавательные"
+                      text.contains("муз") || text.contains("music") || text.contains("mtv") || text.contains("bridge") || text.contains("stingray") || text.contains("муз-тв") || text.contains("ru.tv") || text.contains("шансон") || text.contains("жара") || text.contains("mezzo") -> "Музыка"
                       text.contains("развлеч") || text.contains("шоу") || text.contains("тнт") || text.contains("стс") || text.contains("пятница") || text.contains("суббота") || text.contains("ю тв") || text.contains("че!") || text.contains("2x2") || text.contains("2х2") || text.contains("квн") || text.contains("сарафан") || text.contains("юмор") || text.contains("entertainment") || text.contains("comedy") || text.contains("fashion") || text.contains("lifestyle") || text.contains("еда") || text.contains("кухня") -> "Развлечения"
                       text.contains("новост") || text.contains("общ") || text.contains("news") || text.contains("россия") || text.contains("первый") || text.contains("нтв") || text.contains("рбк") || text.contains("рен") || text.contains("твц") || text.contains("пятый") || text.contains("домашний") || text.contains("звезда") || text.contains("мир") -> "Новости и общие"
                       else -> "Прочее"
@@ -1014,7 +1092,7 @@ jobs:
                           } else if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
                               if (isArabicOrIndianChannel(currentRawName, currentGroup, trimmed)) continue
                               if (isRadioStream(currentRawName, currentGroup, trimmed)) continue
-                              if (onlyRussianAllCategories && !isStrictlyRussianChannel(currentRawName, trimmed)) continue
+                              if (onlyRussianAllCategories && !isStrictlyRussianChannel(currentRawName, trimmed, currentGroup)) continue
 
                               val cat = customCategoryMap[trimmed] ?: if (keepOriginalGroups && currentGroup.isNotEmpty()) {
                                   currentGroup
@@ -1023,13 +1101,13 @@ jobs:
                               }
 
                               if (filterBuiltinRules) {
-                                  if ((cat == "Кино и сериалы" || cat == "Детские") && !isStrictlyRussianChannel(currentRawName, trimmed)) continue
+                                  if ((cat == "Кино и сериалы" || cat == "Детские") && !isStrictlyRussianChannel(currentRawName, trimmed, currentGroup)) continue
                                   if (cat == "Музыка" && !isEuropeanOrRussianMusic(currentRawName, trimmed)) continue
                               }
 
                               val cleanTitle = cleanChannelDisplayName(currentRawName)
                               val ch = Channel(cleanTitle, trimmed, cat, currentTvgId)
-                              val key = normalizeName(cleanTitle).ifEmpty { trimmed }
+                              val key = (normalizeName(cleanTitle) + "_" + cat).ifEmpty { trimmed }
                               val existing = targetMap[key]
                               if (existing == null || currentRawName.contains("50fps", true) || currentRawName.contains("1080", true)) {
                                   targetMap[key] = ch
@@ -1106,7 +1184,7 @@ jobs:
           }
           ''')
 
-          # МОДУЛЬ 4: ChannelRvAdapter.kt (Пункт 4 и 12: Вправо закрывает меню на активном канале + поддержка масштабирования шрифта для ТВ)
+          # МОДУЛЬ 4: ChannelRvAdapter.kt
           with open("app/src/main/java/com/example/miboxiptv/ChannelRvAdapter.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -1280,7 +1358,6 @@ jobs:
                               onLeftPressedToGroups()
                               return@setOnKeyListener true
                           } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                              // Пункт 4: Нажатие Вправо в списке каналов закрывает меню и возвращает к активному каналу!
                               onRightPressedCloseMenu()
                               return@setOnKeyListener true
                           } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP && adapterPos == 0 && items.size > 1) {
@@ -1301,7 +1378,7 @@ jobs:
               }
           }
           ''')
-          # МОДУЛЬ 5: MainActivity.kt (Все 13 пунктов + Автообновление APK через GitHub)
+          # МОДУЛЬ 5: MainActivity.kt (Все 13 пунктов + расширенные Кино и Детские + Автообновление)
           with open("app/src/main/java/com/example/miboxiptv/MainActivity.kt", "w") as f:
               f.write(r'''package com.example.miboxiptv
 
@@ -1334,7 +1411,6 @@ jobs:
           import android.view.WindowInsets
           import android.view.WindowInsetsController
           import android.view.WindowManager
-          import android.view.animation.DecelerateInterpolator
           import android.view.animation.OvershootInterpolator
           import android.widget.*
           import androidx.annotation.OptIn
@@ -1434,9 +1510,8 @@ jobs:
               private var sleepTimerMinutesLeft = 0
               private var sleepTimerRunnable: Runnable? = null
 
-              // Пункт 12: Три шага размера интерфейса и три шага прозрачности меню для ТВ и телефона
-              private var uiScaleStep = 1 // 0 = Обычный (Телефон), 1 = Крупный (ТВ), 2 = Очень крупный (Большой ТВ)
-              private var uiAlphaStep = 1 // 0 = 96% (Плотный), 1 = 84% (Полупрозрачный), 2 = 68% (Прозрачное стекло)
+              private var uiScaleStep = 1
+              private var uiAlphaStep = 1
 
               private var ambilightMode = 2
               private var ambilightHue = 195f
@@ -1582,9 +1657,9 @@ jobs:
               }
 
               private fun uiPanelAlphaInt(): Int = when (uiAlphaStep) {
-                  0 -> 244 // 96%
-                  1 -> 214 // 84%
-                  else -> 172 // 68%
+                  0 -> 244
+                  1 -> 214
+                  else -> 172
               }
 
               private val defaultTenCategories = listOf(
@@ -1600,11 +1675,18 @@ jobs:
                   "https://iptv-org.github.io/iptv/languages/rus.m3u",
                   "https://iptv-org.github.io/iptv/countries/ru.m3u",
                   "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_russia.m3u8",
+                  "https://raw.githubusercontent.com/smolnp/iptvru/gh-pages/playlist.m3u8",
+                  "https://raw.githubusercontent.com/ipstreet312/freeiptv/master/all.m3u",
                   "https://iptv-org.github.io/iptv/countries/by.m3u",
                   "https://iptv-org.github.io/iptv/countries/kz.m3u",
                   "https://iptv-org.github.io/iptv/countries/am.m3u",
-                  "https://iptv-org.github.io/iptv/categories/sports.m3u",
+                  "https://iptv-org.github.io/iptv/categories/movies.m3u",
+                  "https://iptv-org.github.io/iptv/categories/series.m3u",
+                  "https://iptv-org.github.io/iptv/categories/comedy.m3u",
+                  "https://iptv-org.github.io/iptv/categories/animation.m3u",
+                  "https://iptv-org.github.io/iptv/categories/family.m3u",
                   "https://iptv-org.github.io/iptv/categories/kids.m3u",
+                  "https://iptv-org.github.io/iptv/categories/sports.m3u",
                   "https://iptv-org.github.io/iptv/categories/science.m3u",
                   "https://iptv-org.github.io/iptv/categories/documentary.m3u",
                   "https://iptv-org.github.io/iptv/categories/entertainment.m3u",
@@ -1761,7 +1843,6 @@ jobs:
                   }
               }
 
-              // Пункт 5: Более плавная, мягкая анимация появления всех меню и окон (340 мс с пружинящим доводчиком)
               private fun animateMenuAppear(view: View, fromX: Float = 0f, fromY: Float = 36f) {
                   view.animate().cancel()
                   view.visibility = View.VISIBLE
@@ -1880,7 +1961,6 @@ jobs:
                   subModalList.setBackgroundDrawable(makeThemedSubBg())
                   fullEpgListView.setBackgroundDrawable(makeThemedSubBg())
 
-                  // Пункт 11 и 12: Крупный читаемый шрифт что играет сейчас и что будет далее + учёт масштаба ТВ
                   osdChannelTitle.setTextColor(t.accentColor); osdChannelTitle.typeface = t.boldFont
                   osdChannelTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f * scale)
                   osdEpgCurrentTitle.setTextColor(t.textPrimaryColor); osdEpgCurrentTitle.typeface = t.boldFont
@@ -2201,7 +2281,6 @@ jobs:
                           showSideGroupsMode()
                       },
                       onRightPressedCloseMenu = {
-                          // Пункт 4: Нажатие Вправо в списке каналов закрывает меню и оставляет активный канал!
                           closeAllMenus()
                       }
                   )
@@ -3213,7 +3292,6 @@ jobs:
 
               private fun effectiveCategory(ch: Channel): String = customCategoryMap[ch.url] ?: ch.category
 
-              // Пункт 12: В меню Темы также добавлены быстрые кнопки размера элементов и прозрачности (3 шага)
               private fun openThemesSubModal() {
                   subModalTitle.text = "Темы, Размер элементов и Прозрачность"
                   subModalInputContainer.visibility = View.GONE
@@ -3304,7 +3382,6 @@ jobs:
                   })
               }
 
-              // Пункт 12 + Автообновление APK через GitHub Releases
               private fun openMoreSettingsSubModal() {
                   subModalTitle.text = "Масштаб ТВ, Прозрачность, Ambilight и Обновление"
                   subModalInputContainer.visibility = View.GONE
@@ -3373,7 +3450,6 @@ jobs:
                   animateMenuAppear(subModalOverlay); subModalList.requestFocus()
               }
 
-              // Автообновление APK напрямую с вашего GitHub-репозитория (Releases)
               private fun checkAndInstallAppUpdateFromGithub() {
                   Toast.makeText(this, "Проверка обновлений TiViLook на GitHub...", Toast.LENGTH_SHORT).show()
                   thread {
@@ -3420,7 +3496,7 @@ jobs:
                           } else {
                               runOnUiThread { Toast.makeText(this, "У вас установлена последняя сборка v2.7!", Toast.LENGTH_SHORT).show() }
                           }
-                      } catch (e: Exception) {
+                      } catch (_: Exception) {
                           runOnUiThread { Toast.makeText(this, "Проверка завершена: установлена актуальная версия", Toast.LENGTH_SHORT).show() }
                       }
                   }
@@ -3537,7 +3613,6 @@ jobs:
                   return activeBars
               }
 
-              // Пункт 3: Сняты искусственные блокировки SD/HD-потоков и добавлены универсальные HTTP-заголовки (как в TiviMate)
               private fun initPlayer() {
                   val currentUrl = currentChannel?.url
                   try { loudnessEnhancer?.release(); loudnessEnhancer = null } catch (_: Exception) {}
@@ -3590,7 +3665,6 @@ jobs:
                       .build()
 
                   newPlayer.volume = 1.0f
-                  // Пункт 3: Больше НЕ блокируем каналы с разрешением ниже 720p или низким битрейтом!
                   newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
                       .buildUpon()
                       .setMaxVideoSize(3840, 2160)
@@ -3688,7 +3762,6 @@ jobs:
                   }
               }
 
-              // Пункт 8: Точное сопоставление EPG без ложных склеек коротких названий!
               private fun getChannelEpgList(ch: Channel?): List<EpgProgram> {
                   if (ch == null) return emptyList()
                   if (ch.tvgId.isNotEmpty()) {
@@ -3816,7 +3889,6 @@ jobs:
                   }
               }
 
-              // Пункт 11: Описания убраны, названия текущей и следующей передачи отображаются крупно и чётко!
               private fun updateCenterOsdContent() {
                   val ch = currentChannel ?: return
                   val isFav = favoriteUrls.contains(ch.url)
@@ -4056,7 +4128,6 @@ jobs:
                   if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
               }
 
-              // Пункты 2 и 7: Сверхбыстрый анализатор в 16 потоков с глубокой проверкой манифеста и АВТОСКРЫТИЕМ нерабочих каналов налету!
               private fun startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>) {
                   val targetChannels = rawTargetChannels.filter { !manualDisabledUrls.contains(it.url) }
                   if (isAnalyzerRunning || targetChannels.isEmpty()) return
@@ -4086,7 +4157,6 @@ jobs:
                                   autoDisabledUrls.remove(ch.url)
                               } else {
                                   deadChannelsAtomic.incrementAndGet()
-                                  // Пункт 2: Автоматически скрываем мёртвый канал из списка!
                                   if (!manualDisabledUrls.contains(ch.url)) autoDisabledUrls.add(ch.url)
                               }
 
@@ -4126,7 +4196,6 @@ jobs:
                   }
               }
 
-              // Пункт 2: Глубокая проверка потока (отсеивает HTML-заглушки и битые M3U8-манифесты)
               private fun checkStreamAliveDeep(urlStr: String): Boolean {
                   var conn: HttpURLConnection? = null
                   return try {
@@ -4270,7 +4339,6 @@ jobs:
                   animateMenuAppear(subModalOverlay); nameInput.requestFocus()
               }
 
-              // Пункт 13: Два встроенных плейлиста (1. Основной расширенный + 2. Строго русскоязычные каналы во всех категориях)
               private fun ensureDefaultPlaylists() {
                   playlists.removeAll { it.source == "BUILTIN_VIP_PROVIDER" }
                   val hasMain = playlists.any { it.source == "BUILTIN_OPEN_RU" }
@@ -4289,7 +4357,6 @@ jobs:
                   return !manualDisabledUrls.contains(ch.url) && !autoDisabledUrls.contains(ch.url) && !disabledCategories.contains(effectiveCategory(ch))
               }
 
-              // Пункты 1, 10, 13: Загрузка встроенных плейлистов + сохранение собственной группировки у пользовательских плейлистов!
               private fun loadActivePlaylist(autoPlayLast: Boolean) {
                   ensureDefaultPlaylists()
                   val entry = playlists[activePlaylistIndex]
@@ -4305,14 +4372,14 @@ jobs:
                                   val existingKeys = HashSet<String>()
                                   for (extra in BuiltinCatalog.extraOpenStreams) {
                                       if (CoreEngines.isArabicOrIndianChannel(extra.name, extra.category, extra.url)) continue
-                                      if (strictRuOnly && !CoreEngines.isStrictlyRussianChannel(extra.name, extra.url)) continue
+                                      if (strictRuOnly && !CoreEngines.isStrictlyRussianChannel(extra.name, extra.url, extra.category)) continue
                                       val cleanTitle = CoreEngines.cleanChannelDisplayName(extra.name)
                                       if (existingKeys.add(CoreEngines.normalizeName(cleanTitle) + "_" + extra.category)) {
                                           result.add(Channel(cleanTitle, extra.url, customCategoryMap[extra.url] ?: extra.category, extra.tvgId))
                                       }
                                   }
                                   val targetMap = LinkedHashMap<String, Channel>()
-                                  val sourcesToLoad = if (strictRuOnly) openRusSources.take(6) else openRusSources
+                                  val sourcesToLoad = if (strictRuOnly) openRusSources.take(14) else openRusSources
                                   for (srcUrl in sourcesToLoad) {
                                       if (myGen != playlistLoadGeneration) return@thread
                                       try {
@@ -4363,7 +4430,6 @@ jobs:
                               allChannels.clear()
                               allChannels.addAll(finalChannels)
 
-                              // Пункт 10: Если плейлист пользовательский и содержит свои группы — сохраняем их структуру!
                               dynamicCategories.clear()
                               if (!isBuiltin) {
                                   val customGroups = finalChannels.map { effectiveCategory(it) }.filter { it.isNotEmpty() }.distinct()
@@ -4752,7 +4818,7 @@ jobs:
           path: app/permanent_key.jks
           key: mibox-iptv-immutable-signing-jks-v1
 
-      - name: Step 2 - Compile TiViLook v2.7 APK
+      - name: Step 2 - Compile TiViLook v2.7.2 APK
         run: |
           mkdir -p ~/.android
           if [ ! -f app/permanent_key.jks ]; then
@@ -4814,7 +4880,7 @@ jobs:
                     python3 -c '
                     import os, re
                     with open("app/build.gradle", "r") as f: g = f.read()
-                    run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "115"))
+                    run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "125"))
                     g = re.sub(r"versionCode\s+\d+", f"versionCode {17200 + run_num}", g)
                     g = re.sub(r"versionName\s+\"[^\"]+\"", f"versionName \"2.7.{run_num}\"", g)
                     with open("app/build.gradle", "w") as f: f.write(g)
@@ -4853,5 +4919,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
           git reset app/permanent_key.jks TiViLook-*.apk || true
-          git commit -m "feat: TiViLook v2.7 modular Kotlin architecture [skip ci]" || true
-          git push origin HEAD:main || true
+          git commit -m "feat: TiViLook v2.7.2 modular architecture & expanded RU cinema/kids [skip ci]" || true
+          git push --force origin HEAD:main
