@@ -25,10 +25,10 @@ object CoreEngines {
     private val dohDnsCache = ConcurrentHashMap<String, String>()
 
     val russianSmartTvAgents = listOf(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Version/6.5 TV Safari/537.36",
         "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.5359.211 Safari/537.36 WebAppManager",
         "Wink/1.44.0 (AndroidTV; Android 11; Xiaomi Mi Box S)",
-        "Okko/7.22.0 (SmartTV; Linux; Android 11)",
         "VLC/3.0.20 LibVLC/3.0.20"
     )
 
@@ -44,6 +44,41 @@ object CoreEngines {
             HttpsURLConnection.setDefaultSSLSocketFactory(sc.socketFactory)
             HttpsURLConnection.setDefaultHostnameVerifier { _, _ -> true }
         } catch (_: Exception) {}
+    }
+
+    fun headersForStreamUrl(urlStr: String): Map<String, String> {
+        val clean = urlStr.substringBefore("#")
+        val lUrl = clean.lowercase()
+        val parsedOrigin = try {
+            val u = URL(clean)
+            "${u.protocol}://${u.host}"
+        } catch (_: Exception) {
+            "https://smotrim.ru"
+        }
+        val (origin, referer) = when {
+            lUrl.contains("vgtrk") || lUrl.contains("smotrim") || lUrl.contains("mediavitrina") ->
+                Pair("https://smotrim.ru", "https://smotrim.ru/")
+            lUrl.contains("1tv") || lUrl.contains("1internet") ->
+                Pair("https://www.1tv.ru", "https://www.1tv.ru/")
+            lUrl.contains("ntv.ru") ->
+                Pair("https://www.ntv.ru", "https://www.ntv.ru/")
+            lUrl.contains("catcast") ->
+                Pair("https://catcast.tv", "https://catcast.tv/")
+            lUrl.contains("peers.tv") || lUrl.contains("cn.ru") ->
+                Pair("https://peers.tv", "https://peers.tv/")
+            lUrl.contains("1hd.ru") || lUrl.contains("onehdmusic") ->
+                Pair("https://www.1hd.ru", "https://www.1hd.ru/")
+            lUrl.contains("bonus-tv") ->
+                Pair("https://bonus-tv.ru", "https://bonus-tv.ru/")
+            else -> Pair(parsedOrigin, "$parsedOrigin/")
+        }
+        return mapOf(
+            "Accept" to "*/*",
+            "Accept-Language" to "ru-RU,ru;q=0.9,en-US;q=0.7",
+            "Origin" to origin,
+            "Referer" to referer,
+            "Connection" to "keep-alive"
+        )
     }
 
     fun resolveHostViaCloudflareDoH(host: String, dohEnabled: Boolean): String? {
@@ -86,14 +121,11 @@ object CoreEngines {
         while (redirects < 6) {
             val parsed = URL(currentUrl)
             if (dohEnabled) resolveHostViaCloudflareDoH(parsed.host, true)
-            val origin = "${parsed.protocol}://${parsed.host}"
             val activeAgent = russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size]
+            val hdrs = headersForStreamUrl(currentUrl)
             val conn = (parsed.openConnection() as HttpURLConnection).apply {
                 setRequestProperty("User-Agent", activeAgent)
-                setRequestProperty("Accept", "*/*")
-                setRequestProperty("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.7")
-                setRequestProperty("Origin", origin)
-                setRequestProperty("Referer", "$origin/")
+                for ((k, v) in hdrs) setRequestProperty(k, v)
                 instanceFollowRedirects = true
                 connectTimeout = timeoutMs
                 readTimeout = timeoutMs
@@ -152,7 +184,9 @@ object CoreEngines {
             "dubai", "sharjah", "abu dhabi", "al arabiya", "alarabiya", "iqraa", "majid", "spacetoon",
             "zee ", "sony sab", "star plus", "star bharat", "colors ", "aaj tak", "ndtv", "dd national",
             "sun tv", "asianet", "bollywood", "india", "hindi", "tamil", "telugu", "punjabi", "urdu",
-            "bangla", "pakistan", "geo news", "ary digital", "hum tv", "samaa", "kurd", "farsi", "persian"
+            "bangla", "pakistan", "geo news", "ary digital", "hum tv", "samaa", "kurd", "farsi", "persian",
+            "latino", "viva latino", "3abn", "telemundo", "univision", "azteca", "caracol", "tlc ", "kral ",
+            "trt ", "haberturk", "powerturk", "dream turk", "afrobeat", "nollywood", "k-pop", "iran", "afghan"
         )
         return bannedTokens.any { low.contains(it) }
     }
@@ -166,7 +200,8 @@ object CoreEngines {
             lUrl.contains("vgtrk") || lUrl.contains("1tv") || lUrl.contains("ntv") || lUrl.contains("smotrim") ||
             lUrl.contains("tricolor") || lUrl.contains("wink") || lUrl.contains("peers") || lUrl.contains("catcast") ||
             lUrl.contains("cdnvideo") || lUrl.contains("ngenix") || lUrl.contains("mediavitrina") ||
-            lUrl.contains("uma.media") || lUrl.contains("1hd.ru") || lUrl.contains("gcdn.co")) {
+            lUrl.contains("uma.media") || lUrl.contains("1hd.ru") || lUrl.contains("gcdn.co") ||
+            lUrl.contains("bonus-tv") || lUrl.contains("rutube") || lUrl.contains("ok.ru")) {
             return true
         }
         if (lGroup.contains("росси") || lGroup.contains("русск") || lGroup.contains("детск") || lGroup.contains("мульт") || lGroup.contains("cccp") || lGroup.contains("ссср")) {
@@ -177,9 +212,28 @@ object CoreEngines {
             "cartoon network ru", "boomerang ru", "jimjam ru", "da vinci", "sts kids", "ani ", "fan hd",
             "bridge tv", "bridge ", "muz tv", "muz-tv", "ru.tv", "rutv", "1hd", "europa plus", "zhara", "shanson",
             "tnt", "sts", "ren tv", "ntv", "match", "khl", "kino", "illuzion", "soyuzmult", "smeshariki",
-            "masha", "fixiki", "luntik", "tri kota", "multilandia", "tlum", "unicum", "radost", "deti", "detskiy"
+            "masha", "fixiki", "luntik", "tri kota", "multilandia", "tlum", "unicum", "radost", "deti", "detskiy",
+            "mosfilm", "lenfilm", "kinomiks", "kinoprem", "kinohit", "kinosemya", "kinokomediya", "kinoseriya",
+            "kinosvidanie", "kinouzhas", "dom kino", "evrokino", "russkiy", "rodnoe", "nashe", "lyubimoe", "feniks"
         )
         return ruLatinWhitelist.any { lName.contains(it) }
+    }
+
+    // Проверка для группы «Музыка»: только русскоязычные ИЛИ топовые европейские музыкальные каналы
+    fun isAllowedMusicChannel(name: String, url: String, rawGroup: String): Boolean {
+        if (isArabicOrIndianChannel(name, rawGroup, url)) return false
+        if (isStrictlyRussianChannel(name, url, rawGroup)) return true
+        val lName = name.lowercase()
+        val topEuroMusicWhitelist = listOf(
+            "mtv", "vh1", "mezzo", "deluxe music", "mcm ", "trace ", "clubbing", "stingray",
+            "iconcerts", "now 70", "now 80", "now 90", "now rock", "kerrang", "kiss ", "box hits",
+            "the box", "4music", "4 music", "4fun", "4 fun", "stars.tv", "stars tv", "eska",
+            "polo tv", "nuta", "power tv", "vox music", "rfm tv", "nrj hits", "m6 music", "cstar",
+            "melody", "vevo", "qello", "classic fm", "dance", "eurodance", "retro music", "ocko",
+            "óčko", "gotv", " Folx", "one music", "hit tv", "hits hd", "music box", "djing", "rock tv",
+            "metal", "jazz", "chill", "lounge"
+        )
+        return topEuroMusicWhitelist.any { lName.contains(it) }
     }
 
     fun is2kOrHigherStream(rawLine: String, name: String, rawGroup: String, url: String): Boolean {
@@ -294,7 +348,8 @@ object CoreEngines {
                 val idMatch = Regex("tvg-id=\"([^\"]+)\"", RegexOption.IGNORE_CASE).find(l)
                 currentTvgId = idMatch?.groupValues?.get(1)?.trim() ?: ""
             } else if (l.startsWith("http://", ignoreCase = true) || l.startsWith("https://", ignoreCase = true) || l.startsWith("rtmp://", ignoreCase = true)) {
-                if (currentName.isNotEmpty() && !l.contains("sc.id-tv.kz", ignoreCase = true)) {
+                val isDeadHost = l.contains("sc.id-tv.kz", ignoreCase = true) || l.contains("ott-cdn.ucom.am", ignoreCase = true)
+                if (currentName.isNotEmpty() && !isDeadHost) {
                     var skip = false
                     if (filterBuiltinRules) {
                         if (isArabicOrIndianChannel(currentName, currentGroup, l)) {
@@ -304,9 +359,17 @@ object CoreEngines {
                             val isStrictRu = isStrictlyRussianChannel(currentName, l, currentGroup)
                             if (onlyRussianAllCategories) {
                                 if (!isStrictRu) skip = true
-                            } else if (mappedCat == "Детские" || mappedCat == "Новости и общие" || mappedCat == "Развлечения" || mappedCat == "Прочее") {
-                                // В Детских — строго только русскоязычные каналы! В Музыке — разрешены и русские, и мировые.
-                                if (!isStrictRu) skip = true
+                            } else {
+                                when (mappedCat) {
+                                    // В Детских, Кино и сериалах, Новостях, Развлечениях и Прочем — строго только русскоязычные!
+                                    "Детские", "Кино и сериалы", "Новости и общие", "Развлечения", "Прочее" -> {
+                                        if (!isStrictRu) skip = true
+                                    }
+                                    // В Музыке — русскоязычные + топовые европейские музыкальные каналы
+                                    "Музыка" -> {
+                                        if (!isAllowedMusicChannel(currentName, l, currentGroup)) skip = true
+                                    }
+                                }
                             }
                         }
                     }
@@ -317,7 +380,7 @@ object CoreEngines {
                             mapCategory(currentGroup, currentName, currentRawInfLine, l)
                         }
                         val hostKey = try { URL(l.substringBefore("#")).host.lowercase() } catch (_: Exception) { "" }
-                        val dedupKey = if (category == "Детские" || category == "Музыка") {
+                        val dedupKey = if (category == "Детские" || category == "Музыка" || category == "Кино и сериалы") {
                             normalizeName(currentName) + "_" + category + "_" + hostKey
                         } else {
                             normalizeName(currentName) + "_" + category
