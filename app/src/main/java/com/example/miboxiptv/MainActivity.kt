@@ -90,7 +90,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dualPlayerView: PlayerView
     private lateinit var dualStreamLabel: TextView
     private lateinit var dualCloseBtn: TextView
-    private lateinit var morphTransitionOverlay: FrameLayout
     private lateinit var nightDimOverlay: View
     private lateinit var categoryListView: ListView
     private lateinit var channelRecyclerView: RecyclerView
@@ -161,6 +160,7 @@ class MainActivity : AppCompatActivity() {
 
     private var antiBlockEnabled = true
     private var userAgentIndex = 0
+    private var silentFallbackAttemptedForUrl: String = ""
 
     private lateinit var infoTextView: TextView
     private lateinit var clockTextView: TextView
@@ -250,18 +250,56 @@ class MainActivity : AppCompatActivity() {
         strength = Collator.PRIMARY
     }
 
+    // Пункт 5: Только 6 тем со скриншотов
     private val themes = listOf(
-        AppThemeStyle(0, "Material Design 3", Color.parseColor("#EE1E1F22"), Color.parseColor("#FF2B2D30"), Color.parseColor("#FFA8C7FA"), Color.parseColor("#66A8C7FA"), Color.WHITE, Color.parseColor("#FF062E6F"), 28f, Typeface.create("sans-serif-medium", Typeface.NORMAL), Typeface.create("sans-serif-medium", Typeface.BOLD)),
-        AppThemeStyle(1, "Cyber Neon Glass", Color.parseColor("#DF0B0914"), Color.parseColor("#FF231F38"), Color.parseColor("#FF00E5FF"), Color.parseColor("#6600E5FF"), Color.WHITE, Color.parseColor("#FF0B0914"), 20f, Typeface.MONOSPACE, Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)),
-        AppThemeStyle(2, "AMOLED Pure Black", Color.parseColor("#F6000000"), Color.parseColor("#FF121212"), Color.parseColor("#FF00E676"), Color.parseColor("#6600E676"), Color.WHITE, Color.parseColor("#FF000000"), 16f, Typeface.create("sans-serif-condensed", Typeface.NORMAL), Typeface.create("sans-serif-condensed", Typeface.BOLD)),
-        AppThemeStyle(3, "Nordic Frost", Color.parseColor("#EC1B222D"), Color.parseColor("#FF2E3440"), Color.parseColor("#FF88C0D0"), Color.parseColor("#6688C0D0"), Color.WHITE, Color.parseColor("#FF1B222D"), 24f, Typeface.create("sans-serif-light", Typeface.NORMAL), Typeface.create("sans-serif", Typeface.BOLD)),
-        AppThemeStyle(4, "Sunset Warm Retro", Color.parseColor("#EE1F130E"), Color.parseColor("#FF36221A"), Color.parseColor("#FFFFB300"), Color.parseColor("#66FFB300"), Color.WHITE, Color.parseColor("#FF1F130E"), 24f, Typeface.SERIF, Typeface.create(Typeface.SERIF, Typeface.BOLD)),
-        AppThemeStyle(5, "Graphite Monochrome", Color.parseColor("#F218181B"), Color.parseColor("#FF27272A"), Color.parseColor("#FFD4D4D8"), Color.parseColor("#66A1A1AA"), Color.parseColor("#FFF4F4F5"), Color.parseColor("#FF18181B"), 18f, Typeface.create("sans-serif-condensed", Typeface.NORMAL), Typeface.create("sans-serif-condensed", Typeface.BOLD)),
-        AppThemeStyle(6, "Nordic Daylight Светлая", Color.parseColor("#F5F8FAFC"), Color.parseColor("#FFE2E8F0"), Color.parseColor("#FF2563EB"), Color.parseColor("#9994A3B8"), Color.parseColor("#FF0F172A"), Color.WHITE, 26f, Typeface.create("sans-serif-medium", Typeface.NORMAL), Typeface.create("sans-serif-medium", Typeface.BOLD)),
-        AppThemeStyle(7, "Retrowave 80s Neon", Color.parseColor("#EE160424"), Color.parseColor("#FF2A0944"), Color.parseColor("#FFFF2A85"), Color.parseColor("#9900F0FF"), Color.WHITE, Color.WHITE, 22f, Typeface.create("sans-serif-condensed", Typeface.ITALIC), Typeface.create("sans-serif-condensed", Typeface.BOLD_ITALIC)),
-        AppThemeStyle(8, "Matrix Cyber Terminal", Color.parseColor("#F2030D03"), Color.parseColor("#FF071F07"), Color.parseColor("#FF00FF66"), Color.parseColor("#8800FF66"), Color.parseColor("#FFD0FFD6"), Color.parseColor("#FF021002"), 12f, Typeface.MONOSPACE, Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)),
-        AppThemeStyle(9, "Royal Gold Luxury", Color.parseColor("#F2120E07"), Color.parseColor("#FF241B0D"), Color.parseColor("#FFFFD700"), Color.parseColor("#88FFD700"), Color.parseColor("#FFFFF8DC"), Color.parseColor("#FF120E07"), 24f, Typeface.SERIF, Typeface.create(Typeface.SERIF, Typeface.BOLD)),
-        AppThemeStyle(10, "Carousel 3D Карусель", Color.parseColor("#EE101420"), Color.parseColor("#FF1E2638"), Color.parseColor("#FF38BDF8"), Color.parseColor("#8838BDF8"), Color.WHITE, Color.parseColor("#FF081018"), 30f, Typeface.create("sans-serif-medium", Typeface.NORMAL), Typeface.create("sans-serif-medium", Typeface.BOLD), isCarouselMenu = true)
+        AppThemeStyle(
+            0, "Материал Дизайн",
+            Color.parseColor("#F2F4F4F8"), Color.parseColor("#FFE4E6EE"),
+            Color.parseColor("#FF2563EB"), Color.parseColor("#8894A3B8"),
+            Color.parseColor("#FF1E293B"), Color.WHITE, 28f,
+            Typeface.create("sans-serif-medium", Typeface.NORMAL),
+            Typeface.create("sans-serif-medium", Typeface.BOLD)
+        ),
+        AppThemeStyle(
+            1, "Неон",
+            Color.parseColor("#F006050A"), Color.parseColor("#FF12101B"),
+            Color.parseColor("#FF00E5FF"), Color.parseColor("#88FF7597"),
+            Color.WHITE, Color.parseColor("#FF06050A"), 22f,
+            Typeface.create("sans-serif-medium", Typeface.NORMAL),
+            Typeface.create("sans-serif-medium", Typeface.BOLD)
+        ),
+        AppThemeStyle(
+            2, "Амолед Блэк",
+            Color.parseColor("#F8000000"), Color.parseColor("#FF0A0A0A"),
+            Color.WHITE, Color.parseColor("#88FFFFFF"),
+            Color.WHITE, Color.BLACK, 18f,
+            Typeface.create("sans-serif-light", Typeface.NORMAL),
+            Typeface.create("sans-serif-medium", Typeface.BOLD)
+        ),
+        AppThemeStyle(
+            3, "Монохром",
+            Color.parseColor("#F4F4F4F5"), Color.parseColor("#FFE4E4E7"),
+            Color.parseColor("#FF52525B"), Color.parseColor("#99A1A1AA"),
+            Color.parseColor("#FF27272A"), Color.WHITE, 14f,
+            Typeface.create("sans-serif-condensed", Typeface.NORMAL),
+            Typeface.create("sans-serif-condensed", Typeface.BOLD)
+        ),
+        AppThemeStyle(
+            4, "Ретро",
+            Color.parseColor("#F21F1D1B"), Color.parseColor("#FF322E2B"),
+            Color.parseColor("#FFD4892A"), Color.parseColor("#88277A68"),
+            Color.parseColor("#FFF5E6CC"), Color.parseColor("#FF1F1D1B"), 24f,
+            Typeface.SERIF, Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        ),
+        AppThemeStyle(
+            5, "Карусель",
+            Color.parseColor("#EE161922"), Color.parseColor("#FF232836"),
+            Color.parseColor("#FF29B6F6"), Color.parseColor("#8829B6F6"),
+            Color.WHITE, Color.parseColor("#FF0B101B"), 30f,
+            Typeface.create("sans-serif-medium", Typeface.NORMAL),
+            Typeface.create("sans-serif-medium", Typeface.BOLD),
+            isCarouselMenu = true
+        )
     )
 
     private fun currentTheme(): AppThemeStyle = themes[themeIndex.coerceIn(0, themes.lastIndex)]
@@ -475,7 +513,7 @@ class MainActivity : AppCompatActivity() {
             .translationY(0f)
             .scaleX(1f)
             .scaleY(1f)
-            .setDuration(340L)
+            .setDuration(300L)
             .setInterpolator(OvershootInterpolator(0.85f))
             .start()
     }
@@ -744,6 +782,8 @@ class MainActivity : AppCompatActivity() {
         playerView = (LayoutInflater.from(this).inflate(R.layout.player_surface_view, playerContainerFrame, false) as PlayerView).apply {
             useController = false
             isFocusable = false
+            setKeepContentOnPlayerReset(true)
+            setShutterBackgroundColor(Color.TRANSPARENT)
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
         }
         playerContainerFrame.addView(playerView)
@@ -780,13 +820,6 @@ class MainActivity : AppCompatActivity() {
         dualStreamContainer.addView(dualStreamLabel)
         dualStreamContainer.addView(dualCloseBtn)
         root.addView(dualStreamContainer)
-
-        morphTransitionOverlay = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#88080A10"))
-            alpha = 0f; visibility = View.GONE; isClickable = false; isFocusable = false
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
-        }
-        root.addView(morphTransitionOverlay)
 
         clockTextView = TextView(this).apply {
             setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f); typeface = themeBoldFont()
@@ -1035,7 +1068,6 @@ class MainActivity : AppCompatActivity() {
         fullEpgOverlay.addView(fullEpgListView)
         root.addView(fullEpgOverlay)
 
-        // Главное меню настроек: увеличенные отступы между плитками и без нижней текстовой подсказки
         settingsTileOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
             setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE; setPadding(54, 34, 54, 34)
@@ -1246,7 +1278,8 @@ class MainActivity : AppCompatActivity() {
         applyBrightnessLevel()
         startClockAndWatchdogUpdater()
 
-        categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17.5f, true) { pos -> !isSideShowingChannels && !isLeftRailVisible && pos == focusedCategoryPos }
+        // Пункт 1: В списке групп точно такой же размер шрифта (17f), как в списке каналов
+        categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17f, true) { pos -> !isSideShowingChannels && !isLeftRailVisible && pos == focusedCategoryPos }
         categoryListView.adapter = categoryAdapter
 
         categoryListView.setOnItemClickListener { _, _, position, _ ->
@@ -1316,7 +1349,7 @@ class MainActivity : AppCompatActivity() {
             val itemPos = firstVis + i
             val isHighlighted = (itemPos == activeAdapterPos)
             child.typeface = if (isHighlighted) t.boldFont else t.normalFont
-            child.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.5f * scale)
+            child.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f * scale)
             child.forceMarqueeActive = isHighlighted
             if (isHighlighted) {
                 child.setTextColor(t.textOnAccent)
@@ -1342,7 +1375,7 @@ class MainActivity : AppCompatActivity() {
                 val rawTxt = getItem(position) ?: ""
                 tv.typeface = if (highlighted) t.boldFont else t.normalFont
                 tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, spSize * scale)
-                val padV = (13 * scale).toInt()
+                val padV = (12 * scale).toInt()
                 tv.setPadding(22, padV, 22, padV)
                 if (singleLineMarquee) tv.forceMarqueeActive = highlighted else tv.isSingleLine = false
                 if (highlighted) {
@@ -1923,7 +1956,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun effectiveCategory(ch: Channel): String = customCategoryMap[ch.url] ?: ch.category
 
-    // Окно «Темы»: только выбор темы, кнопки размера и прозрачности убраны
     private fun openThemesSubModal() {
         subModalTitle.text = "Темы оформления"
         subModalInputContainer.visibility = View.GONE
@@ -2188,8 +2220,8 @@ class MainActivity : AppCompatActivity() {
                                 } else {
                                     if (antiBlockEnabled) userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                                     reloadIconIndicator.visibility = View.VISIBLE
-                                    uiHandler.postDelayed({ reloadIconIndicator.visibility = View.GONE }, 3500L)
-                                    reconnectCurrentStream()
+                                    uiHandler.postDelayed({ reloadIconIndicator.visibility = View.GONE }, 2500L)
+                                    reconnectCurrentStreamSilently()
                                 }
                             }
                         } else {
@@ -2207,20 +2239,30 @@ class MainActivity : AppCompatActivity() {
         uiHandler.post(ticker)
     }
 
-    private fun reconnectCurrentStream() {
+    // Пункт 3: Бесшовное переподключение и подмена на резервный поток без остановки SurfaceView и без мигания часов/сигнала
+    private fun reconnectCurrentStreamSilently() {
         val ch = currentChannel ?: return
         val p = player ?: return
         try {
-            p.stop(); p.clearMediaItems()
-            p.setMediaItem(createLiveMediaItem(ch.url))
-            p.prepare(); p.play()
+            val cleanUrl = ch.url.substringBefore("#")
+            val targetUrl = if (silentFallbackAttemptedForUrl != ch.url && cleanUrl.contains("sc.id-tv.kz")) {
+                silentFallbackAttemptedForUrl = ch.url
+                if (effectiveCategory(ch) == "Детские") "https://ott-cdn.ucom.am/s29/index.m3u8"
+                else "https://ott-cdn.ucom.am/s48/index.m3u8"
+            } else {
+                cleanUrl
+            }
+            p.setMediaItem(createLiveMediaItem(targetUrl), false)
+            p.prepare()
+            p.play()
         } catch (_: Exception) {}
     }
 
     private fun createLiveMediaItem(url: String): MediaItem {
+        val cleanUrl = url.substringBefore("#")
         val targetOffset = when (bufferLevel) { 0 -> 10000L; 1 -> 18000L; 2 -> 28000L; else -> 40000L }
         return MediaItem.Builder()
-            .setUri(url)
+            .setUri(cleanUrl)
             .setLiveConfiguration(
                 MediaItem.LiveConfiguration.Builder()
                     .setTargetOffsetMs(targetOffset)
@@ -2316,9 +2358,6 @@ class MainActivity : AppCompatActivity() {
 
         newPlayer.addListener(object : Player.Listener {
             override fun onRenderedFirstFrame() {
-                morphTransitionOverlay.animate().alpha(0f).setDuration(220L).withEndAction {
-                    morphTransitionOverlay.visibility = View.GONE
-                }.start()
                 applyAudioEnhancements()
                 applyAutoFrameRateIfNeeded()
             }
@@ -2357,11 +2396,11 @@ class MainActivity : AppCompatActivity() {
                 if (changed) newPlayer.trackSelectionParameters = builder.build()
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED) reconnectCurrentStream()
+                if (playbackState == Player.STATE_ENDED) reconnectCurrentStreamSilently()
             }
             override fun onPlayerError(error: PlaybackException) {
                 userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
-                uiHandler.postDelayed({ reconnectCurrentStream() }, 1200)
+                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 900)
             }
         })
 
@@ -2389,7 +2428,7 @@ class MainActivity : AppCompatActivity() {
                 preloaderExecutor.submit {
                     if (isAnalyzerRunning) return@submit
                     try {
-                        val conn = URL(neighbor.url).openConnection() as HttpURLConnection
+                        val conn = URL(neighbor.url.substringBefore("#")).openConnection() as HttpURLConnection
                         conn.setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
                         conn.connectTimeout = 3000; conn.readTimeout = 3000
                         if (conn.responseCode in 200..299) {
@@ -2770,6 +2809,11 @@ class MainActivity : AppCompatActivity() {
         if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
     }
 
+    // Пункт 2: Защита встроенных русских детских каналов от автоскрытия при быстром тесте
+    private fun isProtectedRussianKidsChannel(ch: Channel): Boolean {
+        return effectiveCategory(ch) == "Детские" && BuiltinCatalog.extraOpenStreams.any { it.url == ch.url }
+    }
+
     private fun startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>) {
         val targetChannels = rawTargetChannels.filter { !manualDisabledUrls.contains(it.url) }
         if (isAnalyzerRunning || targetChannels.isEmpty()) return
@@ -2792,7 +2836,8 @@ class MainActivity : AppCompatActivity() {
             for (ch in snapshot) {
                 pool.submit {
                     if (!isAnalyzerRunning) return@submit
-                    val ok = checkStreamAliveDeep(ch.url)
+                    val isProtectedKids = isProtectedRussianKidsChannel(ch)
+                    val ok = if (isProtectedKids) true else checkStreamAliveDeep(ch.url)
                     channelHealthMap[ch.url] = ok
                     if (ok) {
                         aliveChannelsAtomic.incrementAndGet()
@@ -2841,15 +2886,16 @@ class MainActivity : AppCompatActivity() {
     private fun checkStreamAliveDeep(urlStr: String): Boolean {
         var conn: HttpURLConnection? = null
         return try {
-            val parsed = URL(urlStr)
+            val cleanUrl = urlStr.substringBefore("#")
+            val parsed = URL(cleanUrl)
             val origin = "${parsed.protocol}://${parsed.host}"
             conn = (parsed.openConnection() as HttpURLConnection).apply {
                 setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
                 setRequestProperty("Accept", "*/*")
                 setRequestProperty("Referer", "$origin/")
                 instanceFollowRedirects = true
-                connectTimeout = 2600
-                readTimeout = 2600
+                connectTimeout = 4000
+                readTimeout = 4000
             }
             val code = conn.responseCode
             if (code !in 200..299) {
@@ -2869,7 +2915,7 @@ class MainActivity : AppCompatActivity() {
             if (headStr.contains("<html", true) || headStr.contains("<!doctype html", true) || headStr.contains("404 not found", true) || headStr.contains("access denied", true)) {
                 return false
             }
-            if (urlStr.contains(".m3u", true) && !headStr.contains("#EXTM3U", true) && buf[0] != 0x47.toByte()) {
+            if (cleanUrl.contains(".m3u", true) && !headStr.contains("#EXTM3U", true) && buf[0] != 0x47.toByte()) {
                 return false
             }
             true
@@ -2996,7 +3042,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun isChannelActive(ch: Channel): Boolean {
-        return !manualDisabledUrls.contains(ch.url) && !autoDisabledUrls.contains(ch.url) && !disabledCategories.contains(effectiveCategory(ch))
+        if (manualDisabledUrls.contains(ch.url)) return false
+        if (disabledCategories.contains(effectiveCategory(ch))) return false
+        if (!isProtectedRussianKidsChannel(ch) && autoDisabledUrls.contains(ch.url)) return false
+        return true
     }
 
     private fun loadActivePlaylist(autoPlayLast: Boolean) {
@@ -3163,16 +3212,10 @@ class MainActivity : AppCompatActivity() {
         saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
     }
 
-    private val hideMorphFallbackRunnable = Runnable {
-        morphTransitionOverlay.animate().alpha(0f).setDuration(200L).withEndAction {
-            morphTransitionOverlay.visibility = View.GONE
-        }.start()
-    }
-
     private val executeDebouncedPlayRunnable = Runnable {
         val target = pendingDebouncedChannel ?: return@Runnable
         try {
-            player?.setMediaItem(createLiveMediaItem(target.url))
+            player?.setMediaItem(createLiveMediaItem(target.url), false)
             player?.prepare()
             player?.play()
         } catch (_: Exception) {}
@@ -3180,6 +3223,7 @@ class MainActivity : AppCompatActivity() {
         if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 1500L)
     }
 
+    // Пункт 3: Переключение каналов без мигания и без пропадания часов / индикатора сигнала
     private fun playChannelObj(channel: Channel, immediate: Boolean = false, silentSwap: Boolean = false) {
         val prevPlayingUrl = currentChannel?.url
         if (!silentSwap && currentChannel != null && prevPlayingUrl != channel.url) {
@@ -3188,6 +3232,7 @@ class MainActivity : AppCompatActivity() {
         currentChannel = channel
         pendingDebouncedChannel = channel
         lastSavedChannelUrl = channel.url
+        silentFallbackAttemptedForUrl = ""
         lowSignalStuckSeconds = 0
         consecutiveDropFailures = 0
         saveState()
@@ -3199,16 +3244,11 @@ class MainActivity : AppCompatActivity() {
             if (newIdx >= 0) channelRvAdapter.notifyItemChanged(newIdx)
         }
 
-        uiHandler.removeCallbacks(hideMorphFallbackRunnable)
-        morphTransitionOverlay.visibility = View.VISIBLE
-        morphTransitionOverlay.alpha = 0.50f
-        uiHandler.postDelayed(hideMorphFallbackRunnable, 420L)
-
         uiHandler.removeCallbacks(executeDebouncedPlayRunnable)
         if (immediate) {
             executeDebouncedPlayRunnable.run()
         } else {
-            uiHandler.postDelayed(executeDebouncedPlayRunnable, 160L)
+            uiHandler.postDelayed(executeDebouncedPlayRunnable, 140L)
         }
 
         val topBadge = if (topUrls.contains(channel.url)) "▲ " else ""
@@ -3256,7 +3296,7 @@ class MainActivity : AppCompatActivity() {
             .putInt("active_playlist", activePlaylistIndex)
             .putInt("buffer_level", bufferLevel)
             .putInt("decoder_mode", decoderMode)
-            .putInt("theme_index", themeIndex)
+            .putInt("theme_index", themeIndex.coerceIn(0, themes.lastIndex))
             .putInt("ui_scale_step_v27", uiScaleStep)
             .putInt("ui_alpha_step_v27", uiAlphaStep)
             .putInt("control_mode_v13", controlMode)
@@ -3278,7 +3318,7 @@ class MainActivity : AppCompatActivity() {
             .putStringSet("favorites", favoriteUrls.toSet())
             .putStringSet("top_urls", topUrls.toSet())
             .putStringSet("manual_disabled_urls_v19", manualDisabledUrls.toSet())
-            .putStringSet("auto_disabled_urls_v19", autoDisabledUrls.toSet())
+            .putStringSet("auto_disabled_urls_v28", autoDisabledUrls.toSet())
             .putStringSet("disabled_cats", disabledCategories.toSet())
             .apply()
     }
@@ -3287,7 +3327,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
         bufferLevel = prefs.getInt("buffer_level", 2)
         decoderMode = prefs.getInt("decoder_mode", 1)
-        themeIndex = prefs.getInt("theme_index", 0)
+        themeIndex = prefs.getInt("theme_index", 0).coerceIn(0, themes.lastIndex)
         controlMode = prefs.getInt("control_mode_v13", 0)
         uiScaleStep = prefs.getInt("ui_scale_step_v27", if (controlMode == 1) 0 else 1)
         uiAlphaStep = prefs.getInt("ui_alpha_step_v27", 1)
@@ -3311,7 +3351,7 @@ class MainActivity : AppCompatActivity() {
         favoriteUrls.clear(); favoriteUrls.addAll(prefs.getStringSet("favorites", emptySet()) ?: emptySet())
         topUrls.clear(); topUrls.addAll(prefs.getStringSet("top_urls", emptySet()) ?: emptySet())
         manualDisabledUrls.clear(); manualDisabledUrls.addAll(prefs.getStringSet("manual_disabled_urls_v19", emptySet()) ?: emptySet())
-        autoDisabledUrls.clear(); autoDisabledUrls.addAll(prefs.getStringSet("auto_disabled_urls_v19", emptySet()) ?: emptySet())
+        autoDisabledUrls.clear(); autoDisabledUrls.addAll(prefs.getStringSet("auto_disabled_urls_v28", emptySet()) ?: emptySet())
         disabledCategories.clear(); disabledCategories.addAll(prefs.getStringSet("disabled_cats", emptySet()) ?: emptySet())
 
         customCategoryMap.clear()
