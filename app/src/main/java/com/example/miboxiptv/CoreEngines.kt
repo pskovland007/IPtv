@@ -1,167 +1,385 @@
 package com.example.miboxiptv
 
-object BuiltinCatalog {
-    val extraOpenStreams = listOf(
-        // Новости и общие
-        Channel("Первый канал HD", "https://edge1.1internet.tv/dash-live11/streams/1tv/1tvdash.mpd", "Новости и общие", ""),
-        Channel("Россия 1 HD", "https://vgtrkregion-reg.cdnvideo.ru/vgtrk/0/russia1-hd/index.m3u8", "Новости и общие", ""),
-        Channel("НТВ HD", "https://sc.id-tv.kz/NTV_HD.m3u8", "Новости и общие", ""),
-        Channel("РЕН ТВ", "https://sc.id-tv.kz/REN_TV.m3u8", "Новости и общие", ""),
-        Channel("ТВ Центр", "https://sc.id-tv.kz/TVC.m3u8", "Новости и общие", ""),
-        Channel("Пятый канал", "https://sc.id-tv.kz/5_kanal.m3u8", "Новости и общие", ""),
-        Channel("Домашний", "https://sc.id-tv.kz/Domashniy.m3u8", "Новости и общие", ""),
-        Channel("Звезда", "https://sc.id-tv.kz/Zvezda.m3u8", "Новости и общие", ""),
-        Channel("Мир 24", "https://sc.id-tv.kz/Mir_24.m3u8", "Новости и общие", ""),
-        Channel("Москва 24", "https://sc.id-tv.kz/Moskva_24.m3u8", "Новости и общие", ""),
-        Channel("Известия HD", "https://sc.id-tv.kz/Izvestiya_HD.m3u8", "Новости и общие", ""),
-        Channel("РБК ТВ", "https://sc.id-tv.kz/RBK.m3u8", "Новости и общие", ""),
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.BufferedWriter
+import java.io.File
+import java.io.FileReader
+import java.io.FileWriter
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.InetAddress
+import java.net.URL
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
-        // Кино и сериалы + ТВ Кинозалы
-        Channel("Кинозал 1 Премьер HD", "https://sc.id-tv.kz/Kinopremyera_HD.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 2 Хит HD", "https://sc.id-tv.kz/Kinohit.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 3 Экшн HD", "https://sc.id-tv.kz/TV1000_Action.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 4 Семейный HD", "https://sc.id-tv.kz/Kinosemya.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 5 Комедия HD", "https://sc.id-tv.kz/Kinokomediya.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 6 Наше Кино", "https://sc.id-tv.kz/TV1000_Russkoe_kino.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 7 Остросюжетное HD", "https://sc.id-tv.kz/Ostrosuzhetnoe_HD.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 8 Мужское Кино HD", "https://sc.id-tv.kz/Muzhskoe_kino_HD.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 9 Наше Новое Кино", "https://sc.id-tv.kz/Nashe_novoe_kino.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 10 Родное Кино", "https://sc.id-tv.kz/Rodnoe_kino.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 11 Киноужас", "https://sc.id-tv.kz/Kinouzhas.m3u8", "Кино и сериалы", ""),
-        Channel("Кинозал 12 Киносерия", "https://sc.id-tv.kz/Kinoseriya.m3u8", "Кино и сериалы", ""),
-        Channel("viju+ Premiere HD", "https://sc.id-tv.kz/VIP_Premiere.m3u8", "Кино и сериалы", ""),
-        Channel("viju+ Megahit HD", "https://sc.id-tv.kz/VIP_Megahit.m3u8", "Кино и сериалы", ""),
-        Channel("viju+ Comedy HD", "https://sc.id-tv.kz/VIP_Comedy.m3u8", "Кино и сериалы", ""),
-        Channel("viju+ Serial HD", "https://sc.id-tv.kz/VIP_Serial.m3u8", "Кино и сериалы", ""),
-        Channel("viju TV1000", "https://sc.id-tv.kz/TV1000.m3u8", "Кино и сериалы", ""),
-        Channel("viju TV1000 Action", "https://sc.id-tv.kz/TV1000_Action.m3u8#viju", "Кино и сериалы", ""),
-        Channel("viju TV1000 Русское", "https://sc.id-tv.kz/TV1000_Russkoe_kino.m3u8#viju", "Кино и сериалы", ""),
-        Channel("Мосфильм. Золотая коллекция", "https://ott-cdn.ucom.am/s48/index.m3u8", "Кино и сериалы", ""),
-        Channel("Киномикс HD", "https://sc.id-tv.kz/Kinomiks.m3u8", "Кино и сериалы", ""),
-        Channel("Киносвидание", "https://sc.id-tv.kz/Kinosvidanie.m3u8", "Кино и сериалы", ""),
-        Channel("Дом Кино Премиум HD", "https://sc.id-tv.kz/Dom_kino_premium.m3u8", "Кино и сериалы", ""),
-        Channel("Дом Кино", "https://sc.id-tv.kz/Dom_kino.m3u8", "Кино и сериалы", ""),
-        Channel("Русский Иллюзион", "https://sc.id-tv.kz/Russkiy_illuzion.m3u8", "Кино и сериалы", ""),
-        Channel("Иллюзион+", "https://sc.id-tv.kz/Illuzion_plus.m3u8", "Кино и сериалы", ""),
-        Channel("Еврокино HD", "https://sc.id-tv.kz/Evrokino.m3u8", "Кино и сериалы", ""),
-        Channel("Русский Роман", "https://sc.id-tv.kz/Russkiy_roman.m3u8", "Кино и сериалы", ""),
-        Channel("Русский Бестселлер", "https://sc.id-tv.kz/Russkiy_bestseller.m3u8", "Кино и сериалы", ""),
-        Channel("Русский Детектив", "https://sc.id-tv.kz/Russkiy_detektiv.m3u8", "Кино и сериалы", ""),
-        Channel("Комедия", "https://sc.id-tv.kz/Komediya.m3u8", "Кино и сериалы", ""),
-        Channel("НСТ (Страшное ТВ)", "https://sc.id-tv.kz/NST.m3u8", "Кино и сериалы", ""),
-        Channel("Синема / Cinema", "https://sc.id-tv.kz/Cinema.m3u8", "Кино и сериалы", ""),
-        Channel("Любимое Кино", "https://sc.id-tv.kz/Lyubimoe_kino.m3u8", "Кино и сериалы", ""),
-        Channel("Феникс+ Кино", "https://sc.id-tv.kz/Feniks_plus_kino.m3u8", "Кино и сериалы", ""),
-        Channel("Amedia Premium HD", "https://sc.id-tv.kz/Amedia_Premium_HD.m3u8", "Кино и сериалы", ""),
-        Channel("Amedia Hit HD", "https://sc.id-tv.kz/Amedia_Hit_HD.m3u8", "Кино и сериалы", ""),
-        Channel("Amedia 1", "https://sc.id-tv.kz/Amedia_1.m3u8", "Кино и сериалы", ""),
-        Channel("Amedia 2", "https://sc.id-tv.kz/Amedia_2.m3u8", "Кино и сериалы", ""),
-        Channel("Hollywood HD", "https://sc.id-tv.kz/Hollywood_HD.m3u8", "Кино и сериалы", ""),
-        Channel("RED HD", "https://sc.id-tv.kz/Red_HD.m3u8", "Кино и сериалы", ""),
-        Channel("SCI-FI", "https://sc.id-tv.kz/Sci_Fi.m3u8", "Кино и сериалы", ""),
-        Channel("Кино ТВ HD", "https://sc.id-tv.kz/Kino_TV_HD.m3u8", "Кино и сериалы", ""),
-        Channel("Шокирующее HD", "https://sc.id-tv.kz/Shokiruyuschee_HD.m3u8", "Кино и сериалы", ""),
-        Channel("Комедийное HD", "https://sc.id-tv.kz/Komediynoye_HD.m3u8", "Кино и сериалы", ""),
-        Channel("Душевное HD", "https://sc.id-tv.kz/Dushevnoye_HD.m3u8", "Кино и сериалы", ""),
+object CoreEngines {
+    private val dohDnsCache = ConcurrentHashMap<String, String>()
 
-        // Детские (50 русскоязычных каналов — мультики, сказки, детское кино на разных CDN)
-        Channel("Карусель HD", "https://ott-cdn.ucom.am/s29/index.m3u8", "Детские", ""),
-        Channel("Карусель (Поток 2)", "https://sc.id-tv.kz/Karusel.m3u8", "Детские", ""),
-        Channel("Мульт HD", "https://sc.id-tv.kz/Mult.m3u8", "Детские", ""),
-        Channel("Солнце ТВ (Детский)", "https://sc.id-tv.kz/Solnce.m3u8", "Детские", ""),
-        Channel("СТС Kids HD", "https://sc.id-tv.kz/STS_Kids.m3u8", "Детские", ""),
-        Channel("Мультиландия HD", "https://sc.id-tv.kz/Multimaniya.m3u8", "Детские", ""),
-        Channel("О! (Познавательный детский)", "https://sc.id-tv.kz/O_kanal.m3u8", "Детские", ""),
-        Channel("Рыжий (Мультфильмы и сказки)", "https://sc.id-tv.kz/Ryzhiy.m3u8", "Детские", ""),
-        Channel("Мультимузыка", "https://sc.id-tv.kz/Multimuzyka.m3u8", "Детские", ""),
-        Channel("Тлум HD (Мультзал)", "https://sc.id-tv.kz/Tlum_HD.m3u8", "Детские", ""),
-        Channel("В гостях у сказки", "https://sc.id-tv.kz/V_gostyah_u_skazki.m3u8", "Детские", ""),
-        Channel("Детский мир (Советские мультики)", "https://sc.id-tv.kz/Detskiy_mir.m3u8", "Детские", ""),
-        Channel("Капитан Фантастика HD", "https://sc.id-tv.kz/Kapitan_Fantastika.m3u8", "Детские", ""),
-        Channel("Смайлик ТВ", "https://sc.id-tv.kz/Smaylik_TV.m3u8", "Детские", ""),
-        Channel("Уникум (Детский)", "https://sc.id-tv.kz/Unikum.m3u8", "Детские", ""),
-        Channel("Радость моя (Семейный и сказки)", "https://sc.id-tv.kz/Radost_moya.m3u8", "Детские", ""),
-        Channel("Ани (Ani Мультфильмы)", "https://sc.id-tv.kz/Ani.m3u8", "Детские", ""),
-        Channel("FAN HD (Фэнтези и Анимация)", "https://sc.id-tv.kz/Fan_HD.m3u8", "Детские", ""),
-        Channel("Gulli Girl (На русском)", "https://sc.id-tv.kz/Gulli_Girl.m3u8", "Детские", ""),
-        Channel("TiJi (Для малышей на русском)", "https://sc.id-tv.kz/TiJi.m3u8", "Детские", ""),
-        Channel("Nickelodeon Россия", "https://sc.id-tv.kz/Nickelodeon.m3u8", "Детские", ""),
-        Channel("Nick Jr. Россия", "https://sc.id-tv.kz/Nick_Jr.m3u8", "Детские", ""),
-        Channel("Cartoon Network Россия", "https://sc.id-tv.kz/Cartoon_Network.m3u8", "Детские", ""),
-        Channel("Boomerang Россия", "https://sc.id-tv.kz/Boomerang.m3u8", "Детские", ""),
-        Channel("JimJam Россия", "https://sc.id-tv.kz/JimJam.m3u8", "Детские", ""),
-        Channel("Da Vinci Kids Россия", "https://sc.id-tv.kz/Da_Vinci.m3u8", "Детские", ""),
-        Channel("Союзмультфильм Золотая Коллекция", "https://ott-cdn.ucom.am/s29/index.m3u8#soyuz", "Детские", ""),
-        Channel("Лёва HD (Мультики для малышей)", "https://ott-cdn.ucom.am/s29/index.m3u8#leva", "Детские", ""),
-        Channel("Три Кота и Друзья (Мультзал 1)", "https://ott-cdn.ucom.am/s29/index.m3u8#trikota", "Детские", ""),
-        Channel("Маша и Медведь (Мультзал 2)", "https://ott-cdn.ucom.am/s29/index.m3u8#masha", "Детские", ""),
-        Channel("Смешарики 24/7 (Мультзал 3)", "https://ott-cdn.ucom.am/s29/index.m3u8#smeshariki", "Детские", ""),
-        Channel("Фиксики и ПинКод (Мультзал 4)", "https://ott-cdn.ucom.am/s29/index.m3u8#fixiki", "Детские", ""),
-        Channel("Лунтик и Барбоскины (Мультзал 5)", "https://ott-cdn.ucom.am/s29/index.m3u8#luntik", "Детские", ""),
-        Channel("Добрые Советские Сказки", "https://ott-cdn.ucom.am/s48/index.m3u8#skazki_ussr", "Детские", ""),
-        Channel("Детский Кинозал (Фильмы и Сказки)", "https://ott-cdn.ucom.am/s48/index.m3u8#detkino", "Детские", ""),
-        Channel("Ералаш и Детские Комедии", "https://ott-cdn.ucom.am/s29/index.m3u8#eralash", "Детские", ""),
-        Channel("Ну, погоди! и Простоквашино", "https://ott-cdn.ucom.am/s29/index.m3u8#nupogodi", "Детские", ""),
-        Channel("Гора Самоцветов (Сказки народов)", "https://ott-cdn.ucom.am/s29/index.m3u8#samocvety", "Детские", ""),
-        Channel("Приключения и Фантастика Детям", "https://ott-cdn.ucom.am/s48/index.m3u8#prikl", "Детские", ""),
-        Channel("Колыбельные и Песенки из мультиков", "https://ott-cdn.ucom.am/s29/index.m3u8#pesenki", "Детские", ""),
-        Channel("Три Богатыря (Полнометражные мультики)", "https://ott-cdn.ucom.am/s48/index.m3u8#bogatyri", "Детские", ""),
-        Channel("Дисней Классика (На русском)", "https://ott-cdn.ucom.am/s29/index.m3u8#disney_ru", "Детские", ""),
-        Channel("Пиксар и ДримВоркс Мультзал", "https://ott-cdn.ucom.am/s48/index.m3u8#pixar_ru", "Детские", ""),
-        Channel("Ми-Ми-Мишки и Сказочный Патруль", "https://ott-cdn.ucom.am/s29/index.m3u8#mimimishki", "Детские", ""),
-        Channel("Чижик ТВ (Детское ретро)", "https://ott-cdn.ucom.am/s48/index.m3u8#chizhik", "Детские", ""),
-        Channel("Тип-Топ (Детский HD)", "https://ott-cdn.ucom.am/s29/index.m3u8#tiptop", "Детские", ""),
-        Channel("Шалун ТВ (Мультфильмы)", "https://ott-cdn.ucom.am/s29/index.m3u8#shalun", "Детские", ""),
-        Channel("Детский Плюс", "https://ott-cdn.ucom.am/s29/index.m3u8#detskiy_plus", "Детские", ""),
-        Channel("Мультсериалы HD (На русском)", "https://ott-cdn.ucom.am/s29/index.m3u8#multserial", "Детские", ""),
-        Channel("Семейная Сказка HD", "https://ott-cdn.ucom.am/s48/index.m3u8#semsk", "Детские", ""),
-
-        // Музыка
-        Channel("Муз-ТВ", "https://sc.id-tv.kz/Muz_TV.m3u8", "Музыка", ""),
-        Channel("RU.TV", "https://sc.id-tv.kz/RU_TV.m3u8", "Музыка", ""),
-        Channel("Bridge TV Русский Хит", "https://sc.id-tv.kz/Bridge_TV_Russkiy_Hit.m3u8", "Музыка", ""),
-        Channel("Bridge TV Classic", "https://sc.id-tv.kz/Bridge_TV_Classic.m3u8", "Музыка", ""),
-        Channel("Bridge TV Hits", "https://sc.id-tv.kz/Bridge_TV.m3u8", "Музыка", ""),
-        Channel("Bridge TV Deluxe", "https://sc.id-tv.kz/Bridge_TV_Deluxe.m3u8", "Музыка", ""),
-        Channel("Bridge TV Шлягер", "https://sc.id-tv.kz/Bridge_TV_Shlyager.m3u8", "Музыка", ""),
-        Channel("ТНТ Music", "https://sc.id-tv.kz/TNT_Music.m3u8", "Музыка", ""),
-        Channel("Европа Плюс ТВ", "https://sc.id-tv.kz/Europa_Plus_TV.m3u8", "Музыка", ""),
-        Channel("Жара ТВ", "https://sc.id-tv.kz/Zhara.m3u8", "Музыка", ""),
-        Channel("Шансон ТВ", "https://sc.id-tv.kz/Shanson_TV.m3u8", "Музыка", ""),
-        Channel("Ля-минор ТВ", "https://sc.id-tv.kz/Lya_minor.m3u8", "Музыка", ""),
-        Channel("Жар-Птица", "https://sc.id-tv.kz/Zhar_Ptica.m3u8", "Музыка", ""),
-        Channel("Mezzo Live HD", "https://sc.id-tv.kz/Mezzo_Live_HD.m3u8", "Музыка", ""),
-
-        // Спорт, Познавательные и Развлечения
-        Channel("Матч! ТВ HD", "https://sc.id-tv.kz/Match_TV_HD.m3u8", "Спорт", ""),
-        Channel("Матч! Премьер HD", "https://sc.id-tv.kz/Match_Premier_HD.m3u8", "Спорт", ""),
-        Channel("Матч! Футбол 1 HD", "https://sc.id-tv.kz/Match_Futbol_1_HD.m3u8", "Спорт", ""),
-        Channel("Матч! Футбол 2 HD", "https://sc.id-tv.kz/Match_Futbol_2_HD.m3u8", "Спорт", ""),
-        Channel("Матч! Футбол 3 HD", "https://sc.id-tv.kz/Match_Futbol_3_HD.m3u8", "Спорт", ""),
-        Channel("Матч! Боец", "https://sc.id-tv.kz/Match_Boec.m3u8", "Спорт", ""),
-        Channel("Матч! Игра HD", "https://sc.id-tv.kz/Match_Igra_HD.m3u8", "Спорт", ""),
-        Channel("Матч! Арена HD", "https://sc.id-tv.kz/Match_Arena_HD.m3u8", "Спорт", ""),
-        Channel("КХЛ Prime HD", "https://sc.id-tv.kz/KHL_HD.m3u8", "Спорт", ""),
-        Channel("ТНТ HD", "https://sc.id-tv.kz/TNT_HD.m3u8", "Развлечения", ""),
-        Channel("ТНТ4", "https://sc.id-tv.kz/TNT4.m3u8", "Развлечения", ""),
-        Channel("СТС HD", "https://sc.id-tv.kz/STS_HD.m3u8", "Развлечения", ""),
-        Channel("СТС Love", "https://sc.id-tv.kz/STS_Love.m3u8", "Развлечения", ""),
-        Channel("Пятница!", "https://sc.id-tv.kz/Pyatnica.m3u8", "Развлечения", ""),
-        Channel("Суббота!", "https://sc.id-tv.kz/Subbota.m3u8", "Развлечения", ""),
-        Channel("Ю ТВ", "https://sc.id-tv.kz/Yu.m3u8", "Развлечения", ""),
-        Channel("Че!", "https://sc.id-tv.kz/Che.m3u8", "Развлечения", ""),
-        Channel("2x2", "https://sc.id-tv.kz/2x2.m3u8", "Развлечения", ""),
-        Channel("КВН ТВ", "https://sc.id-tv.kz/KVN_TV.m3u8", "Развлечения", ""),
-        Channel("Сарафан", "https://sc.id-tv.kz/Sarafan.m3u8", "Развлечения", ""),
-        Channel("Моя Планета", "https://sc.id-tv.kz/Moya_planeta.m3u8", "Познавательные", ""),
-        Channel("Наука", "https://sc.id-tv.kz/Nauka.m3u8", "Познавательные", ""),
-        Channel("История", "https://sc.id-tv.kz/Istoriya.m3u8", "Познавательные", ""),
-        Channel("Живая Планета", "https://sc.id-tv.kz/Zhivaya_planeta.m3u8", "Познавательные", ""),
-        Channel("Техно 24", "https://sc.id-tv.kz/Tehno_24.m3u8", "Познавательные", ""),
-        Channel("Оружие", "https://sc.id-tv.kz/Oruzhie.m3u8", "Познавательные", ""),
-        Channel("Авто Плюс", "https://sc.id-tv.kz/Avto_plyus.m3u8", "Познавательные", ""),
-        Channel("Охота и рыбалка", "https://sc.id-tv.kz/Ohota_i_rybalka.m3u8", "Познавательные", ""),
-        Channel("Кухня ТВ", "https://sc.id-tv.kz/Kuhnya_TV.m3u8", "Развлечения", ""),
-        Channel("Еда Премиум", "https://sc.id-tv.kz/Eda_HD.m3u8", "Развлечения", "")
+    val russianSmartTvAgents = listOf(
+        "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Version/6.5 TV Safari/537.36",
+        "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.5359.211 Safari/537.36 WebAppManager",
+        " Wink/1.44.0 (AndroidTV; Android 11; Xiaomi Mi Box S)",
+        "Okko/7.22.0 (SmartTV; Linux; Android 11)",
+        "VLC/3.0.20 LibVLC/3.0.20"
     )
+
+    fun installTrustAllSsl() {
+        try {
+            val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            })
+            val sc = SSLContext.getInstance("TLS")
+            sc.init(null, trustAll, SecureRandom())
+            HttpsURLConnection.setDefaultSSLSocketFactory(sc.socketFactory)
+            HttpsURLConnection.setDefaultHostnameVerifier { _, _ -> true }
+        } catch (_: Exception) {}
+    }
+
+    fun resolveHostViaCloudflareDoH(host: String, dohEnabled: Boolean): String? {
+        if (!dohEnabled || host.isEmpty()) return null
+        if (host.all { it.isDigit() || it == '.' }) return host
+        dohDnsCache[host]?.let { return it }
+        try {
+            val dohUrl = "https://1.1.1.1/dns-query?name=$host&type=A"
+            val conn = (URL(dohUrl).openConnection() as HttpURLConnection).apply {
+                setRequestProperty("Accept", "application/dns-json")
+                connectTimeout = 2800
+                readTimeout = 2800
+            }
+            if (conn.responseCode == 200) {
+                val body = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+                val json = JSONObject(body)
+                val answers = json.optJSONArray("Answer")
+                if (answers != null) {
+                    for (i in 0 until answers.length()) {
+                        val ans = answers.getJSONObject(i)
+                        if (ans.optInt("type") == 1) {
+                            val ip = ans.optString("data", "")
+                            if (ip.isNotEmpty()) {
+                                dohDnsCache[host] = ip
+                                return ip
+                            }
+                        }
+                    }
+                }
+            }
+            conn.disconnect()
+        } catch (_: Exception) {}
+        return try { InetAddress.getByName(host).hostAddress } catch (_: Exception) { null }
+    }
+
+    fun openStreamWithBypass(urlStr: String, userAgentIndex: Int, dohEnabled: Boolean, timeoutMs: Int = 10000): InputStream {
+        var currentUrl = urlStr.substringBefore("#")
+        var redirects = 0
+        while (redirects < 6) {
+            val parsed = URL(currentUrl)
+            if (dohEnabled) resolveHostViaCloudflareDoH(parsed.host, true)
+            val origin = "${parsed.protocol}://${parsed.host}"
+            val activeAgent = russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size]
+            val conn = (parsed.openConnection() as HttpURLConnection).apply {
+                setRequestProperty("User-Agent", activeAgent)
+                setRequestProperty("Accept", "*/*")
+                setRequestProperty("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.7")
+                setRequestProperty("Origin", origin)
+                setRequestProperty("Referer", "$origin/")
+                instanceFollowRedirects = true
+                connectTimeout = timeoutMs
+                readTimeout = timeoutMs
+            }
+            val code = conn.responseCode
+            if (code in 300..399) {
+                val loc = conn.getHeaderField("Location")
+                conn.disconnect()
+                if (!loc.isNullOrEmpty()) {
+                    currentUrl = if (loc.startsWith("http")) loc else URL(parsed, loc).toString()
+                    redirects++
+                    continue
+                }
+            }
+            return conn.inputStream
+        }
+        return URL(currentUrl).openStream()
+    }
+
+    fun normalizeName(s: String): String =
+        s.lowercase(Locale.getDefault()).replace(Regex("[^a-zа-я0-9]"), "")
+
+    fun cleanChannelDisplayName(rawName: String): String {
+        val cleaned = rawName
+            .replace(Regex("\\(\\s*\\d+\\s*[pPрР]\\s*\\)"), " ")
+            .replace(Regex("\\[\\s*\\d+\\s*[pPрР]\\s*\\]"), " ")
+            .replace(Regex("\\b\\d{3,4}[pPрР]\\b"), " ")
+            .replace(Regex("\\[[^\\]]*(Geo|Not 24|720|1080|576|480)[^\\]]*\\]", RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim()
+        return cleaned.ifEmpty { rawName.trim() }
+    }
+
+    fun parseXmltvDate(raw: String): Long {
+        if (raw.length < 14) return 0L
+        return try {
+            val clean = raw.trim()
+            val fmt = if (clean.length >= 19 && (clean[14] == ' ' || clean[14] == '+' || clean[14] == '-')) {
+                SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US)
+            } else {
+                SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+            }
+            fmt.parse(clean)?.time ?: 0L
+        } catch (_: Exception) { 0L }
+    }
+
+    fun isArabicOrIndianChannel(name: String, group: String, url: String): Boolean {
+        val combined = "$name $group $url"
+        for (ch in combined) {
+            val code = ch.code
+            if (code in 0x0600..0x06FF || code in 0x0750..0x077F || code in 0x0900..0x0D7F) return true
+        }
+        val low = combined.lowercase()
+        val bannedTokens = listOf(
+            "arabic", "arabia", "al jazeera", "aljazeera", "mbc", "rotana", "osn ", "art ", "nile ",
+            "dubai", "sharjah", "abu dhabi", "al arabiya", "alarabiya", "iqraa", "majid", "spacetoon",
+            "zee ", "sony sab", "star plus", "star bharat", "colors ", "aaj tak", "ndtv", "dd national",
+            "sun tv", "asianet", "bollywood", "india", "hindi", "tamil", "telugu", "punjabi", "urdu",
+            "bangla", "pakistan", "geo news", "ary digital", "hum tv", "samaa"
+        )
+        return bannedTokens.any { low.contains(it) }
+    }
+
+    fun isStrictlyRussianChannel(name: String, url: String, rawGroup: String = ""): Boolean {
+        if (name.any { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }) return true
+        val lName = name.lowercase()
+        val lUrl = url.lowercase()
+        val lGroup = rawGroup.lowercase()
+        if (lUrl.contains(".ru/") || lUrl.contains(".su/") || lUrl.contains(".by/") || lUrl.contains(".kz/") ||
+            lUrl.contains("vgtrk") || lUrl.contains("1tv") || lUrl.contains("ntv") || lUrl.contains("smotrim") ||
+            lUrl.contains("tricolor") || lUrl.contains("wink") || lUrl.contains("peers") || lUrl.contains("catcast")) {
+            return true
+        }
+        if (lGroup.contains("росси") || lGroup.contains("русск") || lGroup.contains("детск") || lGroup.contains("мульт")) {
+            return true
+        }
+        val ruLatinWhitelist = listOf(
+            "viju", "tv1000", "amedia", "karusel", "mult", "tiji", "gulli", "nickelodeon ru", "nick jr ru",
+            "cartoon network ru", "boomerang ru", "jimjam ru", "da vinci", "sts kids", "ani ", "fan hd",
+            "bridge tv", "muz tv", "ru.tv", "tnt", "sts", "ren tv", "ntv", "match", "khl", "kino", "illuzion"
+        )
+        return ruLatinWhitelist.any { lName.contains(it) }
+    }
+
+    fun is2kOrHigherStream(rawLine: String, name: String, rawGroup: String, url: String): Boolean {
+        val text = "$rawLine $name $rawGroup $url".lowercase()
+        if (text.contains("4k") || text.contains("uhd") || text.contains("2160p") || text.contains("1440p") || text.contains("2k") || text.contains("ultra hd") || text.contains("hevc")) return true
+        val resMatch = Regex("(\\d{3,4})x(\\d{3,4})").find(text)
+        if (resMatch != null) {
+            val w = resMatch.groupValues[1].toIntOrNull() ?: 0
+            val h = resMatch.groupValues[2].toIntOrNull() ?: 0
+            if (w >= 2560 || h >= 1440) return true
+        }
+        return false
+    }
+
+    fun mapCategory(rawGroup: String, name: String, rawLine: String = "", url: String = ""): String {
+        if (is2kOrHigherStream(rawLine, name, rawGroup, url)) return "2K"
+        val g = rawGroup.lowercase()
+        val n = name.lowercase()
+        val combined = "$g $n"
+        return when {
+            combined.contains("дет") || combined.contains("мульт") || combined.contains("карусель") ||
+                combined.contains("сказк") || combined.contains("малыш") || combined.contains("союзмульт") ||
+                combined.contains("смешарик") || combined.contains("фиксик") || combined.contains("лунтик") ||
+                combined.contains("барбоскин") || combined.contains("три кота") || combined.contains("маша и медведь") ||
+                combined.contains("простоквашин") || combined.contains("ну, погоди") || combined.contains("ми-ми-мишк") ||
+                combined.contains("тлум") || combined.contains("рыжий") || combined.contains("смайлик") ||
+                combined.contains("уникум") || combined.contains("мультиландия") || combined.contains("мультимузыка") ||
+                combined.contains("радость моя") || combined.contains("капитан фантастика") || combined.contains("детский") ||
+                combined.contains("стс kids") || combined.contains("sts kids") || combined.contains("солнце") ||
+                combined.contains("gulli") || combined.contains("tiji") || combined.contains("jimjam") ||
+                combined.contains("kids") || combined.contains("cartoon") || combined.contains("nickelodeon") ||
+                combined.contains("disney") || combined.contains("nick jr") || combined.contains("boomerang") ||
+                combined.contains("anim") || combined.contains("анимац") || combined.contains("аниме") ||
+                n == "о!" || n.startsWith("о! ") || n.startsWith("ани ") || n == "ани" -> "Детские"
+
+            combined.contains("кино") || combined.contains("фильм") || combined.contains("сериал") ||
+                combined.contains("movie") || combined.contains("cinema") || combined.contains("film") ||
+                combined.contains("series") || combined.contains("amedia") || combined.contains("viju") ||
+                combined.contains("tv1000") || combined.contains("иллюзион") || combined.contains("комеди") ||
+                combined.contains("comedy") || combined.contains("драма") || combined.contains("детектив") ||
+                combined.contains("триллер") || combined.contains("ужас") || combined.contains("нст") ||
+                combined.contains("фантастик") || combined.contains("sci-fi") || combined.contains("action") ||
+                combined.contains("prem") || combined.contains("hit") || combined.contains("хит") ||
+                combined.contains("бестселлер") || combined.contains("роман") || combined.contains("мосфильм") ||
+                combined.contains("ленфильм") || combined.contains("кинозал") || combined.contains("hollywood") ||
+                combined.contains("red hd") || combined.contains("дом кино") || combined.contains("еврокино") ||
+                combined.contains("индийск") || combined.contains("дорама") || combined.contains("феникс") -> "Кино и сериалы"
+
+            combined.contains("спорт") || combined.contains("sport") || combined.contains("футбол") ||
+                combined.contains("матч") || combined.contains("match") || combined.contains("кхл") ||
+                combined.contains("khl") || combined.contains("боец") || combined.contains("ufc") ||
+                combined.contains("бокс") || combined.contains("теннис") || combined.contains("хоккей") ||
+                combined.contains("eurosport") || combined.contains("арена") || combined.contains("старт") -> "Спорт"
+
+            combined.contains("познават") || combined.contains("наука") || combined.contains("discovery") ||
+                combined.contains("nature") || combined.contains("history") || combined.contains("истори") ||
+                combined.contains("планета") || combined.contains("doc") || combined.contains("док") ||
+                combined.contains("animal") || combined.contains("nat geo") || combined.contains("viasat explore") ||
+                combined.contains("viasat nature") || combined.contains("viasat history") || combined.contains("техно") ||
+                combined.contains("оружие") || combined.contains("охота") || combined.contains("рыбалк") ||
+                combined.contains("авто") || combined.contains("усад") || combined.contains("бобёр") ||
+                combined.contains("зоо") || combined.contains("travel") || combined.contains("путешеств") -> "Познавательные"
+
+            combined.contains("музык") || combined.contains("music") || combined.contains("муз") ||
+                combined.contains("mtv") || combined.contains("bridge") || combined.contains("шансон") ||
+                combined.contains("ru.tv") || combined.contains("европа плюс") || combined.contains("жара") ||
+                combined.contains("mezzo") || combined.contains("vh1") || combined.contains("ля-минор") -> "Музыка"
+
+            combined.contains("новост") || combined.contains("news") || combined.contains("инфо") ||
+                combined.contains("россия 24") || combined.contains("рбк") || combined.contains("мир 24") ||
+                combined.contains("известия") || combined.contains("первый") || combined.contains("россия 1") ||
+                combined.contains("нтв") || combined.contains("тв центр") || combined.contains("твц") ||
+                combined.contains("пятый") || combined.contains("рен") || combined.contains("звезда") ||
+                combined.contains("отр") || combined.contains("спас") || combined.contains("360") ||
+                combined.contains("москва 24") || combined.contains("общие") || combined.contains("федерал") -> "Новости и общие"
+
+            combined.contains("развлеч") || combined.contains(" тнт") || n.startsWith("тнт") ||
+                combined.contains("стс") || combined.contains("пятница") || combined.contains("суббота") ||
+                combined.contains("домашний") || combined.contains("ю ") || n == "ю" ||
+                combined.contains("че!") || n == "че" || combined.contains("2x2") || combined.contains("2х2") ||
+                combined.contains("квн") || combined.contains("сарафан") || combined.contains("еда") ||
+                combined.contains("кухня") || combined.contains("entertain") || combined.contains("fashion") -> "Развлечения"
+
+            else -> "Прочее"
+        }
+    }
+
+    fun parseM3uReaderIntoMap(
+        reader: BufferedReader,
+        targetMap: LinkedHashMap<String, Channel>,
+        customCategoryMap: Map<String, String>,
+        filterBuiltinRules: Boolean,
+        onlyRussianAllCategories: Boolean = false,
+        keepOriginalGroups: Boolean = false
+    ) {
+        var currentName = ""
+        var currentGroup = ""
+        var currentTvgId = ""
+        var currentRawInfLine = ""
+        var line: String? = reader.readLine()
+        while (line != null) {
+            val l = line.trim()
+            if (l.startsWith("#EXTINF", ignoreCase = true)) {
+                currentRawInfLine = l
+                currentName = cleanChannelDisplayName(l.substringAfterLast(",", "Канал").trim())
+                val groupMatch = Regex("group-title=\"([^\"]+)\"", RegexOption.IGNORE_CASE).find(l)
+                currentGroup = groupMatch?.groupValues?.get(1)?.trim() ?: ""
+                val idMatch = Regex("tvg-id=\"([^\"]+)\"", RegexOption.IGNORE_CASE).find(l)
+                currentTvgId = idMatch?.groupValues?.get(1)?.trim() ?: ""
+            } else if (l.startsWith("http://", ignoreCase = true) || l.startsWith("https://", ignoreCase = true) || l.startsWith("rtmp://", ignoreCase = true)) {
+                if (currentName.isNotEmpty()) {
+                    var skip = false
+                    if (filterBuiltinRules) {
+                        if (isArabicOrIndianChannel(currentName, currentGroup, l)) {
+                            skip = true
+                        } else {
+                            val mappedCat = mapCategory(currentGroup, currentName, currentRawInfLine, l)
+                            val isStrictRu = isStrictlyRussianChannel(currentName, l, currentGroup)
+                            // Пункт 2: В категории «Детские» и «Новости и общие» ВСЕГДА оставляем только русскоязычные каналы!
+                            if (onlyRussianAllCategories) {
+                                if (!isStrictRu) skip = true
+                            } else if (mappedCat == "Детские" || mappedCat == "Новости и общие" || mappedCat == "Развлечения" || mappedCat == "Прочее") {
+                                if (!isStrictRu) skip = true
+                            }
+                        }
+                    }
+                    if (!skip) {
+                        val category = customCategoryMap[l] ?: if (keepOriginalGroups) {
+                            currentGroup.ifEmpty { mapCategory(currentGroup, currentName, currentRawInfLine, l) }
+                        } else {
+                            mapCategory(currentGroup, currentName, currentRawInfLine, l)
+                        }
+                        val dedupKey = normalizeName(currentName) + "_" + category
+                        if (!targetMap.containsKey(dedupKey)) {
+                            targetMap[dedupKey] = Channel(currentName, l, category, currentTvgId)
+                        }
+                    }
+                    currentName = ""
+                    currentGroup = ""
+                    currentTvgId = ""
+                    currentRawInfLine = ""
+                }
+            }
+            line = reader.readLine()
+        }
+        reader.close()
+    }
+
+    fun saveEpgToStreamCache(cacheFile: File, mapByName: Map<String, List<EpgProgram>>) {
+        try {
+            val tmpFile = File(cacheFile.parentFile, cacheFile.name + ".tmp")
+            BufferedWriter(FileWriter(tmpFile)).use { writer ->
+                for ((normName, progs) in mapByName) {
+                    if (normName.isEmpty() || progs.isEmpty()) continue
+                    val row = JSONObject()
+                    row.put("k", normName)
+                    val pArr = JSONArray()
+                    for (p in progs) {
+                        val po = JSONObject()
+                        po.put("t", p.title)
+                        po.put("s", p.startMs)
+                        po.put("e", p.stopMs)
+                        pArr.put(po)
+                    }
+                    row.put("p", pArr)
+                    writer.write(row.toString())
+                    writer.newLine()
+                }
+            }
+            if (cacheFile.exists()) cacheFile.delete()
+            tmpFile.renameTo(cacheFile)
+        } catch (_: Exception) {}
+    }
+
+    fun restoreEpgFromStreamCache(cacheFile: File, outByName: ConcurrentHashMap<String, MutableList<EpgProgram>>): Int {
+        if (!cacheFile.exists()) return 0
+        var count = 0
+        try {
+            val now = System.currentTimeMillis()
+            val minTime = now - 2 * 3600_000L
+            BufferedReader(FileReader(cacheFile)).use { reader ->
+                var line = reader.readLine()
+                while (line != null) {
+                    if (line.isNotBlank()) {
+                        val row = JSONObject(line)
+                        val key = row.optString("k", "")
+                        val pArr = row.optJSONArray("p")
+                        if (key.isNotEmpty() && pArr != null) {
+                            val list = mutableListOf<EpgProgram>()
+                            for (i in 0 until pArr.length()) {
+                                val po = pArr.getJSONObject(i)
+                                val stop = po.optLong("e", 0L)
+                                if (stop >= minTime) {
+                                    list.add(EpgProgram(po.optString("t", ""), "", po.optLong("s", 0L), stop))
+                                    count++
+                                }
+                            }
+                            if (list.isNotEmpty()) outByName[key] = list
+                        }
+                    }
+                    line = reader.readLine()
+                }
+            }
+        } catch (_: Exception) {}
+        return count
+    }
 }
