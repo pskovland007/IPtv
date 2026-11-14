@@ -157,17 +157,28 @@ class LiveEqualizerView(context: Context) : View(context) {
 }
 
 class MarqueeRowTextView(context: Context) : TextView(context) {
+    init {
+        setSingleLine(true)
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+    }
+
     var forceMarqueeActive: Boolean = false
         set(value) {
-            if (field == value) return
-            field = value; isSelected = value
+            field = value
+            setSingleLine(true)
+            maxLines = 1
             if (value) {
-                ellipsize = TextUtils.TruncateAt.MARQUEE; marqueeRepeatLimit = -1
-                setSingleLine(true); setHorizontallyScrolling(true)
+                ellipsize = TextUtils.TruncateAt.MARQUEE
+                marqueeRepeatLimit = -1
+                setHorizontallyScrolling(true)
+                isSelected = true
             } else {
-                ellipsize = TextUtils.TruncateAt.END; setSingleLine(true)
+                isSelected = false
+                ellipsize = TextUtils.TruncateAt.END
             }
         }
+
     override fun isFocused(): Boolean = forceMarqueeActive || super.isFocused()
 }
 
@@ -175,9 +186,11 @@ class ChannelRowView(context: Context) : FrameLayout(context) {
     val badgeView = TextView(context).apply {
         gravity = Gravity.CENTER; setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
         setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
+        setSingleLine(true); maxLines = 1
         layoutParams = LayoutParams(44, 44, Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = 14 }
     }
     val titleView = MarqueeRowTextView(context).apply {
+        setSingleLine(true); maxLines = 1
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL).apply {
             leftMargin = 70; rightMargin = 54
         }
@@ -187,7 +200,7 @@ class ChannelRowView(context: Context) : FrameLayout(context) {
         layoutParams = LayoutParams(34, 24, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = 14 }
     }
     init {
-        setPadding(4, 12, 4, 12)
+        setPadding(4, 10, 4, 10)
         addView(badgeView); addView(titleView); addView(eqView)
     }
 }
