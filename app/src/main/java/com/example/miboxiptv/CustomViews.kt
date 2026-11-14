@@ -32,48 +32,49 @@ class GraphicOrbSpan(private val orbType: Int) : ReplacementSpan() {
     private val rect = RectF()
 
     override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
-        return if (orbType >= 10) 68 else 34
+        return if (orbType >= 10) 80 else 48
     }
 
     override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, textPaint: Paint) {
         val cy = (top + bottom) / 2f
         if (orbType == 10 || orbType == 11) {
             val isOn = (orbType == 10)
-            val trackW = 54f; val trackH = 26f
+            val trackW = 66f; val trackH = 32f
             val left = x + 4f; val topY = cy - trackH / 2f
             rect.set(left, topY, left + trackW, topY + trackH)
             paint.style = Paint.Style.FILL
             paint.color = if (isOn) Color.parseColor("#00C853") else Color.parseColor("#455A64")
             canvas.drawRoundRect(rect, trackH / 2f, trackH / 2f, paint)
-            paint.style = Paint.Style.STROKE; paint.strokeWidth = 1.8f
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.2f
             paint.color = if (isOn) Color.parseColor("#B9F6CA") else Color.parseColor("#90A4AE")
             canvas.drawRoundRect(rect, trackH / 2f, trackH / 2f, paint)
             paint.style = Paint.Style.FILL; paint.color = Color.WHITE
             val knobX = if (isOn) (left + trackW - trackH / 2f) else (left + trackH / 2f)
-            canvas.drawCircle(knobX, cy, trackH * 0.38f, paint)
+            canvas.drawCircle(knobX, cy, trackH * 0.39f, paint)
             return
         }
-        val cx = x + 15f; val r = 10.5f
+        val cx = x + 21f; val r = 14.5f
         val mainColor = when (orbType) {
             1 -> Color.parseColor("#00E676")
             2 -> Color.parseColor("#FF5252")
             else -> Color.parseColor("#FFD740")
         }
         paint.style = Paint.Style.FILL
-        paint.color = Color.argb(65, Color.red(mainColor), Color.green(mainColor), Color.blue(mainColor))
-        canvas.drawCircle(cx, cy, r * 1.32f, paint)
-        paint.color = mainColor; canvas.drawCircle(cx, cy, r, paint)
-        paint.color = Color.argb(130, 255, 255, 255)
+        paint.color = Color.argb(75, Color.red(mainColor), Color.green(mainColor), Color.blue(mainColor))
+        canvas.drawCircle(cx, cy, r * 1.34f, paint)
+        paint.color = mainColor
+        canvas.drawCircle(cx, cy, r, paint)
+        paint.color = Color.argb(140, 255, 255, 255)
         canvas.drawCircle(cx - r * 0.3f, cy - r * 0.3f, r * 0.32f, paint)
 
-        paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.4f; paint.strokeCap = Paint.Cap.ROUND
+        paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.2f; paint.strokeCap = Paint.Cap.ROUND
         paint.color = Color.parseColor("#101418")
         if (orbType == 1) {
-            canvas.drawLine(cx - 4.2f, cy + 0.5f, cx - 1.0f, cy + 3.8f, paint)
-            canvas.drawLine(cx - 1.0f, cy + 3.8f, cx + 4.8f, cy - 3.5f, paint)
+            canvas.drawLine(cx - 5.5f, cy + 0.5f, cx - 1.2f, cy + 5.0f, paint)
+            canvas.drawLine(cx - 1.2f, cy + 5.0f, cx + 6.2f, cy - 4.6f, paint)
         } else if (orbType == 2) {
-            canvas.drawLine(cx - 3.6f, cy - 3.6f, cx + 3.6f, cy + 3.6f, paint)
-            canvas.drawLine(cx + 3.6f, cy - 3.6f, cx - 3.6f, cy + 3.6f, paint)
+            canvas.drawLine(cx - 4.8f, cy - 4.8f, cx + 4.8f, cy + 4.8f, paint)
+            canvas.drawLine(cx + 4.8f, cy - 4.8f, cx - 4.8f, cy + 4.8f, paint)
         }
     }
 }
@@ -179,6 +180,16 @@ class MarqueeRowTextView(context: Context) : TextView(context) {
         ellipsize = TextUtils.TruncateAt.END
     }
 
+    fun setTextWithSmoothToggle(newText: CharSequence, animateToggle: Boolean) {
+        val oldStr = text?.toString() ?: ""
+        val newStr = newText.toString()
+        text = newText
+        if (animateToggle && oldStr.isNotEmpty() && oldStr != newStr) {
+            alpha = 0.62f
+            animate().alpha(1f).setDuration(170L).start()
+        }
+    }
+
     override fun isFocused(): Boolean = forceMarqueeActive || super.isFocused()
 }
 
@@ -265,6 +276,7 @@ class RealisticEyeSplashView(context: Context) : View(context) {
     }
 }
 
+// АВТОРСКИЕ СМЫСЛОВЫЕ ИКОНКИ ДЛЯ IPTV В 6 УНИКАЛЬНЫХ ХУДОЖЕСТВЕННЫХ СТИЛЯХ
 class ThemedTileView(
     context: Context, private val iconType: String,
     private val baseColorHex: String, private val accentColorHex: String
@@ -290,336 +302,440 @@ class ThemedTileView(
         paint.strokeJoin = Paint.Join.ROUND
 
         when (themeStyleId) {
-            0 -> drawMaterialThemeIcon(canvas, cx, cy, minDim)
-            1 -> drawNeonThemeIcon(canvas, cx, cy, minDim)
-            2 -> drawAmoledThemeIcon(canvas, cx, cy, minDim)
-            3 -> drawMonochromeThemeIcon(canvas, cx, cy, minDim)
-            4 -> drawRetroThemeIcon(canvas, cx, cy, minDim)
-            else -> drawCarousel3DThemeIcon(canvas, cx, cy, minDim)
+            0 -> drawMaterialIptvIcon(canvas, cx, cy, minDim)
+            1 -> drawNeonIptvIcon(canvas, cx, cy, minDim)
+            2 -> drawAmoledIptvIcon(canvas, cx, cy, minDim)
+            3 -> drawMonochromeIptvIcon(canvas, cx, cy, minDim)
+            4 -> drawRetroIptvIcon(canvas, cx, cy, minDim)
+            else -> drawCarousel3DIptvIcon(canvas, cx, cy, minDim)
         }
         paint.shader = null
     }
 
-    private fun drawMaterialThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+    // =========================================================================
+    // ТЕМА 0: МАТЕРИАЛ ДИЗАЙН (Многослойные плоские векторные фигуры со смыслом IPTV)
+    // =========================================================================
+    private fun drawMaterialIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val r = minDim * 0.36f
         if (isTileFocused) {
             paint.style = Paint.Style.FILL
-            paint.color = Color.parseColor("#242563EB")
+            paint.color = Color.parseColor("#3360A5FA")
             canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 3.5f
-            paint.color = Color.parseColor("#2563EB")
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
+            paint.color = Color.parseColor("#60A5FA")
             canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
         }
         paint.style = Paint.Style.FILL
         when (iconType) {
             "PLAYLISTS" -> {
-                paint.color = Color.parseColor("#F59E0B")
+                // Плоская двухцветная папка с тремя строками каналов и кружком Play
+                paint.color = Color.parseColor("#D97706")
                 path.reset()
-                path.moveTo(cx - r * 0.85f, cy - r * 0.55f)
-                path.lineTo(cx - r * 0.20f, cy - r * 0.55f)
-                path.lineTo(cx, cy - r * 0.32f)
-                path.lineTo(cx + r * 0.85f, cy - r * 0.32f)
+                path.moveTo(cx - r * 0.85f, cy - r * 0.58f)
+                path.lineTo(cx - r * 0.22f, cy - r * 0.58f)
+                path.lineTo(cx - r * 0.02f, cy - r * 0.34f)
+                path.lineTo(cx + r * 0.85f, cy - r * 0.34f)
                 path.lineTo(cx + r * 0.85f, cy + r * 0.62f)
                 path.lineTo(cx - r * 0.85f, cy + r * 0.62f)
                 path.close()
                 canvas.drawPath(path, paint)
                 paint.color = Color.parseColor("#FBBF24")
-                rect.set(cx - r * 0.85f, cy - r * 0.25f, cx + r * 0.85f, cy + r * 0.62f)
-                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                rect.set(cx - r * 0.85f, cy - r * 0.26f, cx + r * 0.85f, cy + r * 0.62f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                paint.color = Color.parseColor("#FEF3C7")
+                for (i in 0..1) {
+                    val ly = cy + i * r * 0.28f
+                    rect.set(cx - r * 0.58f, ly - 4f, cx + r * 0.05f, ly + 4f)
+                    canvas.drawRoundRect(rect, 4f, 4f, paint)
+                }
+                paint.color = Color.parseColor("#10B981")
+                canvas.drawCircle(cx + r * 0.46f, cy + r * 0.24f, r * 0.34f, paint)
+                paint.color = Color.WHITE
+                path.reset()
+                path.moveTo(cx + r * 0.38f, cy + r * 0.09f)
+                path.lineTo(cx + r * 0.60f, cy + r * 0.24f)
+                path.lineTo(cx + r * 0.38f, cy + r * 0.39f)
+                path.close()
+                canvas.drawPath(path, paint)
             }
             "EDITOR" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 7f
-                paint.color = Color.parseColor("#94A3B8")
-                canvas.drawLine(cx - r * 0.35f, cy + r * 0.35f, cx + r * 0.72f, cy - r * 0.62f, paint)
-                canvas.drawLine(cx - r * 0.35f, cy - r * 0.35f, cx + r * 0.72f, cy + r * 0.62f, paint)
-                paint.color = Color.parseColor("#1D4ED8")
-                paint.strokeWidth = 6.5f
-                canvas.drawCircle(cx - r * 0.48f, cy - r * 0.42f, r * 0.30f, paint)
-                canvas.drawCircle(cx - r * 0.48f, cy + r * 0.42f, r * 0.30f, paint)
+                // Планшет списка каналов + диагональный двухцветный карандаш
+                paint.color = Color.parseColor("#3B82F6")
+                rect.set(cx - r * 0.72f, cy - r * 0.72f, cx + r * 0.42f, cy + r * 0.72f)
+                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                paint.color = Color.parseColor("#DBEAFE")
+                for (i in -1..1) {
+                    val ly = cy + i * r * 0.36f
+                    rect.set(cx - r * 0.48f, ly - 4f, cx + r * 0.14f, ly + 4f)
+                    canvas.drawRoundRect(rect, 4f, 4f, paint)
+                }
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 12f
+                paint.color = Color.parseColor("#F59E0B")
+                canvas.drawLine(cx + r * 0.06f, cy + r * 0.48f, cx + r * 0.72f, cy - r * 0.34f, paint)
+                paint.color = Color.parseColor("#EF4444")
+                canvas.drawLine(cx + r * 0.60f, cy - r * 0.20f, cx + r * 0.76f, cy - r * 0.40f, paint)
             }
             "ANALYZER" -> {
+                // Радар сигнала со шкалой импульса и зелёной галочкой
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#BAE6FD")
-                canvas.drawCircle(cx, cy, r * 0.74f, paint)
-                paint.color = Color.parseColor("#38BDF8")
-                rect.set(cx - r * 0.74f, cy - r * 0.74f, cx + r * 0.74f, cy + r * 0.74f)
-                canvas.drawArc(rect, 0f, 90f, true, paint)
-                canvas.drawArc(rect, 180f, 90f, true, paint)
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 6f
                 paint.color = Color.parseColor("#0284C7")
-                canvas.drawCircle(cx, cy, r * 0.74f, paint)
-                canvas.drawLine(cx, cy - r * 0.96f, cx, cy - r * 0.56f, paint)
-                canvas.drawLine(cx, cy + r * 0.56f, cx, cy + r * 0.96f, paint)
-                canvas.drawLine(cx - r * 0.96f, cy, cx - r * 0.56f, cy, paint)
-                canvas.drawLine(cx + r * 0.56f, cy, cx + r * 0.96f, cy, paint)
+                canvas.drawCircle(cx, cy, r * 0.80f, paint)
+                paint.color = Color.parseColor("#38BDF8")
+                rect.set(cx - r * 0.80f, cy - r * 0.80f, cx + r * 0.80f, cy + r * 0.80f)
+                canvas.drawArc(rect, -90f, 180f, true, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5.5f; paint.color = Color.WHITE
+                path.reset()
+                path.moveTo(cx - r * 0.56f, cy + r * 0.06f)
+                path.lineTo(cx - r * 0.24f, cy + r * 0.06f)
+                path.lineTo(cx - r * 0.08f, cy - r * 0.36f)
+                path.lineTo(cx + r * 0.12f, cy + r * 0.36f)
+                path.lineTo(cx + r * 0.28f, cy - r * 0.08f)
+                path.lineTo(cx + r * 0.56f, cy - r * 0.08f)
+                canvas.drawPath(path, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#10B981")
+                canvas.drawCircle(cx + r * 0.48f, cy + r * 0.48f, r * 0.28f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.5f; paint.color = Color.WHITE
+                canvas.drawLine(cx + r * 0.36f, cy + r * 0.48f, cx + r * 0.45f, cy + r * 0.58f, paint)
+                canvas.drawLine(cx + r * 0.45f, cy + r * 0.58f, cx + r * 0.62f, cy + r * 0.38f, paint)
             }
             "THEMES" -> {
+                // Плоская палитра художника с цветными красками
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#F59E0B")
                 canvas.drawCircle(cx, cy, r * 0.82f, paint)
-                paint.color = Color.parseColor("#E4E6EE")
-                canvas.drawCircle(cx + r * 0.34f, cy + r * 0.34f, r * 0.24f, paint)
-                paint.color = Color.parseColor("#EF4444"); canvas.drawCircle(cx - r * 0.36f, cy - r * 0.18f, r * 0.14f, paint)
-                paint.color = Color.parseColor("#8B5CF6"); canvas.drawCircle(cx - r * 0.08f, cy - r * 0.44f, r * 0.14f, paint)
-                paint.color = Color.parseColor("#3B82F6"); canvas.drawCircle(cx + r * 0.32f, cy - r * 0.24f, r * 0.14f, paint)
-                paint.color = Color.parseColor("#10B981"); canvas.drawCircle(cx - r * 0.32f, cy + r * 0.28f, r * 0.14f, paint)
+                paint.color = Color.parseColor("#242C3D")
+                canvas.drawCircle(cx + r * 0.34f, cy + r * 0.34f, r * 0.22f, paint)
+                paint.color = Color.parseColor("#EF4444"); canvas.drawCircle(cx - r * 0.36f, cy - r * 0.18f, r * 0.15f, paint)
+                paint.color = Color.parseColor("#8B5CF6"); canvas.drawCircle(cx - r * 0.08f, cy - r * 0.44f, r * 0.15f, paint)
+                paint.color = Color.parseColor("#3B82F6"); canvas.drawCircle(cx + r * 0.32f, cy - r * 0.24f, r * 0.15f, paint)
+                paint.color = Color.parseColor("#10B981"); canvas.drawCircle(cx - r * 0.32f, cy + r * 0.28f, r * 0.15f, paint)
             }
             "BUFFER" -> {
+                // Круглый индикатор буфера подкачки с молнией внутри
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#67E8F9")
-                canvas.drawCircle(cx - r * 0.38f, cy + r * 0.08f, r * 0.42f, paint)
-                canvas.drawCircle(cx + r * 0.02f, cy - r * 0.16f, r * 0.52f, paint)
-                canvas.drawCircle(cx + r * 0.44f, cy + r * 0.12f, r * 0.38f, paint)
-                rect.set(cx - r * 0.48f, cy + r * 0.05f, cx + r * 0.50f, cy + r * 0.50f)
-                canvas.drawRect(rect, paint)
                 paint.color = Color.parseColor("#0D9488")
-                rect.set(cx - r * 0.12f, cy - r * 0.25f, cx + r * 0.12f, cy + r * 0.15f)
-                canvas.drawRect(rect, paint)
+                canvas.drawCircle(cx, cy, r * 0.80f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 7f
+                paint.color = Color.parseColor("#5EEAD4")
+                rect.set(cx - r * 0.58f, cy - r * 0.58f, cx + r * 0.58f, cy + r * 0.58f)
+                canvas.drawArc(rect, 140f, 260f, false, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
                 path.reset()
-                path.moveTo(cx - r * 0.32f, cy + r * 0.08f)
-                path.lineTo(cx + r * 0.32f, cy + r * 0.08f)
-                path.lineTo(cx, cy + r * 0.42f)
+                path.moveTo(cx + r * 0.08f, cy - r * 0.42f)
+                path.lineTo(cx - r * 0.26f, cy + r * 0.04f)
+                path.lineTo(cx + r * 0.02f, cy + r * 0.04f)
+                path.lineTo(cx - r * 0.08f, cy + r * 0.44f)
+                path.lineTo(cx + r * 0.28f, cy - r * 0.04f)
+                path.lineTo(cx + r * 0.02f, cy - r * 0.04f)
                 path.close()
                 canvas.drawPath(path, paint)
             }
             "DECODER" -> {
+                // Процессор видеодекодера с ножками и зелёным кристаллом
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f
+                paint.color = Color.parseColor("#94A3B8")
+                for (k in -1..1) {
+                    val off = k * r * 0.32f
+                    canvas.drawLine(cx + off, cy - r * 0.84f, cx + off, cy + r * 0.84f, paint)
+                    canvas.drawLine(cx - r * 0.84f, cy + off, cx + r * 0.84f, cy + off, paint)
+                }
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#1E293B")
-                canvas.drawCircle(cx, cy, r * 0.84f, paint)
-                paint.color = Color.parseColor("#334155")
-                rect.set(cx - r * 0.84f, cy - r * 0.84f, cx + r * 0.84f, cy + r * 0.84f)
-                canvas.drawArc(rect, -45f, 90f, true, paint)
-                paint.color = Color.parseColor("#38BDF8")
-                canvas.drawCircle(cx, cy, r * 0.34f, paint)
-                paint.color = Color.parseColor("#1E293B")
-                canvas.drawCircle(cx, cy, r * 0.10f, paint)
+                paint.color = Color.parseColor("#475569")
+                rect.set(cx - r * 0.62f, cy - r * 0.62f, cx + r * 0.62f, cy + r * 0.62f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                paint.color = Color.parseColor("#0EA5E9")
+                rect.set(cx - r * 0.36f, cy - r * 0.36f, cx + r * 0.36f, cy + r * 0.36f)
+                canvas.drawRoundRect(rect, 6f, 6f, paint)
             }
             "EPG_GRID" -> {
+                // Сетка телегида с малиновой шапкой и часами в углу
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#D6D3D1")
-                rect.set(cx - r * 0.72f, cy - r * 0.65f, cx + r * 0.72f, cy + r * 0.68f)
+                paint.color = Color.parseColor("#E2E8F0")
+                rect.set(cx - r * 0.74f, cy - r * 0.66f, cx + r * 0.68f, cy + r * 0.66f)
                 canvas.drawRoundRect(rect, 14f, 14f, paint)
-                paint.color = Color.parseColor("#BE123C")
-                rect.set(cx - r * 0.72f, cy - r * 0.65f, cx + r * 0.72f, cy - r * 0.20f)
+                paint.color = Color.parseColor("#E11D48")
+                rect.set(cx - r * 0.74f, cy - r * 0.66f, cx + r * 0.68f, cy - r * 0.22f)
                 canvas.drawRoundRect(rect, 14f, 14f, paint)
-                paint.color = Color.parseColor("#DC2626")
-                canvas.drawCircle(cx + r * 0.42f, cy + r * 0.38f, r * 0.36f, paint)
-                paint.color = Color.WHITE
-                canvas.drawCircle(cx + r * 0.42f, cy + r * 0.38f, r * 0.18f, paint)
+                paint.color = Color.parseColor("#64748B")
+                for (i in 0..1) {
+                    val ly = cy + i * r * 0.26f
+                    rect.set(cx - r * 0.52f, ly - 4f, cx + r * 0.16f, ly + 4f)
+                    canvas.drawRoundRect(rect, 4f, 4f, paint)
+                }
+                paint.color = Color.parseColor("#0284C7")
+                canvas.drawCircle(cx + r * 0.46f, cy + r * 0.42f, r * 0.34f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = Color.WHITE
+                canvas.drawLine(cx + r * 0.46f, cy + r * 0.42f, cx + r * 0.46f, cy + r * 0.24f, paint)
+                canvas.drawLine(cx + r * 0.46f, cy + r * 0.42f, cx + r * 0.60f, cy + r * 0.42f, paint)
             }
             "TOP_CHANNELS" -> {
+                // Золотая корона на синем щите
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#EF4444")
-                rect.set(cx - r * 0.50f, cy - r * 0.68f, cx + r * 0.25f, cy - r * 0.02f)
-                canvas.drawRect(rect, paint)
-                paint.color = Color.parseColor("#DC2626")
-                rect.set(cx + r * 0.10f, cy - r * 0.54f, cx + r * 0.68f, cy + r * 0.10f)
-                canvas.drawRect(rect, paint)
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 7f
-                paint.color = Color.parseColor("#78350F")
-                canvas.drawLine(cx - r * 0.50f, cy - r * 0.72f, cx - r * 0.50f, cy + r * 0.75f, paint)
-            }
-            "FAVORITES" -> {
-                paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#EC4899")
-                canvas.drawCircle(cx - r * 0.36f, cy - r * 0.22f, r * 0.44f, paint)
-                canvas.drawCircle(cx + r * 0.36f, cy - r * 0.22f, r * 0.44f, paint)
+                paint.color = Color.parseColor("#4F46E5")
+                canvas.drawCircle(cx, cy, r * 0.80f, paint)
+                paint.color = Color.parseColor("#FBBF24")
                 path.reset()
-                path.moveTo(cx - r * 0.77f, cy - r * 0.04f)
-                path.lineTo(cx + r * 0.77f, cy - r * 0.04f)
-                path.lineTo(cx, cy + r * 0.78f)
+                path.moveTo(cx - r * 0.52f, cy + r * 0.36f)
+                path.lineTo(cx - r * 0.58f, cy - r * 0.24f)
+                path.lineTo(cx - r * 0.20f, cy + r * 0.06f)
+                path.lineTo(cx, cy - r * 0.42f)
+                path.lineTo(cx + r * 0.20f, cy + r * 0.06f)
+                path.lineTo(cx + r * 0.58f, cy - r * 0.24f)
+                path.lineTo(cx + r * 0.52f, cy + r * 0.36f)
                 path.close()
                 canvas.drawPath(path, paint)
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f; paint.color = Color.WHITE
+            }
+            "FAVORITES" -> {
+                // Малиновый круг с золотой звездой Избранного
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#DB2777")
+                canvas.drawCircle(cx, cy, r * 0.80f, paint)
+                paint.color = Color.parseColor("#FDE047")
                 path.reset()
-                path.moveTo(cx - r * 0.65f, cy + r * 0.05f)
-                path.lineTo(cx - r * 0.22f, cy + r * 0.05f)
-                path.lineTo(cx - r * 0.08f, cy - r * 0.28f)
-                path.lineTo(cx + r * 0.12f, cy + r * 0.32f)
-                path.lineTo(cx + r * 0.26f, cy + r * 0.05f)
-                path.lineTo(cx + r * 0.65f, cy + r * 0.05f)
+                for (i in 0 until 10) {
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val rad = if (i % 2 == 0) r * 0.56f else r * 0.24f
+                    val sx = cx + (rad * cos(a)).toFloat(); val sy = cy + (rad * sin(a)).toFloat()
+                    if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                }
+                path.close()
                 canvas.drawPath(path, paint)
             }
             "AUDIO" -> {
+                // Плоский фиолетово-синий блок с 4 цветными столбиками эквалайзера
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#6366F1")
-                rect.set(cx - r * 0.76f, cy - r * 0.62f, cx + r * 0.76f, cy + r * 0.62f)
-                canvas.drawRoundRect(rect, 14f, 14f, paint)
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 6.5f; paint.color = Color.parseColor("#E0E7FF")
-                path.reset()
-                path.moveTo(cx - r * 0.62f, cy)
-                path.cubicTo(cx - r * 0.30f, cy - r * 0.65f, cx - r * 0.10f, cy + r * 0.65f, cx + r * 0.18f, cy - r * 0.25f)
-                path.lineTo(cx + r * 0.62f, cy - r * 0.25f)
-                canvas.drawPath(path, paint)
+                paint.color = Color.parseColor("#4338CA")
+                rect.set(cx - r * 0.78f, cy - r * 0.68f, cx + r * 0.78f, cy + r * 0.68f)
+                canvas.drawRoundRect(rect, 16f, 16f, paint)
+                val xs = listOf(-0.45f, -0.15f, 0.15f, 0.45f)
+                val hs = listOf(0.28f, 0.48f, 0.38f, 0.22f)
+                val cols = listOf("#38BDF8", "#34D399", "#FBBF24", "#F472B6")
+                for (i in xs.indices) {
+                    paint.color = Color.parseColor(cols[i])
+                    rect.set(cx + xs[i] * r - 7f, cy - hs[i] * r, cx + xs[i] * r + 7f, cy + hs[i] * r)
+                    canvas.drawRoundRect(rect, 5f, 5f, paint)
+                }
             }
             "CONTROL_MODE" -> {
+                // Пульт ДУ с цветными кнопками и крестовиной
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#64748B")
-                rect.set(cx - r * 0.62f, cy - r * 0.80f, cx + r * 0.62f, cy + r * 0.80f)
-                canvas.drawRoundRect(rect, 14f, 14f, paint)
-                paint.color = Color.parseColor("#CBD5E1")
-                rect.set(cx - r * 0.44f, cy - r * 0.62f, cx + r * 0.44f, cy - r * 0.28f)
-                canvas.drawRect(rect, paint)
-                for (row in 0..2) {
+                paint.color = Color.parseColor("#334155")
+                rect.set(cx - r * 0.48f, cy - r * 0.82f, cx + r * 0.48f, cy + r * 0.82f)
+                canvas.drawRoundRect(rect, 18f, 18f, paint)
+                paint.color = Color.parseColor("#EF4444")
+                canvas.drawCircle(cx, cy - r * 0.54f, r * 0.11f, paint)
+                paint.color = Color.parseColor("#38BDF8")
+                canvas.drawCircle(cx, cy - r * 0.08f, r * 0.26f, paint)
+                paint.color = Color.WHITE
+                canvas.drawCircle(cx, cy - r * 0.08f, r * 0.10f, paint)
+                paint.color = Color.parseColor("#94A3B8")
+                for (row in 0..1) {
                     for (col in -1..1) {
-                        canvas.drawCircle(cx + col * r * 0.28f, cy + row * r * 0.26f, r * 0.08f, paint)
+                        canvas.drawCircle(cx + col * r * 0.22f, cy + r * 0.36f + row * r * 0.22f, r * 0.06f, paint)
                     }
                 }
             }
+            "SETTINGS_GEAR" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#0284C7")
+                canvas.drawCircle(cx, cy, r * 0.72f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f; paint.color = Color.WHITE
+                canvas.drawCircle(cx, cy, r * 0.32f, paint)
+            }
+            "SWAP_GROUPS" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#EA580C")
+                canvas.drawCircle(cx, cy, r * 0.72f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f; paint.color = Color.WHITE
+                canvas.drawLine(cx - r * 0.38f, cy - r * 0.16f, cx + r * 0.38f, cy - r * 0.16f, paint)
+                canvas.drawLine(cx - r * 0.38f, cy + r * 0.16f, cx + r * 0.38f, cy + r * 0.16f, paint)
+            }
             else -> {
+                // Широкоформатный ТВ-экран с подсветкой Ambilight и глазом
                 paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#F59E0B")
-                canvas.drawCircle(cx + r * 0.22f, cy - r * 0.18f, r * 0.38f, paint)
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f
-                for (deg in 0 until 360 step 45) {
-                    val rad = Math.toRadians(deg.toDouble())
-                    canvas.drawLine(
-                        cx + r * 0.22f + (r * 0.46f * cos(rad)).toFloat(), cy - r * 0.18f + (r * 0.46f * sin(rad)).toFloat(),
-                        cx + r * 0.22f + (r * 0.62f * cos(rad)).toFloat(), cy - r * 0.18f + (r * 0.62f * sin(rad)).toFloat(), paint
-                    )
-                }
-                paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#60A5FA")
-                canvas.drawCircle(cx - r * 0.32f, cy + r * 0.18f, r * 0.36f, paint)
-                canvas.drawCircle(cx + r * 0.04f, cy + r * 0.08f, r * 0.42f, paint)
-                rect.set(cx - r * 0.35f, cy + r * 0.15f, cx + r * 0.25f, cy + r * 0.54f)
-                canvas.drawRect(rect, paint)
+                paint.color = Color.parseColor("#7C3AED")
+                rect.set(cx - r * 0.82f, cy - r * 0.56f, cx + r * 0.82f, cy + r * 0.44f)
+                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                paint.color = Color.parseColor("#38BDF8")
+                rect.set(cx - r * 0.68f, cy - r * 0.42f, cx + r * 0.68f, cy + r * 0.30f)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                paint.color = Color.WHITE
+                canvas.drawCircle(cx, cy - r * 0.06f, r * 0.18f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 6f; paint.color = Color.parseColor("#94A3B8")
+                canvas.drawLine(cx - r * 0.36f, cy + r * 0.66f, cx + r * 0.36f, cy + r * 0.66f, paint)
             }
         }
     }
 
-    private fun drawNeonThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+    // =========================================================================
+    // ТЕМА 1: НЕОН (Радужные неоновые контуры на чёрном со смыслом IPTV)
+    // =========================================================================
+    private fun drawNeonIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val r = minDim * 0.35f
         val grad = LinearGradient(
             cx - r, cy - r, cx + r, cy + r,
-            intArrayOf(Color.parseColor("#FF7597"), Color.parseColor("#FFE082"), Color.parseColor("#64FFDA"), Color.parseColor("#7C4DFF")),
+            intArrayOf(Color.parseColor("#FF7597"), Color.parseColor("#FFE082"), Color.parseColor("#64FFDA"), Color.parseColor("#00E5FF")),
             null, Shader.TileMode.CLAMP
         )
         if (isTileFocused) {
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 2.5f
-            paint.shader = grad
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.8f; paint.shader = grad
             canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
         }
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 4.6f
+        paint.strokeWidth = 4.5f
         paint.shader = grad
 
         when (iconType) {
             "PLAYLISTS" -> {
+                // Неоновая папка со значком Play внутри
                 path.reset()
-                path.moveTo(cx - r * 0.55f, cy - r * 0.72f)
-                path.lineTo(cx + r * 0.68f, cy)
-                path.lineTo(cx - r * 0.55f, cy + r * 0.72f)
+                path.moveTo(cx - r * 0.78f, cy - r * 0.52f)
+                path.lineTo(cx - r * 0.18f, cy - r * 0.52f)
+                path.lineTo(cx + r * 0.02f, cy - r * 0.30f)
+                path.lineTo(cx + r * 0.78f, cy - r * 0.30f)
+                path.lineTo(cx + r * 0.78f, cy + r * 0.58f)
+                path.lineTo(cx - r * 0.78f, cy + r * 0.58f)
                 path.close()
                 canvas.drawPath(path, paint)
-                canvas.drawLine(cx - r * 0.55f, cy - r * 0.72f, cx + r * 0.15f, cy + r * 0.30f, paint)
-                canvas.drawLine(cx - r * 0.55f, cy + r * 0.72f, cx + r * 0.15f, cy - r * 0.30f, paint)
+                path.reset()
+                path.moveTo(cx - r * 0.16f, cy - r * 0.08f)
+                path.lineTo(cx + r * 0.24f, cy + r * 0.15f)
+                path.lineTo(cx - r * 0.16f, cy + r * 0.38f)
+                path.close()
+                canvas.drawPath(path, paint)
             }
             "EDITOR" -> {
+                // 3 неоновые строки каналов и диагональный карандаш
                 for (i in -1..1) {
                     val y = cy + i * r * 0.38f
-                    canvas.drawLine(cx - r * 0.68f, y, cx + r * 0.55f, y, paint)
+                    canvas.drawLine(cx - r * 0.68f, y, cx + r * 0.20f, y, paint)
                 }
                 path.reset()
-                path.moveTo(cx + r * 0.12f, cy - r * 0.68f)
-                path.lineTo(cx + r * 0.38f, cy - r * 0.56f)
-                path.lineTo(cx - r * 0.08f, cy + r * 0.62f)
-                path.lineTo(cx - r * 0.32f, cy + r * 0.72f)
-                path.lineTo(cx - r * 0.32f, cy + r * 0.46f)
+                path.moveTo(cx + r * 0.38f, cy - r * 0.60f)
+                path.lineTo(cx + r * 0.62f, cy - r * 0.42f)
+                path.lineTo(cx + r * 0.12f, cy + r * 0.52f)
+                path.lineTo(cx - r * 0.10f, cy + r * 0.60f)
+                path.lineTo(cx - r * 0.08f, cy + r * 0.36f)
                 path.close()
                 canvas.drawPath(path, paint)
             }
             "ANALYZER" -> {
-                canvas.drawCircle(cx - r * 0.15f, cy - r * 0.15f, r * 0.52f, paint)
-                canvas.drawLine(cx + r * 0.22f, cy + r * 0.22f, cx + r * 0.72f, cy + r * 0.72f, paint)
+                // Неоновые дуги сигнала и проверочная галочка внизу
+                for (ring in 1..3) {
+                    val rad = r * (0.28f * ring)
+                    rect.set(cx - rad, cy - rad + r * 0.15f, cx + rad, cy + rad + r * 0.15f)
+                    canvas.drawArc(rect, 210f, 120f, false, paint)
+                }
+                canvas.drawLine(cx - r * 0.20f, cy + r * 0.34f, cx - r * 0.04f, cy + r * 0.50f, paint)
+                canvas.drawLine(cx - r * 0.04f, cy + r * 0.50f, cx + r * 0.28f, cy + r * 0.18f, paint)
             }
             "THEMES" -> {
-                rect.set(cx - r * 0.66f, cy - r * 0.66f, cx - r * 0.10f, cy - r * 0.10f)
-                canvas.drawRoundRect(rect, 10f, 10f, paint)
-                rect.set(cx + r * 0.10f, cy - r * 0.66f, cx + r * 0.66f, cy - r * 0.10f)
-                canvas.drawRoundRect(rect, 10f, 10f, paint)
-                rect.set(cx - r * 0.66f, cy + r * 0.10f, cx - r * 0.10f, cy + r * 0.66f)
-                canvas.drawRoundRect(rect, 10f, 10f, paint)
-                canvas.drawCircle(cx + r * 0.38f, cy + r * 0.38f, r * 0.28f, paint)
+                // Неоновая палитра с кружками красок
+                canvas.drawCircle(cx, cy, r * 0.74f, paint)
+                canvas.drawCircle(cx - r * 0.28f, cy - r * 0.18f, r * 0.12f, paint)
+                canvas.drawCircle(cx + r * 0.22f, cy - r * 0.24f, r * 0.12f, paint)
+                canvas.drawCircle(cx + r * 0.20f, cy + r * 0.22f, r * 0.14f, paint)
             }
             "BUFFER" -> {
-                rect.set(cx - r * 0.32f, cy - r * 0.72f, cx + r * 0.32f, cy - r * 0.38f)
-                canvas.drawRoundRect(rect, 6f, 6f, paint)
-                rect.set(cx - r * 0.20f, cy - r * 0.38f, cx + r * 0.20f, cy + r * 0.72f)
-                canvas.drawRoundRect(rect, 10f, 10f, paint)
-                canvas.drawCircle(cx, cy + r * 0.10f, r * 0.08f, paint)
+                // Неоновое кольцо буфера с молнией внутри
+                rect.set(cx - r * 0.72f, cy - r * 0.72f, cx + r * 0.72f, cy + r * 0.72f)
+                canvas.drawArc(rect, 140f, 260f, false, paint)
+                path.reset()
+                path.moveTo(cx + r * 0.08f, cy - r * 0.42f)
+                path.lineTo(cx - r * 0.24f, cy + r * 0.04f)
+                path.lineTo(cx + r * 0.22f, cy + r * 0.04f)
+                path.lineTo(cx - r * 0.08f, cy + r * 0.44f)
+                canvas.drawPath(path, paint)
             }
             "DECODER" -> {
-                rect.set(cx - r * 0.75f, cy - r * 0.46f, cx + r * 0.75f, cy + r * 0.46f)
-                canvas.drawRoundRect(rect, 8f, 8f, paint)
-                canvas.drawCircle(cx, cy, r * 0.24f, paint)
-                canvas.drawLine(cx - r * 0.75f, cy - r * 0.18f, cx - r * 0.42f, cy - r * 0.18f, paint)
-                canvas.drawLine(cx + r * 0.42f, cy + r * 0.18f, cx + r * 0.75f, cy + r * 0.18f, paint)
+                // Неоновый процессор с выводами по 4 сторонам
+                rect.set(cx - r * 0.52f, cy - r * 0.52f, cx + r * 0.52f, cy + r * 0.52f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                rect.set(cx - r * 0.22f, cy - r * 0.22f, cx + r * 0.22f, cy + r * 0.22f)
+                canvas.drawRect(rect, paint)
+                for (k in -1..1) {
+                    val off = k * r * 0.28f
+                    canvas.drawLine(cx + off, cy - r * 0.76f, cx + off, cy - r * 0.52f, paint)
+                    canvas.drawLine(cx + off, cy + r * 0.52f, cx + off, cy + r * 0.76f, paint)
+                    canvas.drawLine(cx - r * 0.76f, cy + off, cx - r * 0.52f, cy + off, paint)
+                    canvas.drawLine(cx + r * 0.52f, cy + off, cx + r * 0.76f, cy + off, paint)
+                }
             }
             "EPG_GRID" -> {
-                canvas.drawCircle(cx, cy, r * 0.74f, paint)
-                canvas.drawLine(cx, cy - r * 0.46f, cx, cy, paint)
-                canvas.drawLine(cx, cy, cx + r * 0.34f, cy + r * 0.26f, paint)
+                // Неоновый телегид с расписанием и часами
+                rect.set(cx - r * 0.70f, cy - r * 0.60f, cx + r * 0.70f, cy + r * 0.60f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                canvas.drawLine(cx - r * 0.70f, cy - r * 0.20f, cx + r * 0.70f, cy - r * 0.20f, paint)
+                canvas.drawLine(cx - r * 0.44f, cy + r * 0.08f, cx + r * 0.44f, cy + r * 0.08f, paint)
+                canvas.drawLine(cx - r * 0.44f, cy + r * 0.34f, cx + r * 0.16f, cy + r * 0.34f, paint)
             }
             "TOP_CHANNELS" -> {
+                // Неоновая корона ТОП-каналов
                 path.reset()
-                path.moveTo(cx + r * 0.62f, cy - r * 0.62f)
-                path.lineTo(cx + r * 0.16f, cy + r * 0.16f)
-                path.lineTo(cx - r * 0.62f, cy + r * 0.62f)
-                path.lineTo(cx - r * 0.16f, cy - r * 0.16f)
+                path.moveTo(cx - r * 0.62f, cy + r * 0.44f)
+                path.lineTo(cx - r * 0.70f, cy - r * 0.30f)
+                path.lineTo(cx - r * 0.24f, cy + r * 0.08f)
+                path.lineTo(cx, cy - r * 0.50f)
+                path.lineTo(cx + r * 0.24f, cy + r * 0.08f)
+                path.lineTo(cx + r * 0.70f, cy - r * 0.30f)
+                path.lineTo(cx + r * 0.62f, cy + r * 0.44f)
                 path.close()
                 canvas.drawPath(path, paint)
-                canvas.drawLine(cx - r * 0.16f, cy - r * 0.16f, cx + r * 0.16f, cy + r * 0.16f, paint)
             }
             "FAVORITES" -> {
-                canvas.drawCircle(cx, cy, r * 0.74f, paint)
-                rect.set(cx - r * 0.36f, cy - r * 0.74f, cx + r * 0.36f, cy + r * 0.74f)
-                canvas.drawOval(rect, paint)
-                canvas.drawLine(cx - r * 0.70f, cy - r * 0.22f, cx + r * 0.70f, cy - r * 0.22f, paint)
-                canvas.drawLine(cx - r * 0.70f, cy + r * 0.22f, cx + r * 0.70f, cy + r * 0.22f, paint)
+                // Неоновая пятиконечная звезда
+                path.reset()
+                for (i in 0 until 10) {
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val rad = if (i % 2 == 0) r * 0.74f else r * 0.32f
+                    val sx = cx + (rad * cos(a)).toFloat(); val sy = cy + (rad * sin(a)).toFloat()
+                    if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                }
+                path.close()
+                canvas.drawPath(path, paint)
             }
             "AUDIO" -> {
-                canvas.drawCircle(cx - r * 0.18f, cy + r * 0.38f, r * 0.32f, paint)
-                canvas.drawLine(cx + r * 0.14f, cy + r * 0.38f, cx + r * 0.14f, cy - r * 0.68f, paint)
+                // Неоновая музыкальная нота + волны звука
+                canvas.drawCircle(cx - r * 0.22f, cy + r * 0.36f, r * 0.28f, paint)
+                canvas.drawLine(cx + r * 0.06f, cy + r * 0.36f, cx + r * 0.06f, cy - r * 0.62f, paint)
                 path.reset()
-                path.moveTo(cx + r * 0.14f, cy - r * 0.68f)
-                path.quadTo(cx + r * 0.68f, cy - r * 0.42f, cx + r * 0.56f, cy - r * 0.08f)
+                path.moveTo(cx + r * 0.06f, cy - r * 0.62f)
+                path.quadTo(cx + r * 0.58f, cy - r * 0.38f, cx + r * 0.48f, cy - r * 0.05f)
                 canvas.drawPath(path, paint)
             }
             "CONTROL_MODE" -> {
-                path.reset()
-                path.moveTo(cx - r * 0.45f, cy - r * 0.65f)
-                path.quadTo(cx - r * 0.80f, cy + r * 0.15f, cx + r * 0.35f, cy + r * 0.70f)
-                path.lineTo(cx + r * 0.62f, cy + r * 0.42f)
-                path.lineTo(cx + r * 0.28f, cy + r * 0.15f)
-                path.lineTo(cx + r * 0.08f, cy + r * 0.32f)
-                path.quadTo(cx - r * 0.32f, cy + r * 0.05f, cx - r * 0.22f, cy - r * 0.22f)
-                path.lineTo(cx - r * 0.04f, cy - r * 0.38f)
-                path.close()
-                canvas.drawPath(path, paint)
+                // Неоновый ТВ-пульт с крестовиной
+                rect.set(cx - r * 0.44f, cy - r * 0.74f, cx + r * 0.44f, cy + r * 0.74f)
+                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                canvas.drawCircle(cx, cy - r * 0.18f, r * 0.20f, paint)
+                canvas.drawLine(cx - r * 0.16f, cy + r * 0.34f, cx + r * 0.16f, cy + r * 0.34f, paint)
             }
-            else -> {
-                canvas.drawCircle(cx, cy, r * 0.26f, paint)
-                canvas.drawCircle(cx, cy, r * 0.58f, paint)
+            "SETTINGS_GEAR" -> {
+                canvas.drawCircle(cx, cy, r * 0.48f, paint)
                 for (deg in 0 until 360 step 45) {
                     val rad = Math.toRadians(deg.toDouble())
-                    canvas.drawLine(
-                        cx + (r * 0.58f * cos(rad)).toFloat(), cy + (r * 0.58f * sin(rad)).toFloat(),
-                        cx + (r * 0.78f * cos(rad)).toFloat(), cy + (r * 0.78f * sin(rad)).toFloat(), paint
-                    )
+                    canvas.drawLine(cx + (r * 0.48f * cos(rad)).toFloat(), cy + (r * 0.48f * sin(rad)).toFloat(), cx + (r * 0.72f * cos(rad)).toFloat(), cy + (r * 0.72f * sin(rad)).toFloat(), paint)
                 }
+            }
+            "SWAP_GROUPS" -> {
+                canvas.drawLine(cx - r * 0.55f, cy - r * 0.22f, cx + r * 0.55f, cy - r * 0.22f, paint)
+                canvas.drawLine(cx - r * 0.55f, cy + r * 0.22f, cx + r * 0.55f, cy + r * 0.22f, paint)
+            }
+            else -> {
+                // Неоновый широкоформатный экран ТВ с глазом внутри
+                rect.set(cx - r * 0.74f, cy - r * 0.52f, cx + r * 0.74f, cy + r * 0.38f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                canvas.drawCircle(cx, cy - r * 0.07f, r * 0.20f, paint)
+                canvas.drawLine(cx - r * 0.36f, cy + r * 0.62f, cx + r * 0.36f, cy + r * 0.62f, paint)
             }
         }
     }
 
-    private fun drawAmoledThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+    // =========================================================================
+    // ТЕМА 2: АМОЛЕД БЛЭК (Тонкие белые чертежи на чёрном со смыслом IPTV)
+    // =========================================================================
+    private fun drawAmoledIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val r = minDim * 0.36f
         if (isTileFocused) {
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 2.2f
-            paint.color = Color.WHITE
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.2f; paint.color = Color.WHITE
             canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
         }
         paint.style = Paint.Style.STROKE
@@ -628,146 +744,147 @@ class ThemedTileView(
 
         when (iconType) {
             "PLAYLISTS" -> {
+                // Тонкий чертёж папки с двойным треугольником Play
+                rect.set(cx - r * 0.74f, cy - r * 0.52f, cx + r * 0.74f, cy + r * 0.58f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                canvas.drawLine(cx - r * 0.74f, cy - r * 0.24f, cx + r * 0.74f, cy - r * 0.24f, paint)
                 path.reset()
-                path.moveTo(cx - r * 0.58f, cy - r * 0.65f)
-                path.lineTo(cx + r * 0.58f, cy)
-                path.lineTo(cx - r * 0.58f, cy + r * 0.65f)
+                path.moveTo(cx - r * 0.18f, cy - r * 0.05f)
+                path.lineTo(cx + r * 0.26f, cy + r * 0.18f)
+                path.lineTo(cx - r * 0.18f, cy + r * 0.41f)
                 path.close()
-                canvas.drawPath(path, paint)
-                path.reset()
-                path.moveTo(cx - r * 0.25f, cy - r * 0.45f)
-                path.lineTo(cx + r * 0.58f, cy)
-                path.lineTo(cx - r * 0.25f, cy + r * 0.45f)
                 canvas.drawPath(path, paint)
             }
             "EDITOR" -> {
-                val s = r * 0.58f
-                rect.set(cx - r * 0.72f, cy - r * 0.72f, cx - r * 0.72f + s, cy - r * 0.72f + s)
-                canvas.drawRoundRect(rect, 10f, 10f, paint)
-                canvas.drawLine(rect.centerX() - 10f, rect.centerY(), rect.centerX() + 10f, rect.centerY(), paint)
-                canvas.drawLine(rect.centerX(), rect.centerY() - 10f, rect.centerX(), rect.centerY() + 10f, paint)
+                // Чертёж 4 блоков с галочками и ползунками
+                val s = r * 0.56f
+                rect.set(cx - r * 0.70f, cy - r * 0.70f, cx - r * 0.70f + s, cy - r * 0.70f + s)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                canvas.drawLine(rect.centerX() - 8f, rect.centerY(), rect.centerX() - 2f, rect.centerY() + 7f, paint)
+                canvas.drawLine(rect.centerX() - 2f, rect.centerY() + 7f, rect.centerX() + 9f, rect.centerY() - 6f, paint)
+                canvas.drawLine(cx + r * 0.04f, cy - r * 0.42f, cx + r * 0.70f, cy - r * 0.42f, paint)
 
-                rect.set(cx + r * 0.14f, cy - r * 0.72f, cx + r * 0.14f + s, cy - r * 0.72f + s)
-                canvas.drawRoundRect(rect, 10f, 10f, paint)
-
-                rect.set(cx - r * 0.72f, cy + r * 0.14f, cx - r * 0.72f + s, cy + r * 0.14f + s)
-                canvas.drawRoundRect(rect, 10f, 10f, paint)
-
-                rect.set(cx + r * 0.14f, cy + r * 0.14f, cx + r * 0.14f + s, cy + r * 0.14f + s)
-                canvas.drawRoundRect(rect, 10f, 10f, paint)
-                canvas.drawLine(rect.centerX() - 10f, rect.centerY() - 5f, rect.centerX() + 10f, rect.centerY() - 5f, paint)
-                canvas.drawLine(rect.centerX() - 10f, rect.centerY() + 5f, rect.centerX() + 10f, rect.centerY() + 5f, paint)
+                rect.set(cx - r * 0.70f, cy + r * 0.12f, cx - r * 0.70f + s, cy + r * 0.12f + s)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                canvas.drawLine(cx + r * 0.04f, cy + r * 0.40f, cx + r * 0.70f, cy + r * 0.40f, paint)
             }
             "ANALYZER" -> {
-                canvas.drawCircle(cx, cy, r * 0.16f, paint)
-                val angles = listOf(-90.0, -25.0, 45.0, 135.0, 205.0)
-                for (deg in angles) {
-                    val rad = Math.toRadians(deg)
-                    val ex = cx + (r * 0.65f * cos(rad)).toFloat()
-                    val ey = cy + (r * 0.65f * sin(rad)).toFloat()
-                    canvas.drawLine(cx + (r * 0.16f * cos(rad)).toFloat(), cy + (r * 0.16f * sin(rad)).toFloat(), ex, ey, paint)
-                    canvas.drawCircle(ex, ey, r * 0.15f, paint)
-                }
+                // Круговой радар с сеткой координат и точками сигнала
+                canvas.drawCircle(cx, cy, r * 0.74f, paint)
+                canvas.drawCircle(cx, cy, r * 0.38f, paint)
+                canvas.drawLine(cx - r * 0.74f, cy, cx + r * 0.74f, cy, paint)
+                canvas.drawLine(cx, cy - r * 0.74f, cx, cy + r * 0.74f, paint)
+                canvas.drawCircle(cx + r * 0.26f, cy - r * 0.24f, r * 0.09f, paint)
             }
             "THEMES" -> {
-                canvas.drawCircle(cx, cy, r * 0.66f, paint)
-                canvas.drawCircle(cx, cy, r * 0.22f, paint)
-                path.reset()
-                path.moveTo(cx - r * 0.36f, cy + r * 0.76f)
-                path.lineTo(cx, cy)
-                path.lineTo(cx + r * 0.36f, cy + r * 0.76f)
-                canvas.drawPath(path, paint)
-                rect.set(cx - r * 0.80f, cy - r * 0.36f, cx - r * 0.48f, cy - r * 0.06f)
-                canvas.drawRoundRect(rect, 6f, 6f, paint)
-                rect.set(cx + r * 0.48f, cy - r * 0.56f, cx + r * 0.80f, cy - r * 0.26f)
-                canvas.drawRoundRect(rect, 6f, 6f, paint)
+                // Колесо стилей с 6 секторами
+                canvas.drawCircle(cx, cy, r * 0.72f, paint)
+                canvas.drawCircle(cx, cy, r * 0.24f, paint)
+                for (deg in 0 until 360 step 60) {
+                    val rad = Math.toRadians(deg.toDouble())
+                    canvas.drawLine(
+                        cx + (r * 0.24f * cos(rad)).toFloat(), cy + (r * 0.24f * sin(rad)).toFloat(),
+                        cx + (r * 0.72f * cos(rad)).toFloat(), cy + (r * 0.72f * sin(rad)).toFloat(), paint
+                    )
+                }
             }
             "BUFFER" -> {
-                canvas.drawCircle(cx, cy, r * 0.76f, paint)
-                paint.style = Paint.Style.FILL
-                paint.textSize = r * 0.72f
-                paint.textAlign = Paint.Align.CENTER
-                paint.typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-                canvas.drawText("64", cx, cy + r * 0.26f, paint)
+                // Спидометр со шкалой и стрелкой
+                rect.set(cx - r * 0.74f, cy - r * 0.64f, cx + r * 0.74f, cy + r * 0.84f)
+                canvas.drawArc(rect, 160f, 220f, false, paint)
+                canvas.drawCircle(cx, cy + r * 0.16f, r * 0.12f, paint)
+                canvas.drawLine(cx, cy + r * 0.16f, cx + r * 0.42f, cy - r * 0.28f, paint)
             }
             "DECODER" -> {
-                rect.set(cx - r * 0.74f, cy - r * 0.74f, cx + r * 0.74f, cy + r * 0.74f)
+                // Чертёж процессора CPU-Z с контактами
+                rect.set(cx - r * 0.72f, cy - r * 0.72f, cx + r * 0.72f, cy + r * 0.72f)
                 canvas.drawRoundRect(rect, 12f, 12f, paint)
                 rect.set(cx - r * 0.38f, cy - r * 0.38f, cx + r * 0.38f, cy + r * 0.38f)
                 canvas.drawRect(rect, paint)
                 for (k in -1..1) {
                     val off = k * r * 0.24f
-                    canvas.drawCircle(cx + off, cy - r * 0.56f, r * 0.06f, paint)
-                    canvas.drawCircle(cx + off, cy + r * 0.56f, r * 0.06f, paint)
-                    canvas.drawCircle(cx - r * 0.56f, cy + off, r * 0.06f, paint)
-                    canvas.drawCircle(cx + r * 0.56f, cy + off, r * 0.06f, paint)
+                    canvas.drawCircle(cx + off, cy - r * 0.55f, r * 0.06f, paint)
+                    canvas.drawCircle(cx + off, cy + r * 0.55f, r * 0.06f, paint)
+                    canvas.drawCircle(cx - r * 0.55f, cy + off, r * 0.06f, paint)
+                    canvas.drawCircle(cx + r * 0.55f, cy + off, r * 0.06f, paint)
                 }
             }
             "EPG_GRID" -> {
-                rect.set(cx - r * 0.70f, cy - r * 0.68f, cx + r * 0.70f, cy + r * 0.70f)
-                canvas.drawRoundRect(rect, 14f, 14f, paint)
-                canvas.drawCircle(cx - r * 0.32f, cy - r * 0.46f, r * 0.07f, paint)
-                canvas.drawCircle(cx + r * 0.32f, cy - r * 0.46f, r * 0.07f, paint)
-                paint.style = Paint.Style.FILL
-                paint.textSize = r * 0.76f
-                paint.textAlign = Paint.Align.CENTER
-                paint.typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-                canvas.drawText("31", cx, cy + r * 0.36f, paint)
+                // Чертёж сетки ТВ-программы с часами сверху
+                rect.set(cx - r * 0.72f, cy - r * 0.66f, cx + r * 0.72f, cy + r * 0.66f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                canvas.drawLine(cx - r * 0.72f, cy - r * 0.22f, cx + r * 0.72f, cy - r * 0.22f, paint)
+                canvas.drawLine(cx - r * 0.24f, cy - r * 0.22f, cx - r * 0.24f, cy + r * 0.66f, paint)
+                canvas.drawLine(cx - r * 0.72f, cy + r * 0.22f, cx + r * 0.72f, cy + r * 0.22f, paint)
             }
             "TOP_CHANNELS" -> {
+                // Тонкий чертёж короны с точками на вершинах
                 path.reset()
-                path.moveTo(cx - r * 0.65f, cy - r * 0.58f)
-                path.lineTo(cx + r * 0.15f, cy - r * 0.58f)
-                path.lineTo(cx - r * 0.45f, cy + r * 0.58f)
-                path.lineTo(cx + r * 0.65f, cy + r * 0.58f)
-                path.lineTo(cx + r * 0.20f, cy - r * 0.58f)
-                path.lineTo(cx - r * 0.18f, cy + r * 0.25f)
+                path.moveTo(cx - r * 0.58f, cy + r * 0.42f)
+                path.lineTo(cx - r * 0.64f, cy - r * 0.22f)
+                path.lineTo(cx - r * 0.22f, cy + r * 0.08f)
+                path.lineTo(cx, cy - r * 0.42f)
+                path.lineTo(cx + r * 0.22f, cy + r * 0.08f)
+                path.lineTo(cx + r * 0.64f, cy - r * 0.22f)
+                path.lineTo(cx + r * 0.58f, cy + r * 0.42f)
+                path.close()
                 canvas.drawPath(path, paint)
+                canvas.drawCircle(cx, cy - r * 0.52f, r * 0.07f, paint)
             }
             "FAVORITES" -> {
-                rect.set(cx - r * 0.74f, cy - r * 0.60f, cx + r * 0.74f, cy + r * 0.60f)
-                canvas.drawRoundRect(rect, 10f, 10f, paint)
-                canvas.drawCircle(cx + r * 0.34f, cy - r * 0.22f, r * 0.16f, paint)
+                // Тонкая пятиконечная звезда внутри контура экрана
+                rect.set(cx - r * 0.74f, cy - r * 0.58f, cx + r * 0.74f, cy + r * 0.58f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
                 path.reset()
-                path.moveTo(cx - r * 0.62f, cy + r * 0.48f)
-                path.lineTo(cx - r * 0.15f, cy - r * 0.12f)
-                path.lineTo(cx + r * 0.25f, cy + r * 0.32f)
-                path.lineTo(cx + r * 0.45f, cy + r * 0.12f)
-                path.lineTo(cx + r * 0.65f, cy + r * 0.48f)
+                for (i in 0 until 10) {
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val rad = if (i % 2 == 0) r * 0.42f else r * 0.18f
+                    val sx = cx + (rad * cos(a)).toFloat(); val sy = cy + (rad * sin(a)).toFloat()
+                    if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                }
+                path.close()
                 canvas.drawPath(path, paint)
             }
             "AUDIO" -> {
+                // Вертикальные линии звуковой дорожки Voice Recorder
                 val xs = listOf(-0.60f, -0.36f, -0.12f, 0.12f, 0.36f, 0.60f)
-                val hs = listOf(0.18f, 0.46f, 0.74f, 0.32f, 0.56f, 0.20f)
+                val hs = listOf(0.20f, 0.48f, 0.74f, 0.34f, 0.58f, 0.22f)
                 for (i in xs.indices) {
                     canvas.drawLine(cx + xs[i] * r, cy - hs[i] * r, cx + xs[i] * r, cy + hs[i] * r, paint)
                 }
             }
             "CONTROL_MODE" -> {
-                rect.set(cx - r * 0.78f, cy - r * 0.46f, cx + r * 0.78f, cy + r * 0.46f)
-                canvas.drawRoundRect(rect, 26f, 26f, paint)
+                // Контурный пульт/геймпад с крестовиной
+                rect.set(cx - r * 0.76f, cy - r * 0.46f, cx + r * 0.76f, cy + r * 0.46f)
+                canvas.drawRoundRect(rect, 24f, 24f, paint)
                 canvas.drawCircle(cx - r * 0.36f, cy, r * 0.22f, paint)
-                canvas.drawCircle(cx + r * 0.36f, cy, r * 0.22f, paint)
                 canvas.drawLine(cx - r * 0.36f - 8f, cy, cx - r * 0.36f + 8f, cy, paint)
                 canvas.drawLine(cx - r * 0.36f, cy - 8f, cx - r * 0.36f, cy + 8f, paint)
+                canvas.drawCircle(cx + r * 0.36f, cy - r * 0.10f, r * 0.07f, paint)
+                canvas.drawCircle(cx + r * 0.24f, cy + r * 0.10f, r * 0.07f, paint)
+            }
+            "SETTINGS_GEAR" -> {
+                canvas.drawCircle(cx, cy, r * 0.46f, paint)
+                canvas.drawCircle(cx, cy, r * 0.20f, paint)
+            }
+            "SWAP_GROUPS" -> {
+                canvas.drawLine(cx - r * 0.52f, cy - r * 0.20f, cx + r * 0.52f, cy - r * 0.20f, paint)
+                canvas.drawLine(cx - r * 0.52f, cy + r * 0.20f, cx + r * 0.52f, cy + r * 0.20f, paint)
             }
             else -> {
-                rect.set(cx - r * 0.76f, cy - r * 0.54f, cx + r * 0.76f, cy + r * 0.54f)
+                // Экран ТВ с объективом диафрагмы внутри
+                rect.set(cx - r * 0.76f, cy - r * 0.52f, cx + r * 0.76f, cy + r * 0.40f)
                 canvas.drawRoundRect(rect, 10f, 10f, paint)
-                canvas.drawCircle(cx, cy, r * 0.34f, paint)
-                canvas.drawCircle(cx + r * 0.52f, cy - r * 0.32f, r * 0.08f, paint)
-                for (deg in 0 until 360 step 60) {
-                    val rad = Math.toRadians(deg.toDouble())
-                    canvas.drawLine(
-                        cx + (r * 0.12f * cos(rad)).toFloat(), cy + (r * 0.12f * sin(rad)).toFloat(),
-                        cx + (r * 0.32f * cos(rad + 0.5)).toFloat(), cy + (r * 0.32f * sin(rad + 0.5)).toFloat(), paint
-                    )
-                }
+                canvas.drawCircle(cx, cy - r * 0.06f, r * 0.28f, paint)
+                canvas.drawLine(cx - r * 0.34f, cy + r * 0.62f, cx + r * 0.34f, cy + r * 0.62f, paint)
             }
         }
     }
 
-    private fun drawMonochromeThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+    // =========================================================================
+    // ТЕМА 3: МОНОХРОМ (Светлые плитки со строгими графитовыми пиктограммами IPTV)
+    // =========================================================================
+    private fun drawMonochromeIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val pad = minDim * 0.08f
         val r = (minDim - pad * 2) * 0.35f
         rect.set(pad, pad, width - pad, height - pad)
@@ -779,7 +896,7 @@ class ThemedTileView(
         paint.color = if (isTileFocused) Color.parseColor("#3F3F46") else Color.parseColor("#D4D4D8")
         canvas.drawRect(rect, paint)
 
-        val gray = Color.parseColor("#71717A")
+        val gray = Color.parseColor("#52525B")
         paint.color = gray
 
         when (iconType) {
@@ -787,7 +904,8 @@ class ThemedTileView(
                 paint.style = Paint.Style.FILL
                 for (i in -1..1) {
                     val y = cy + i * r * 0.42f
-                    rect.set(cx - r * 0.55f, y - r * 0.11f, cx + r * 0.55f, y + r * 0.11f)
+                    canvas.drawCircle(cx - r * 0.52f, y, r * 0.11f, paint)
+                    rect.set(cx - r * 0.26f, y - r * 0.09f, cx + r * 0.58f, y + r * 0.09f)
                     canvas.drawRect(rect, paint)
                 }
             }
@@ -804,27 +922,19 @@ class ThemedTileView(
             }
             "ANALYZER" -> {
                 paint.style = Paint.Style.FILL
-                canvas.drawCircle(cx - r * 0.42f, cy + r * 0.42f, r * 0.14f, paint)
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.5f
-                rect.set(cx - r * 0.95f, cy - r * 0.10f, cx + r * 0.10f, cy + r * 0.95f)
-                canvas.drawArc(rect, -90f, 90f, false, paint)
-                rect.set(cx - r * 1.30f, cy - r * 0.45f, cx + r * 0.45f, cy + r * 1.30f)
-                canvas.drawArc(rect, -90f, 90f, false, paint)
+                for (i in 0..3) {
+                    val left = cx - r * 0.58f + i * r * 0.32f
+                    val top = cy + r * 0.52f - (i + 1) * r * 0.26f
+                    rect.set(left, top, left + r * 0.20f, cy + r * 0.52f)
+                    canvas.drawRect(rect, paint)
+                }
             }
             "THEMES" -> {
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
-                canvas.drawCircle(cx, cy, r * 0.52f, paint)
+                canvas.drawCircle(cx, cy, r * 0.54f, paint)
                 paint.style = Paint.Style.FILL
-                rect.set(cx - r * 0.52f, cy - r * 0.52f, cx + r * 0.52f, cy + r * 0.52f)
+                rect.set(cx - r * 0.54f, cy - r * 0.54f, cx + r * 0.54f, cy + r * 0.54f)
                 canvas.drawArc(rect, 90f, 180f, true, paint)
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
-                for (deg in 0 until 360 step 45) {
-                    val rad = Math.toRadians(deg.toDouble())
-                    canvas.drawLine(
-                        cx + (r * 0.62f * cos(rad)).toFloat(), cy + (r * 0.62f * sin(rad)).toFloat(),
-                        cx + (r * 0.78f * cos(rad)).toFloat(), cy + (r * 0.78f * sin(rad)).toFloat(), paint
-                    )
-                }
             }
             "BUFFER" -> {
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f
@@ -833,14 +943,16 @@ class ThemedTileView(
                 canvas.drawArc(rect, 30f, 130f, false, paint)
             }
             "DECODER" -> {
-                paint.style = Paint.Style.FILL
-                for (deg in 0 until 360 step 45) {
-                    val rad = Math.toRadians(deg.toDouble())
-                    canvas.drawCircle(cx + (r * 0.56f * cos(rad)).toFloat(), cy + (r * 0.56f * sin(rad)).toFloat(), r * 0.14f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
+                rect.set(cx - r * 0.48f, cy - r * 0.48f, cx + r * 0.48f, cy + r * 0.48f)
+                canvas.drawRect(rect, paint)
+                for (k in -1..1) {
+                    val off = k * r * 0.26f
+                    canvas.drawLine(cx + off, cy - r * 0.70f, cx + off, cy - r * 0.48f, paint)
+                    canvas.drawLine(cx + off, cy + r * 0.48f, cx + off, cy + r * 0.70f, paint)
+                    canvas.drawLine(cx - r * 0.70f, cy + off, cx - r * 0.48f, cy + off, paint)
+                    canvas.drawLine(cx + r * 0.48f, cy + off, cx + r * 0.70f, cy + off, paint)
                 }
-                canvas.drawCircle(cx, cy, r * 0.52f, paint)
-                paint.color = Color.parseColor("#F8FAFC")
-                canvas.drawCircle(cx, cy, r * 0.22f, paint)
             }
             "EPG_GRID" -> {
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f
@@ -856,12 +968,16 @@ class ThemedTileView(
             }
             "TOP_CHANNELS" -> {
                 paint.style = Paint.Style.FILL
-                for (i in 0..3) {
-                    val left = cx - r * 0.58f + i * r * 0.32f
-                    val top = cy + r * 0.50f - (i + 1) * r * 0.26f
-                    rect.set(left, top, left + r * 0.20f, cy + r * 0.50f)
-                    canvas.drawRect(rect, paint)
-                }
+                path.reset()
+                path.moveTo(cx - r * 0.56f, cy + r * 0.42f)
+                path.lineTo(cx - r * 0.62f, cy - r * 0.22f)
+                path.lineTo(cx - r * 0.22f, cy + r * 0.06f)
+                path.lineTo(cx, cy - r * 0.44f)
+                path.lineTo(cx + r * 0.22f, cy + r * 0.06f)
+                path.lineTo(cx + r * 0.62f, cy - r * 0.22f)
+                path.lineTo(cx + r * 0.56f, cy + r * 0.42f)
+                path.close()
+                canvas.drawPath(path, paint)
             }
             "FAVORITES" -> {
                 paint.style = Paint.Style.FILL
@@ -889,30 +1005,27 @@ class ThemedTileView(
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f
                 rect.set(cx - r * 0.10f, cy - r * 0.36f, cx + r * 0.38f, cy + r * 0.36f)
                 canvas.drawArc(rect, -55f, 110f, false, paint)
-                rect.set(cx - r * 0.22f, cy - r * 0.58f, cx + r * 0.60f, cy + r * 0.58f)
-                canvas.drawArc(rect, -55f, 110f, false, paint)
             }
             "CONTROL_MODE" -> {
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
                 rect.set(cx - r * 0.36f, cy - r * 0.64f, cx + r * 0.36f, cy + r * 0.64f)
                 canvas.drawRoundRect(rect, 8f, 8f, paint)
                 paint.style = Paint.Style.FILL
-                canvas.drawCircle(cx, cy + r * 0.46f, r * 0.07f, paint)
+                canvas.drawCircle(cx, cy - r * 0.12f, r * 0.14f, paint)
             }
             else -> {
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
-                val shifts = listOf(-0.25f, 0.25f, -0.10f)
-                for (i in -1..1) {
-                    val y = cy + i * r * 0.38f
-                    canvas.drawLine(cx - r * 0.58f, y, cx + r * 0.58f, y, paint)
-                    val kx = cx + shifts[i + 1] * r
-                    canvas.drawLine(kx, y - r * 0.15f, kx, y + r * 0.15f, paint)
-                }
+                rect.set(cx - r * 0.64f, cy - r * 0.44f, cx + r * 0.64f, cy + r * 0.32f)
+                canvas.drawRect(rect, paint)
+                canvas.drawLine(cx - r * 0.32f, cy + r * 0.52f, cx + r * 0.32f, cy + r * 0.52f, paint)
             }
         }
     }
 
-    private fun drawRetroThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+    // =========================================================================
+    // ТЕМА 4: РЕТРО (Матовые винтажные карточки с ретро-значками IPTV)
+    // =========================================================================
+    private fun drawRetroIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val pad = minDim * 0.08f
         val r = (minDim - pad * 2) * 0.36f
         val cardColor = when (iconType) {
@@ -941,144 +1054,137 @@ class ThemedTileView(
 
         when (iconType) {
             "PLAYLISTS" -> {
+                // Винтажная видеокассета / картотека с полосами
                 paint.style = Paint.Style.FILL; paint.color = cream
-                rect.set(cx - r * 0.72f, cy - r * 0.56f, cx + r * 0.72f, cy + r * 0.62f)
-                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                rect.set(cx - r * 0.72f, cy - r * 0.52f, cx + r * 0.72f, cy + r * 0.56f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
                 paint.color = Color.parseColor("#2A7B69")
-                rect.set(cx - r * 0.56f, cy - r * 0.14f, cx + r * 0.56f, cy + r * 0.08f)
-                canvas.drawRect(rect, paint)
-                paint.color = Color.parseColor("#2C3E6B")
-                rect.set(cx - r * 0.56f, cy + r * 0.24f, cx + r * 0.56f, cy + r * 0.42f)
-                canvas.drawRect(rect, paint)
+                canvas.drawCircle(cx - r * 0.30f, cy + r * 0.04f, r * 0.18f, paint)
+                canvas.drawCircle(cx + r * 0.30f, cy + r * 0.04f, r * 0.18f, paint)
             }
             "EDITOR" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 9f; paint.color = cream
+                // Ретро-линейка и карандаш
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 8f; paint.color = cream
                 path.reset()
-                path.moveTo(cx + r * 0.35f, cy - r * 0.65f)
-                path.lineTo(cx - r * 0.55f, cy + r * 0.45f)
-                path.lineTo(cx + r * 0.55f, cy + r * 0.45f)
+                path.moveTo(cx - r * 0.55f, cy - r * 0.55f)
+                path.lineTo(cx - r * 0.55f, cy + r * 0.55f)
+                path.lineTo(cx + r * 0.55f, cy + r * 0.55f)
                 canvas.drawPath(path, paint)
-                canvas.drawLine(cx + r * 0.15f, cy + r * 0.10f, cx + r * 0.15f, cy + r * 0.45f, paint)
+                canvas.drawLine(cx - r * 0.15f, cy + r * 0.25f, cx + r * 0.55f, cy - r * 0.45f, paint)
             }
             "ANALYZER" -> {
+                // Винтажная мишень радара
                 paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#E63926")
-                canvas.drawCircle(cx, cy, r * 0.76f, paint)
+                canvas.drawCircle(cx, cy, r * 0.74f, paint)
                 paint.color = cream
-                canvas.drawCircle(cx, cy, r * 0.52f, paint)
+                canvas.drawCircle(cx, cy, r * 0.50f, paint)
                 paint.color = Color.parseColor("#E63926")
-                canvas.drawCircle(cx, cy, r * 0.32f, paint)
+                canvas.drawCircle(cx, cy, r * 0.28f, paint)
                 paint.color = cream
-                canvas.drawCircle(cx, cy, r * 0.16f, paint)
+                canvas.drawCircle(cx, cy, r * 0.12f, paint)
             }
             "THEMES" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f
-                paint.color = cream
-                rect.set(cx - r * 0.65f, cy - r * 0.65f, cx + r * 0.65f, cy + r * 0.65f)
+                // Ретро-рамка с 4 цветными квадратами внутри
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f; paint.color = cream
+                rect.set(cx - r * 0.64f, cy - r * 0.64f, cx + r * 0.64f, cy + r * 0.64f)
                 canvas.drawRect(rect, paint)
-                canvas.drawLine(cx - r * 0.65f, cy - r * 0.65f, cx + r * 0.65f, cy + r * 0.65f, paint)
-                canvas.drawLine(cx + r * 0.65f, cy - r * 0.65f, cx - r * 0.65f, cy + r * 0.65f, paint)
+                canvas.drawLine(cx - r * 0.64f, cy, cx + r * 0.64f, cy, paint)
+                canvas.drawLine(cx, cy - r * 0.64f, cx, cy + r * 0.64f, paint)
             }
             "BUFFER" -> {
-                paint.style = Paint.Style.FILL
-                paint.color = Color.parseColor("#FDE047")
-                canvas.drawCircle(cx, cy + r * 0.06f, r * 0.68f, paint)
-                paint.color = Color.parseColor("#D97706")
-                canvas.drawCircle(cx, cy + r * 0.06f, r * 0.44f, paint)
-                paint.color = Color.parseColor("#FDE047")
-                canvas.drawCircle(cx, cy + r * 0.06f, r * 0.20f, paint)
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f; paint.color = cream
-                canvas.drawLine(cx + r * 0.35f, cy - r * 0.45f, cx + r * 0.58f, cy - r * 0.72f, paint)
+                // Жёлтый ретро-секундомер подкачки
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                canvas.drawCircle(cx, cy + r * 0.06f, r * 0.66f, paint)
+                paint.color = Color.parseColor("#9B533F")
+                canvas.drawCircle(cx, cy + r * 0.06f, r * 0.40f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 6f; paint.color = cream
+                canvas.drawLine(cx, cy + r * 0.06f, cx + r * 0.28f, cy - r * 0.18f, paint)
+                canvas.drawLine(cx, cy - r * 0.60f, cx, cy - r * 0.78f, paint)
             }
             "DECODER" -> {
+                // Ламповый ретро-блок с антенной
                 paint.style = Paint.Style.FILL; paint.color = cream
-                rect.set(cx - r * 0.62f, cy - r * 0.32f, cx + r * 0.62f, cy + r * 0.62f)
-                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                rect.set(cx - r * 0.62f, cy - r * 0.32f, cx + r * 0.62f, cy + r * 0.60f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 6f; paint.color = cream
-                canvas.drawLine(cx + r * 0.05f, cy - r * 0.32f, cx + r * 0.28f, cy - r * 0.70f, paint)
+                canvas.drawLine(cx - r * 0.20f, cy - r * 0.32f, cx - r * 0.45f, cy - r * 0.70f, paint)
+                canvas.drawLine(cx + r * 0.20f, cy - r * 0.32f, cx + r * 0.45f, cy - r * 0.70f, paint)
                 paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#3B2F63")
-                rect.set(cx - r * 0.44f, cy - r * 0.14f, cx + r * 0.44f, cy + r * 0.06f)
-                canvas.drawRect(rect, paint)
-                rect.set(cx - r * 0.44f, cy + r * 0.22f, cx + r * 0.44f, cy + r * 0.42f)
-                canvas.drawRect(rect, paint)
+                rect.set(cx - r * 0.44f, cy - r * 0.12f, cx + r * 0.44f, cy + r * 0.38f)
+                canvas.drawRoundRect(rect, 6f, 6f, paint)
             }
             "EPG_GRID" -> {
+                // Планшет с расписанием передач
                 paint.style = Paint.Style.FILL; paint.color = cream
-                rect.set(cx - r * 0.66f, cy - r * 0.64f, cx - r * 0.36f, cy + r * 0.64f)
-                canvas.drawRect(rect, paint)
-                rect.set(cx - r * 0.20f, cy - r * 0.52f, cx + r * 0.66f, cy + r * 0.64f)
+                rect.set(cx - r * 0.64f, cy - r * 0.62f, cx + r * 0.64f, cy + r * 0.62f)
                 canvas.drawRoundRect(rect, 8f, 8f, paint)
+                paint.color = Color.parseColor("#544F4E")
+                for (i in -1..1) {
+                    val y = cy + i * r * 0.32f
+                    rect.set(cx - r * 0.44f, y - 5f, cx + r * 0.44f, y + 5f)
+                    canvas.drawRect(rect, paint)
+                }
             }
             "TOP_CHANNELS" -> {
+                // Пирамида с солнцем на вершине
                 paint.style = Paint.Style.FILL; paint.color = cream
                 path.reset()
-                path.moveTo(cx, cy - r * 0.12f)
-                path.lineTo(cx - r * 0.76f, cy + r * 0.56f)
-                path.lineTo(cx + r * 0.76f, cy + r * 0.56f)
+                path.moveTo(cx, cy - r * 0.10f)
+                path.lineTo(cx - r * 0.72f, cy + r * 0.56f)
+                path.lineTo(cx + r * 0.72f, cy + r * 0.56f)
                 path.close()
                 canvas.drawPath(path, paint)
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f
-                canvas.drawCircle(cx, cy - r * 0.48f, r * 0.16f, paint)
+                canvas.drawCircle(cx, cy - r * 0.44f, r * 0.18f, paint)
             }
             "FAVORITES" -> {
+                // Сияющий ретро-маяк / звезда с лучами
                 paint.style = Paint.Style.FILL; paint.color = cream
-                rect.set(cx - r * 0.65f, cy + r * 0.34f, cx + r * 0.65f, cy + r * 0.56f)
-                canvas.drawRect(rect, paint)
-                path.reset()
-                path.moveTo(cx - r * 0.50f, cy + r * 0.20f)
-                path.lineTo(cx - r * 0.25f, cy - r * 0.08f)
-                path.lineTo(cx + r * 0.25f, cy - r * 0.08f)
-                path.lineTo(cx + r * 0.50f, cy + r * 0.20f)
-                path.close()
-                canvas.drawPath(path, paint)
+                canvas.drawCircle(cx, cy + r * 0.15f, r * 0.34f, paint)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 6f
-                for (deg in listOf(-145, -115, -65, -35)) {
+                for (deg in listOf(-150, -120, -90, -60, -30)) {
                     val rad = Math.toRadians(deg.toDouble())
                     canvas.drawLine(
-                        cx + (r * 0.42f * cos(rad)).toFloat(), cy + (r * 0.42f * sin(rad)).toFloat(),
-                        cx + (r * 0.78f * cos(rad)).toFloat(), cy + (r * 0.78f * sin(rad)).toFloat(), paint
+                        cx + (r * 0.46f * cos(rad)).toFloat(), cy + r * 0.15f + (r * 0.46f * sin(rad)).toFloat(),
+                        cx + (r * 0.78f * cos(rad)).toFloat(), cy + r * 0.15f + (r * 0.78f * sin(rad)).toFloat(), paint
                     )
                 }
             }
             "AUDIO" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 8f; paint.color = cream
-                path.reset()
-                path.moveTo(cx - r * 0.68f, cy - r * 0.52f)
-                path.lineTo(cx + r * 0.68f, cy - r * 0.52f)
-                path.lineTo(cx + r * 0.44f, cy + r * 0.56f)
-                path.lineTo(cx - r * 0.44f, cy + r * 0.56f)
-                path.close()
-                canvas.drawPath(path, paint)
-                canvas.drawLine(cx - r * 0.46f, cy + r * 0.12f, cx + r * 0.46f, cy + r * 0.12f, paint)
+                // Ретро-громкоговоритель
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 7f; paint.color = cream
+                canvas.drawCircle(cx, cy, r * 0.62f, paint)
+                paint.style = Paint.Style.FILL
+                canvas.drawCircle(cx, cy, r * 0.24f, paint)
             }
             "CONTROL_MODE" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 8f; paint.color = cream
-                path.reset()
-                path.moveTo(cx - r * 0.36f, cy - r * 0.18f)
-                path.lineTo(cx + r * 0.36f, cy - r * 0.18f)
-                path.lineTo(cx + r * 0.56f, cy + r * 0.48f)
-                path.lineTo(cx - r * 0.56f, cy + r * 0.48f)
-                path.close()
-                canvas.drawPath(path, paint)
-                canvas.drawLine(cx - r * 0.32f, cy - r * 0.36f, cx + r * 0.16f, cy - r * 0.36f, paint)
-                canvas.drawLine(cx + r * 0.16f, cy - r * 0.36f, cx + r * 0.44f, cy - r * 0.68f, paint)
+                // Ретро-джойстик с рычагом
+                paint.style = Paint.Style.FILL; paint.color = cream
+                rect.set(cx - r * 0.62f, cy + r * 0.18f, cx + r * 0.62f, cy + r * 0.54f)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 8f
+                canvas.drawLine(cx, cy + r * 0.18f, cx + r * 0.24f, cy - r * 0.42f, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#E63926")
+                canvas.drawCircle(cx + r * 0.24f, cy - r * 0.46f, r * 0.20f, paint)
             }
             else -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 10f; paint.color = cream
-                rect.set(cx - r * 0.56f, cy - r * 0.48f, cx + r * 0.56f, cy + r * 0.56f)
-                canvas.drawArc(rect, 15f, 275f, false, paint)
-                paint.style = Paint.Style.FILL
-                path.reset()
-                path.moveTo(cx + r * 0.15f, cy - r * 0.72f)
-                path.lineTo(cx + r * 0.72f, cy - r * 0.25f)
-                path.lineTo(cx + r * 0.15f, cy + r * 0.05f)
-                path.close()
-                canvas.drawPath(path, paint)
+                // Ретро-телевизор с кинескопом
+                paint.style = Paint.Style.FILL; paint.color = cream
+                rect.set(cx - r * 0.70f, cy - r * 0.52f, cx + r * 0.70f, cy + r * 0.52f)
+                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                paint.color = Color.parseColor("#2A7B69")
+                rect.set(cx - r * 0.52f, cy - r * 0.36f, cx + r * 0.28f, cy + r * 0.36f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                canvas.drawCircle(cx + r * 0.48f, cy - r * 0.14f, r * 0.08f, paint)
+                canvas.drawCircle(cx + r * 0.48f, cy + r * 0.14f, r * 0.08f, paint)
             }
         }
     }
 
-    private fun drawCarousel3DThemeIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+    // =========================================================================
+    // ТЕМА 5: КАРУСЕЛЬ 3D (Объёмные круглые 3D-фишки со смысловыми значками IPTV)
+    // =========================================================================
+    private fun drawCarousel3DIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
         val discR = minDim * 0.41f
         val topCy = cy - minDim * 0.04f
         val r = discR * 0.65f
@@ -1086,25 +1192,29 @@ class ThemedTileView(
         val (topHex, edgeHex) = when (iconType) {
             "PLAYLISTS" -> Pair("#EF4444", "#991B1B")
             "EDITOR" -> Pair("#65A30D", "#3F6212")
-            "ANALYZER" -> Pair("#DC2626", "#7F1D1D")
-            "THEMES" -> Pair("#9333EA", "#D97706")
-            "BUFFER" -> Pair("#0284C7", "#075985")
-            "DECODER" -> Pair("#16A34A", "#14532D")
-            "EPG_GRID" -> Pair("#B91C1C", "#7F1D1D")
+            "ANALYZER" -> Pair("#0284C7", "#075985")
+            "THEMES" -> Pair("#9333EA", "#6B21A8")
+            "BUFFER" -> Pair("#EA580C", "#9A3412")
+            "DECODER" -> Pair("#0D9488", "#115E59")
+            "EPG_GRID" -> Pair("#E11D48", "#881337")
             "TOP_CHANNELS" -> Pair("#2563EB", "#1E3A8A")
-            "FAVORITES" -> Pair("#EA580C", "#9A3412")
+            "FAVORITES" -> Pair("#D97706", "#78350F")
             "AUDIO" -> Pair("#0EA5E9", "#0369A1")
-            "CONTROL_MODE" -> Pair("#0284C7", "#075985")
+            "CONTROL_MODE" -> Pair("#4F46E5", "#312E81")
             else -> Pair("#0284C7", "#075985")
         }
 
+        // 1) Тень под 3D-шайбой
         paint.style = Paint.Style.FILL
         paint.color = Color.parseColor("#66000000")
         canvas.drawCircle(cx, topCy + minDim * 0.12f, discR, paint)
+        // 2) Нижнее цветное 3D-ребро
         paint.color = Color.parseColor(edgeHex)
         canvas.drawCircle(cx, topCy + minDim * 0.088f, discR, paint)
+        // 3) Белая прослойка
         paint.color = Color.parseColor("#F1F5F9")
         canvas.drawCircle(cx, topCy + minDim * 0.044f, discR, paint)
+        // 4) Верхняя цветная крышка шайбы
         if (iconType == "THEMES") {
             paint.shader = LinearGradient(
                 cx - discR, topCy - discR, cx + discR, topCy + discR,
@@ -1122,125 +1232,149 @@ class ThemedTileView(
             canvas.drawCircle(cx, topCy, discR, paint)
         }
 
+        // 5) Смысловой IPTV-символ на лицевой стороне каждой 3D-шайбы
         when (iconType) {
             "PLAYLISTS" -> {
+                // Экран с кнопкой Play и полосками списка
                 paint.style = Paint.Style.FILL; paint.color = Color.WHITE
-                rect.set(cx - r * 0.62f, topCy - r * 0.42f, cx + r * 0.62f, topCy + r * 0.42f)
+                rect.set(cx - r * 0.62f, topCy - r * 0.44f, cx + r * 0.62f, topCy + r * 0.44f)
                 canvas.drawRoundRect(rect, 12f, 12f, paint)
                 paint.color = Color.parseColor("#EF4444")
                 path.reset()
-                path.moveTo(cx - r * 0.16f, topCy - r * 0.22f)
-                path.lineTo(cx + r * 0.24f, topCy)
-                path.lineTo(cx - r * 0.16f, topCy + r * 0.22f)
+                path.moveTo(cx - r * 0.18f, topCy - r * 0.24f)
+                path.lineTo(cx + r * 0.26f, topCy)
+                path.lineTo(cx - r * 0.18f, topCy + r * 0.24f)
                 path.close()
                 canvas.drawPath(path, paint)
             }
             "EDITOR" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f
-                paint.color = Color.parseColor("#FDE047")
-                canvas.drawLine(cx - r * 0.48f, topCy - r * 0.28f, cx - r * 0.16f, topCy - r * 0.28f, paint)
-                canvas.drawLine(cx + r * 0.18f, topCy - r * 0.40f, cx + r * 0.44f, topCy - r * 0.14f, paint)
-                canvas.drawLine(cx + r * 0.44f, topCy - r * 0.40f, cx + r * 0.18f, topCy - r * 0.14f, paint)
-                canvas.drawLine(cx - r * 0.48f, topCy + r * 0.28f, cx - r * 0.16f, topCy + r * 0.28f, paint)
-                canvas.drawLine(cx - r * 0.32f, topCy + r * 0.12f, cx - r * 0.32f, topCy + r * 0.44f, paint)
-                canvas.drawLine(cx + r * 0.16f, topCy + r * 0.20f, cx + r * 0.48f, topCy + r * 0.20f, paint)
-                canvas.drawLine(cx + r * 0.16f, topCy + r * 0.36f, cx + r * 0.48f, topCy + r * 0.36f, paint)
+                // Белый список каналов и жёлтый карандаш редактирования
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.5f; paint.color = Color.WHITE
+                canvas.drawLine(cx - r * 0.56f, topCy - r * 0.30f, cx + r * 0.12f, topCy - r * 0.30f, paint)
+                canvas.drawLine(cx - r * 0.56f, topCy, cx + r * 0.02f, topCy, paint)
+                canvas.drawLine(cx - r * 0.56f, topCy + r * 0.30f, cx - r * 0.12f, topCy + r * 0.30f, paint)
+                paint.strokeWidth = 7f; paint.color = Color.parseColor("#FDE047")
+                canvas.drawLine(cx + r * 0.08f, topCy + r * 0.38f, cx + r * 0.54f, topCy - r * 0.28f, paint)
             }
             "ANALYZER" -> {
-                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
-                canvas.drawCircle(cx, topCy, r * 0.56f, paint)
-                paint.color = Color.parseColor("#991B1B")
-                canvas.drawCircle(cx, topCy, r * 0.36f, paint)
-                paint.color = Color.WHITE
-                canvas.drawCircle(cx - r * 0.10f, topCy - r * 0.10f, r * 0.10f, paint)
+                // Белые радиоволны сигнала и зелёная галочка
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f; paint.color = Color.WHITE
+                for (ring in 1..2) {
+                    val rad = r * (0.34f * ring)
+                    rect.set(cx - rad, topCy - rad + r * 0.10f, cx + rad, topCy + rad + r * 0.10f)
+                    canvas.drawArc(rect, 205f, 130f, false, paint)
+                }
+                paint.color = Color.parseColor("#4ADE80"); paint.strokeWidth = 5f
+                canvas.drawLine(cx - r * 0.22f, topCy + r * 0.24f, cx - r * 0.04f, topCy + r * 0.42f, paint)
+                canvas.drawLine(cx - r * 0.04f, topCy + r * 0.42f, cx + r * 0.28f, topCy + r * 0.08f, paint)
             }
             "THEMES" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = Color.WHITE
-                rect.set(cx - r * 0.56f, topCy - r * 0.56f, cx + r * 0.56f, topCy + r * 0.56f)
-                canvas.drawRoundRect(rect, 16f, 16f, paint)
-                canvas.drawCircle(cx, topCy, r * 0.26f, paint)
-                paint.style = Paint.Style.FILL
-                canvas.drawCircle(cx + r * 0.34f, topCy - r * 0.34f, r * 0.07f, paint)
+                // Белая палитра с цветными точками на градиентной 3D-шайбе
+                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+                canvas.drawCircle(cx, topCy, r * 0.58f, paint)
+                paint.color = Color.parseColor("#EF4444"); canvas.drawCircle(cx - r * 0.22f, topCy - r * 0.14f, r * 0.11f, paint)
+                paint.color = Color.parseColor("#3B82F6"); canvas.drawCircle(cx + r * 0.02f, topCy - r * 0.28f, r * 0.11f, paint)
+                paint.color = Color.parseColor("#10B981"); canvas.drawCircle(cx + r * 0.24f, topCy - r * 0.08f, r * 0.11f, paint)
+                paint.color = Color.parseColor("#9333EA"); canvas.drawCircle(cx + r * 0.18f, topCy + r * 0.22f, r * 0.14f, paint)
             }
             "BUFFER" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = Color.WHITE
-                rect.set(cx - r * 0.62f, topCy - r * 0.32f, cx + r * 0.62f, topCy + r * 0.32f)
-                canvas.drawRoundRect(rect, 22f, 22f, paint)
-                paint.color = Color.parseColor("#FACC15")
-                canvas.drawLine(cx, topCy - r * 0.15f, cx, topCy + r * 0.35f, paint)
-                canvas.drawLine(cx - r * 0.18f, topCy + r * 0.18f, cx, topCy + r * 0.38f, paint)
-                canvas.drawLine(cx + r * 0.18f, topCy + r * 0.18f, cx, topCy + r * 0.38f, paint)
+                // Белое облако буфера с жёлтой молнией подкачки
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f; paint.color = Color.WHITE
+                rect.set(cx - r * 0.56f, topCy - r * 0.56f, cx + r * 0.56f, topCy + r * 0.56f)
+                canvas.drawArc(rect, 140f, 260f, false, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                path.reset()
+                path.moveTo(cx + r * 0.06f, topCy - r * 0.36f)
+                path.lineTo(cx - r * 0.22f, topCy + r * 0.04f)
+                path.lineTo(cx + r * 0.02f, topCy + r * 0.04f)
+                path.lineTo(cx - r * 0.06f, topCy + r * 0.38f)
+                path.lineTo(cx + r * 0.24f, topCy - r * 0.04f)
+                path.lineTo(cx + r * 0.02f, topCy - r * 0.04f)
+                path.close()
+                canvas.drawPath(path, paint)
             }
             "DECODER" -> {
-                paint.style = Paint.Style.FILL
-                rect.set(cx - discR, topCy - discR, cx + discR, topCy + discR)
-                paint.color = Color.parseColor("#DC2626"); canvas.drawArc(rect, -150f, 120f, true, paint)
-                paint.color = Color.parseColor("#FACC15"); canvas.drawArc(rect, -30f, 120f, true, paint)
-                paint.color = Color.parseColor("#16A34A"); canvas.drawArc(rect, 90f, 120f, true, paint)
-                paint.color = Color.WHITE; canvas.drawCircle(cx, topCy, r * 0.56f, paint)
-                paint.color = Color.parseColor("#2563EB"); canvas.drawCircle(cx, topCy, r * 0.42f, paint)
+                // Белый микрочип видеодекодера с ножками и ядром внутри (вместо браузера!)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = Color.WHITE
+                rect.set(cx - r * 0.46f, topCy - r * 0.46f, cx + r * 0.46f, topCy + r * 0.46f)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                for (k in -1..1) {
+                    val off = k * r * 0.24f
+                    canvas.drawLine(cx + off, topCy - r * 0.68f, cx + off, topCy - r * 0.46f, paint)
+                    canvas.drawLine(cx + off, topCy + r * 0.46f, cx + off, topCy + r * 0.68f, paint)
+                    canvas.drawLine(cx - r * 0.68f, topCy + off, cx - r * 0.46f, topCy + off, paint)
+                    canvas.drawLine(cx + r * 0.46f, topCy + off, cx + r * 0.68f, topCy + off, paint)
+                }
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                rect.set(cx - r * 0.20f, topCy - r * 0.20f, cx + r * 0.20f, topCy + r * 0.20f)
+                canvas.drawRoundRect(rect, 4f, 4f, paint)
             }
             "EPG_GRID" -> {
+                // Белая карточка телепрограммы с часами и строками
                 paint.style = Paint.Style.FILL; paint.color = Color.WHITE
-                rect.set(cx - r * 0.48f, topCy - r * 0.48f, cx + r * 0.48f, topCy + r * 0.25f)
+                rect.set(cx - r * 0.56f, topCy - r * 0.48f, cx + r * 0.56f, topCy + r * 0.48f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                paint.color = Color.parseColor("#E11D48")
+                rect.set(cx - r * 0.40f, topCy - r * 0.28f, cx + r * 0.40f, topCy - r * 0.14f)
                 canvas.drawRect(rect, paint)
-                paint.color = Color.parseColor("#1E293B")
-                paint.textSize = r * 0.55f; paint.textAlign = Paint.Align.CENTER; paint.typeface = Typeface.DEFAULT_BOLD
-                canvas.drawText("@", cx, topCy - r * 0.04f, paint)
+                rect.set(cx - r * 0.40f, topCy - r * 0.02f, cx + r * 0.24f, topCy + r * 0.12f)
+                canvas.drawRect(rect, paint)
+                rect.set(cx - r * 0.40f, topCy + r * 0.22f, cx + r * 0.32f, topCy + r * 0.34f)
+                canvas.drawRect(rect, paint)
             }
             "TOP_CHANNELS" -> {
-                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+                // Золотая корона на синей 3D-шайбе
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
                 path.reset()
-                path.moveTo(cx - r * 0.58f, topCy + r * 0.18f)
-                path.lineTo(cx - r * 0.06f, topCy - r * 0.28f)
-                path.lineTo(cx + r * 0.12f, topCy + r * 0.02f)
+                path.moveTo(cx - r * 0.52f, topCy + r * 0.36f)
+                path.lineTo(cx - r * 0.58f, topCy - r * 0.22f)
+                path.lineTo(cx - r * 0.20f, topCy + r * 0.06f)
+                path.lineTo(cx, topCy - r * 0.42f)
+                path.lineTo(cx + r * 0.20f, topCy + r * 0.06f)
                 path.lineTo(cx + r * 0.58f, topCy - r * 0.22f)
-                path.lineTo(cx + r * 0.06f, topCy + r * 0.26f)
-                path.lineTo(cx - r * 0.12f, topCy - r * 0.02f)
+                path.lineTo(cx + r * 0.52f, topCy + r * 0.36f)
                 path.close()
                 canvas.drawPath(path, paint)
             }
             "FAVORITES" -> {
-                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#431407")
-                canvas.drawCircle(cx - r * 0.28f, topCy - r * 0.28f, r * 0.14f, paint)
+                // Белая звезда Избранного на оранжевой 3D-шайбе
+                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
                 path.reset()
-                path.moveTo(cx - r * 0.65f, topCy + r * 0.36f)
-                path.lineTo(cx - r * 0.15f, topCy - r * 0.15f)
-                path.lineTo(cx + r * 0.22f, topCy + r * 0.22f)
-                path.lineTo(cx + r * 0.42f, topCy)
-                path.lineTo(cx + r * 0.68f, topCy + r * 0.36f)
+                for (i in 0 until 10) {
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val rad = if (i % 2 == 0) r * 0.58f else r * 0.25f
+                    val sx = cx + (rad * cos(a)).toFloat(); val sy = topCy + (rad * sin(a)).toFloat()
+                    if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                }
                 path.close()
                 canvas.drawPath(path, paint)
             }
             "AUDIO" -> {
-                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#0F172A")
-                canvas.drawCircle(cx - r * 0.28f, topCy + r * 0.32f, r * 0.18f, paint)
-                canvas.drawCircle(cx + r * 0.22f, topCy + r * 0.24f, r * 0.18f, paint)
+                // Двойная нота на голубой 3D-шайбе
+                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+                canvas.drawCircle(cx - r * 0.26f, topCy + r * 0.30f, r * 0.17f, paint)
+                canvas.drawCircle(cx + r * 0.22f, topCy + r * 0.22f, r * 0.17f, paint)
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.5f
-                canvas.drawLine(cx - r * 0.12f, topCy + r * 0.32f, cx - r * 0.12f, topCy - r * 0.36f, paint)
-                canvas.drawLine(cx + r * 0.38f, topCy + r * 0.24f, cx + r * 0.38f, topCy - r * 0.44f, paint)
-                canvas.drawLine(cx - r * 0.12f, topCy - r * 0.36f, cx + r * 0.38f, topCy - r * 0.44f, paint)
+                canvas.drawLine(cx - r * 0.10f, topCy + r * 0.30f, cx - r * 0.10f, topCy - r * 0.34f, paint)
+                canvas.drawLine(cx + r * 0.38f, topCy + r * 0.22f, cx + r * 0.38f, topCy - r * 0.42f, paint)
+                canvas.drawLine(cx - r * 0.10f, topCy - r * 0.34f, cx + r * 0.38f, topCy - r * 0.42f, paint)
             }
             "CONTROL_MODE" -> {
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 9f; paint.color = Color.WHITE
-                rect.set(cx - r * 0.48f, topCy - r * 0.48f, cx + r * 0.48f, topCy + r * 0.48f)
-                canvas.drawArc(rect, 35f, 115f, false, paint)
+                // Белый ТВ-пульт с крестовиной на индиго 3D-шайбе
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = Color.WHITE
+                rect.set(cx - r * 0.38f, topCy - r * 0.58f, cx + r * 0.38f, topCy + r * 0.58f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                canvas.drawCircle(cx, topCy - r * 0.12f, r * 0.16f, paint)
             }
             else -> {
-                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
-                path.reset()
-                path.moveTo(cx, topCy - r * 0.56f)
-                path.lineTo(cx - r * 0.58f, topCy - r * 0.18f)
-                path.lineTo(cx + r * 0.58f, topCy - r * 0.18f)
-                path.close()
-                canvas.drawPath(path, paint)
-                rect.set(cx - r * 0.56f, topCy + r * 0.36f, cx + r * 0.56f, topCy + r * 0.50f)
-                canvas.drawRect(rect, paint)
-                for (k in -1..1) {
-                    val x = cx + k * r * 0.32f
-                    rect.set(x - r * 0.07f, topCy - r * 0.16f, x + r * 0.07f, topCy + r * 0.36f)
-                    canvas.drawRect(rect, paint)
-                }
+                // Белый широкоформатный экран ТВ с глазом внутри
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f; paint.color = Color.WHITE
+                rect.set(cx - r * 0.58f, topCy - r * 0.42f, cx + r * 0.58f, topCy + r * 0.30f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                canvas.drawLine(cx - r * 0.30f, topCy + r * 0.48f, cx + r * 0.30f, topCy + r * 0.48f, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                canvas.drawCircle(cx, topCy - r * 0.06f, r * 0.16f, paint)
             }
         }
     }
