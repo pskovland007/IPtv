@@ -56,6 +56,8 @@ object CoreEngines {
             "https://smotrim.ru"
         }
         val (origin, referer) = when {
+            lUrl.contains("rostelekom.xyz") ->
+                Pair(parsedOrigin, "$parsedOrigin/")
             lUrl.contains("vgtrk") || lUrl.contains("smotrim") || lUrl.contains("mediavitrina") ->
                 Pair("https://smotrim.ru", "https://smotrim.ru/")
             lUrl.contains("1tv") || lUrl.contains("1internet") ->
@@ -150,10 +152,7 @@ object CoreEngines {
 
     fun cleanChannelDisplayName(rawName: String): String {
         val cleaned = rawName
-            .replace(Regex("\\(\\s*\\d+\\s*[pPрР]\\s*\\)"), " ")
-            .replace(Regex("\\[\\s*\\d+\\s*[pPрР]\\s*\\]"), " ")
-            .replace(Regex("\\b\\d{3,4}[pPрР]\\b"), " ")
-            .replace(Regex("\\[[^\\]]*(Geo|Not 24|720|1080|576|480)[^\\]]*\\]", RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("\\[[^\\]]*(Geo|Not 24)[^\\]]*\\]", RegexOption.IGNORE_CASE), " ")
             .replace(Regex("\\s{2,}"), " ")
             .trim()
         return cleaned.ifEmpty { rawName.trim() }
@@ -178,22 +177,24 @@ object CoreEngines {
             val code = ch.code
             if (code in 0x0600..0x06FF || code in 0x0750..0x077F || code in 0x0900..0x0D7F) return true
         }
-        val low = combined.lowercase()
+        val low = " ${name.lowercase()} ${group.lowercase()} "
         val bannedTokens = listOf(
-            "arabic", "arabia", "al jazeera", "aljazeera", "mbc", "rotana", "osn ", "art ", "nile ",
+            "arabic", "arabia", "al jazeera", "aljazeera", " mbc", "rotana", " osn ", " nile ",
             "dubai", "sharjah", "abu dhabi", "al arabiya", "alarabiya", "iqraa", "majid", "spacetoon",
-            "zee ", "sony sab", "star plus", "star bharat", "colors ", "aaj tak", "ndtv", "dd national",
-            "sun tv", "asianet", "bollywood", "india", "hindi", "tamil", "telugu", "punjabi", "urdu",
+            " zee ", "sony sab", "star plus", "star bharat", "colors ", "aaj tak", "ndtv", "dd national",
+            "sun tv", "asianet", "bollywood", " hindi", " tamil", " telugu", " punjabi", " urdu",
             "bangla", "pakistan", "geo news", "ary digital", "hum tv", "samaa", "kurd", "farsi", "persian",
-            "latino", "viva latino", "3abn", "telemundo", "univision", "azteca", "caracol", "tlc ", "kral ",
-            "trt ", "haberturk", "powerturk", "dream turk", "afrobeat", "nollywood", "k-pop", "iran", "afghan"
+            "latino", "viva latino", "3abn", "telemundo", "univision", "azteca", "caracol", "kral ",
+            "trt ", "haberturk", "powerturk", "dream turk", "afrobeat", "nollywood", "iran", "afghan",
+            "[magenta]", " in ", " ae ", " qa ", " br ", " pl ", " de ", " fr ", " es ", " it ", " nl ", " se ", " dk ", " no ", " fi ", " ro ", " hr ", " cz ", " sk ", " lt ", " lv ", " ee "
         )
         return bannedTokens.any { low.contains(it) }
     }
 
     fun isStrictlyRussianChannel(name: String, url: String, rawGroup: String = ""): Boolean {
+        if (isArabicOrIndianChannel(name, rawGroup, url)) return false
         if (name.any { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }) return true
-        val lName = name.lowercase()
+        val lName = name.lowercase().trim()
         val lUrl = url.lowercase()
         val lGroup = rawGroup.lowercase()
         if (lUrl.contains(".ru/") || lUrl.contains(".su/") || lUrl.contains(".by/") ||
@@ -204,41 +205,45 @@ object CoreEngines {
             lUrl.contains("bonus-tv") || lUrl.contains("rutube") || lUrl.contains("ok.ru")) {
             return true
         }
-        if (lGroup.contains("росси") || lGroup.contains("русск") || lGroup.contains("детск") || lGroup.contains("мульт") || lGroup.contains("cccp") || lGroup.contains("ссср")) {
-            return true
-        }
+        val ruPrefixes = listOf(
+            "vf ", "uz ", "mm ", "bcu ", "yosso ", "cineman ", "kli ", "z!", "prokop ",
+            "veles ", "dosug ", "kinoshka ", "fresh ", "liberty ", "magic ", "eye ", "cobra "
+        )
+        if (ruPrefixes.any { lName.startsWith(it) }) return true
+
         val ruLatinWhitelist = listOf(
-            "viju", "tv1000", "amedia", "karusel", "mult", "tiji", "gulli", "nickelodeon ru", "nick jr ru",
-            "cartoon network ru", "boomerang ru", "jimjam ru", "da vinci", "sts kids", "ani ", "fan hd",
-            "bridge tv", "bridge ", "muz tv", "muz-tv", "ru.tv", "rutv", "1hd", "europa plus", "zhara", "shanson",
+            "viju", "tv1000", "amedia", "karusel", "mult", "tiji", "gulli", "nickelodeon", "nick jr", "nicktoons",
+            "cartoon network", "cartoonito", "boomerang", "jimjam", "jim jam", "da vinci", "sts kids", "ani", "fan hd",
+            "bridge", "muz tv", "muz-tv", "ru.tv", "rutv", "ru tv", "1hd", "europa plus", "zhara", "shanson",
             "tnt", "sts", "ren tv", "ntv", "match", "khl", "kino", "illuzion", "soyuzmult", "smeshariki",
             "masha", "fixiki", "luntik", "tri kota", "multilandia", "tlum", "unicum", "radost", "deti", "detskiy",
             "mosfilm", "lenfilm", "kinomiks", "kinoprem", "kinohit", "kinosemya", "kinokomediya", "kinoseriya",
-            "kinosvidanie", "kinouzhas", "dom kino", "evrokino", "russkiy", "rodnoe", "nashe", "lyubimoe", "feniks"
+            "kinosvidanie", "kinouzhas", "dom kino", "evrokino", "russkiy", "rodnoe", "nashe", "lyubimoe", "feniks",
+            "cinema", "hollywood", ".red", ".sci-fi", ".black", "tv xxi", "shot tv", "retro", "ussr", "vhs",
+            "discovery", "national geographic", "nat geo", "animal planet", "history", "h2", "ocean tv", "rtg",
+            "outdoor", "travel+adventure", "2x2", "comedy central", "eurosport", "setanta", "mma-tv"
         )
         return ruLatinWhitelist.any { lName.contains(it) }
     }
 
-    // Проверка для группы «Музыка»: только русскоязычные ИЛИ топовые европейские музыкальные каналы
     fun isAllowedMusicChannel(name: String, url: String, rawGroup: String): Boolean {
         if (isArabicOrIndianChannel(name, rawGroup, url)) return false
         if (isStrictlyRussianChannel(name, url, rawGroup)) return true
         val lName = name.lowercase()
         val topEuroMusicWhitelist = listOf(
-            "mtv", "vh1", "mezzo", "deluxe music", "mcm ", "trace ", "clubbing", "stingray",
-            "iconcerts", "now 70", "now 80", "now 90", "now rock", "kerrang", "kiss ", "box hits",
+            "mtv", "vh1", "mezzo", "deluxe music", "mcm", "trace", "clubbing", "stingray",
+            "iconcerts", "now 70", "now 80", "now 90", "now rock", "kerrang", "kiss", "box hits",
             "the box", "4music", "4 music", "4fun", "4 fun", "stars.tv", "stars tv", "eska",
-            "polo tv", "nuta", "power tv", "vox music", "rfm tv", "nrj hits", "m6 music", "cstar",
-            "melody", "vevo", "qello", "classic fm", "dance", "eurodance", "retro music", "ocko",
-            "óčko", "gotv", " Folx", "one music", "hit tv", "hits hd", "music box", "djing", "rock tv",
-            "metal", "jazz", "chill", "lounge"
+            "polo tv", "nuta", "power tv", "vox music", "rfm tv", "nrj", "m6 music", "cstar",
+            "melody", "vevo", "qello", "classic fm", "classic music", "dance", "eurodance", "retro",
+            "one music", "hit tv", "hits hd", "music box", "djing", "rock", "metal", "jazz", "chill", "lounge", "v2beat"
         )
         return topEuroMusicWhitelist.any { lName.contains(it) }
     }
 
     fun is2kOrHigherStream(rawLine: String, name: String, rawGroup: String, url: String): Boolean {
         val text = "$rawLine $name $rawGroup $url".lowercase()
-        if (text.contains("4k") || text.contains("uhd") || text.contains("2160p") || text.contains("1440p") || text.contains("2k") || text.contains("ultra hd") || text.contains("hevc")) return true
+        if (text.contains("4k") || text.contains("uhd") || text.contains("2160p") || text.contains("1440p") || text.contains("2k") || text.contains("ultra hd")) return true
         val resMatch = Regex("(\\d{3,4})x(\\d{3,4})").find(text)
         if (resMatch != null) {
             val w = resMatch.groupValues[1].toIntOrNull() ?: 0
@@ -254,72 +259,93 @@ object CoreEngines {
         val n = name.lowercase()
         val combined = "$g $n"
         return when {
-            combined.contains("дет") || combined.contains("мульт") || combined.contains("карусель") ||
+            g == "детские" || combined.contains("детск") || combined.contains("мульт") || combined.contains("карусель") ||
                 combined.contains("сказк") || combined.contains("малыш") || combined.contains("союзмульт") ||
                 combined.contains("смешарик") || combined.contains("фиксик") || combined.contains("лунтик") ||
                 combined.contains("барбоскин") || combined.contains("три кота") || combined.contains("маша и медведь") ||
-                combined.contains("простоквашин") || combined.contains("ну, погоди") || combined.contains("ми-ми-мишк") ||
+                combined.contains("простоквашин") || combined.contains("ну, погоди") || combined.contains("ну погоди") ||
+                combined.contains("ми-ми-мишк") || combined.contains("том и джер") || combined.contains("tom and jerry") ||
+                combined.contains("скуби-ду") || combined.contains("масяня") || combined.contains("кроха") ||
                 combined.contains("тлум") || combined.contains("рыжий") || combined.contains("смайлик") ||
                 combined.contains("уникум") || combined.contains("мультиландия") || combined.contains("мультимузыка") ||
-                combined.contains("радость моя") || combined.contains("капитан фантастика") || combined.contains("детский") ||
-                combined.contains("стс kids") || combined.contains("sts kids") || combined.contains("солнце") ||
+                combined.contains("радость моя") || combined.contains("капитан фантастика") || combined.contains("супергерои") ||
+                combined.contains("стс kids") || combined.contains("sts kids") || combined.contains("типтоп") ||
                 combined.contains("лёва") || combined.contains("лева ") || combined.contains("чижик") ||
-                combined.contains("gulli") || combined.contains("tiji") || combined.contains("jimjam") ||
+                combined.contains("бебимульт") || combined.contains("multserial") || combined.contains("little hd") ||
+                combined.contains("gulli") || combined.contains("tiji") || combined.contains("jimjam") || combined.contains("jim jam") ||
                 combined.contains("kids") || combined.contains("cartoon") || combined.contains("nickelodeon") ||
-                combined.contains("disney") || combined.contains("nick jr") || combined.contains("boomerang") ||
-                combined.contains("anim") || combined.contains("анимац") || combined.contains("аниме") ||
-                n == "о!" || n.startsWith("о! ") || n.startsWith("ани ") || n == "ани" -> "Детские"
+                combined.contains("disney") || combined.contains("pixar") || combined.contains("nick jr") || combined.contains("nicktoons") ||
+                combined.contains("boomerang") || combined.contains("анимац") ||
+                n == "о!" || n.startsWith("о! ") || n.startsWith("ани ") || n == "ани" || n == "ani" -> "Детские"
 
-            combined.contains("музык") || combined.contains("music") || combined.contains("муз") ||
+            g == "музыка" || combined.contains("музык") || combined.contains("music") || combined.contains("муз-тв") ||
+                combined.contains("муз тв") || combined.contains("музсоюз") || combined.contains("песни") ||
                 combined.contains("mtv") || combined.contains("bridge") || combined.contains("шансон") ||
-                combined.contains("ru.tv") || combined.contains("rutv") || combined.contains("1hd") ||
+                combined.contains("ru.tv") || combined.contains("rutv") || combined.contains("ru tv") || combined.contains("1hd") ||
                 combined.contains("европа плюс") || combined.contains("europa plus") || combined.contains("жара") ||
                 combined.contains("mezzo") || combined.contains("vh1") || combined.contains("ля-минор") ||
-                combined.contains("mcm") || combined.contains("clubbing") || combined.contains("hit ") ||
-                combined.contains("dance") || combined.contains("rock") || combined.contains("pop ") ||
-                combined.contains("jazz") || combined.contains("trace") || combined.contains("deluxe music") -> "Музыка"
+                combined.contains("mcm") || combined.contains("clubbing") || combined.contains("eurodance") ||
+                combined.contains("страна fm") || combined.contains("ретро фм") || combined.contains("караоке") ||
+                combined.contains("trace") || combined.contains("deluxe music") -> "Музыка"
 
-            combined.contains("кино") || combined.contains("фильм") || combined.contains("сериал") ||
+            g == "кино" || combined.contains("кино") || combined.contains("фильм") || combined.contains("сериал") ||
                 combined.contains("movie") || combined.contains("cinema") || combined.contains("film") ||
                 combined.contains("series") || combined.contains("amedia") || combined.contains("viju") ||
                 combined.contains("tv1000") || combined.contains("иллюзион") || combined.contains("комеди") ||
                 combined.contains("comedy") || combined.contains("драма") || combined.contains("детектив") ||
-                combined.contains("триллер") || combined.contains("ужас") || combined.contains("нст") ||
+                combined.contains("триллер") || combined.contains("ужас") || combined.contains("страшное") || combined.contains("нст") ||
                 combined.contains("фантастик") || combined.contains("sci-fi") || combined.contains("action") ||
                 combined.contains("prem") || combined.contains("бестселлер") || combined.contains("роман") ||
                 combined.contains("мосфильм") || combined.contains("ленфильм") || combined.contains("кинозал") ||
-                combined.contains("hollywood") || combined.contains("red hd") || combined.contains("дом кино") ||
-                combined.contains("еврокино") || combined.contains("дорама") || combined.contains("феникс") -> "Кино и сериалы"
+                combined.contains("зал ") || combined.contains("боевик") || combined.contains("вестерн") ||
+                combined.contains("hollywood") || combined.contains("red hd") || combined.contains(".red") ||
+                combined.contains("дом кино") || combined.contains("еврокино") || combined.contains("дорама") ||
+                combined.contains("феникс") || combined.contains("сваты") || combined.contains("интерны") ||
+                combined.contains("универ") || combined.contains("воронины") || combined.contains("гайдай") ||
+                combined.contains("рязанов") || combined.contains("остросюжетн") || combined.contains("блокбастер") -> "Кино и сериалы"
 
-            combined.contains("спорт") || combined.contains("sport") || combined.contains("футбол") ||
+            g == "спорт" || combined.contains("спорт") || combined.contains("sport") || combined.contains("футбол") ||
                 combined.contains("матч") || combined.contains("match") || combined.contains("кхл") ||
                 combined.contains("khl") || combined.contains("боец") || combined.contains("ufc") ||
                 combined.contains("бокс") || combined.contains("теннис") || combined.contains("хоккей") ||
-                combined.contains("eurosport") || combined.contains("арена") || combined.contains("старт") -> "Спорт"
+                combined.contains("eurosport") || combined.contains("арена") || combined.contains("старт") ||
+                combined.contains("удар") || combined.contains("mma") -> "Спорт"
 
-            combined.contains("познават") || combined.contains("наука") || combined.contains("discovery") ||
+            g == "познавательные" || combined.contains("познават") || combined.contains("наука") || combined.contains("discovery") ||
                 combined.contains("nature") || combined.contains("history") || combined.contains("истори") ||
-                combined.contains("планета") || combined.contains("doc") || combined.contains("док") ||
+                combined.contains("планета") || combined.contains("doc") || combined.contains("доктор") ||
                 combined.contains("animal") || combined.contains("nat geo") || combined.contains("viasat explore") ||
                 combined.contains("viasat nature") || combined.contains("viasat history") || combined.contains("техно") ||
-                combined.contains("оружие") || combined.contains("охота") || combined.contains("рыбалк") ||
-                combined.contains("авто") || combined.contains("усад") || combined.contains("бобёр") ||
-                combined.contains("зоо") || combined.contains("travel") || combined.contains("путешеств") -> "Познавательные"
+                combined.contains("оружие") || combined.contains("арсенал") || combined.contains("охота") ||
+                combined.contains("рыбалк") || combined.contains("рыболов") || combined.contains("дикий") ||
+                combined.contains("авто") || combined.contains("драйв") || combined.contains("усадьба") ||
+                combined.contains("бобёр") || combined.contains("загородн") || combined.contains("зоо") ||
+                combined.contains("животн") || combined.contains("пёс и ко") || combined.contains("природ") ||
+                combined.contains("travel") || combined.contains("путешеств") || combined.contains("поехали") ||
+                combined.contains("турист") || combined.contains("rtg") || combined.contains("стихия") ||
+                combined.contains("косм") || combined.contains("galaxy") || combined.contains("нано") ||
+                combined.contains("тайна") || combined.contains("секретно") || combined.contains("365 дней") ||
+                combined.contains("культура") || combined.contains("время") || combined.contains("кухня") ||
+                combined.contains("еда") || combined.contains("телекафе") || combined.contains("вкусное") -> "Познавательные"
 
-            combined.contains("новост") || combined.contains("news") || combined.contains("инфо") ||
+            g == "развлекательные" || combined.contains("развлеч") || combined.contains(" тнт") || n.startsWith("тнт") ||
+                combined.contains("стс") || combined.contains("пятница") || combined.contains("суббота") ||
+                combined.contains("домашний") || combined.contains("тв3") || combined.contains("ю ") || n == "ю" ||
+                combined.contains("че!") || n == "че" || combined.contains("2x2") || combined.contains("2х2") ||
+                combined.contains("солнце") || combined.contains("квн") || combined.contains("сарафан") ||
+                combined.contains("анекдот") || combined.contains("пельмени") || combined.contains("6 кадров") ||
+                combined.contains("городок") || combined.contains("наша раша") || combined.contains("ностальгия") ||
+                combined.contains("модерн") || combined.contains("осп") || combined.contains("юмор") ||
+                combined.contains("entertain") || combined.contains("fashion") -> "Развлечения"
+
+            g == "новости" || combined.contains("новост") || combined.contains("news") || combined.contains("инфо") ||
                 combined.contains("россия 24") || combined.contains("рбк") || combined.contains("мир 24") ||
                 combined.contains("известия") || combined.contains("первый") || combined.contains("россия 1") ||
                 combined.contains("нтв") || combined.contains("тв центр") || combined.contains("твц") ||
                 combined.contains("пятый") || combined.contains("рен") || combined.contains("звезда") ||
                 combined.contains("отр") || combined.contains("спас") || combined.contains("360") ||
-                combined.contains("москва 24") || combined.contains("общие") || combined.contains("федерал") -> "Новости и общие"
-
-            combined.contains("развлеч") || combined.contains(" тнт") || n.startsWith("тнт") ||
-                combined.contains("стс") || combined.contains("пятница") || combined.contains("суббота") ||
-                combined.contains("домашний") || combined.contains("ю ") || n == "ю" ||
-                combined.contains("че!") || n == "че" || combined.contains("2x2") || combined.contains("2х2") ||
-                combined.contains("квн") || combined.contains("сарафан") || combined.contains("еда") ||
-                combined.contains("кухня") || combined.contains("entertain") || combined.contains("fashion") -> "Развлечения"
+                combined.contains("москва 24") || combined.contains("санкт-петербург") || combined.contains("псков") ||
+                combined.contains("вместе-рф") || combined.contains("общие") || combined.contains("федерал") -> "Новости и общие"
 
             else -> "Прочее"
         }
@@ -347,9 +373,15 @@ object CoreEngines {
                 currentGroup = groupMatch?.groupValues?.get(1)?.trim() ?: ""
                 val idMatch = Regex("tvg-id=\"([^\"]+)\"", RegexOption.IGNORE_CASE).find(l)
                 currentTvgId = idMatch?.groupValues?.get(1)?.trim() ?: ""
+            } else if (l.startsWith("#EXTGRP:", ignoreCase = true)) {
+                val extGrp = l.substringAfter(":").trim()
+                if (extGrp.isNotEmpty() && currentGroup.isEmpty()) {
+                    currentGroup = extGrp
+                }
             } else if (l.startsWith("http://", ignoreCase = true) || l.startsWith("https://", ignoreCase = true) || l.startsWith("rtmp://", ignoreCase = true)) {
                 val isDeadHost = l.contains("sc.id-tv.kz", ignoreCase = true) || l.contains("ott-cdn.ucom.am", ignoreCase = true)
-                if (currentName.isNotEmpty() && !isDeadHost) {
+                val isAdultGroup = currentGroup.equals("взрослые", ignoreCase = true) || currentGroup.contains("18+", ignoreCase = true) || currentGroup.contains("adult", ignoreCase = true)
+                if (currentName.isNotEmpty() && !isDeadHost && !isAdultGroup) {
                     var skip = false
                     if (filterBuiltinRules) {
                         if (isArabicOrIndianChannel(currentName, currentGroup, l)) {
@@ -361,11 +393,11 @@ object CoreEngines {
                                 if (!isStrictRu) skip = true
                             } else {
                                 when (mappedCat) {
-                                    // В Детских, Кино и сериалах, Новостях, Развлечениях и Прочем — строго только русскоязычные!
-                                    "Детские", "Кино и сериалы", "Новости и общие", "Развлечения", "Прочее" -> {
+                                    // Детские, Кино и сериалы, Познавательные, Развлечения, Новости и Прочее — строго русскоязычные!
+                                    "Детские", "Кино и сериалы", "Познавательные", "Развлечения", "Новости и общие", "Прочее" -> {
                                         if (!isStrictRu) skip = true
                                     }
-                                    // В Музыке — русскоязычные + топовые европейские музыкальные каналы
+                                    // Музыка — русскоязычные + топовые европейские музыкальные каналы
                                     "Музыка" -> {
                                         if (!isAllowedMusicChannel(currentName, l, currentGroup)) skip = true
                                     }
@@ -379,9 +411,9 @@ object CoreEngines {
                         } else {
                             mapCategory(currentGroup, currentName, currentRawInfLine, l)
                         }
-                        val hostKey = try { URL(l.substringBefore("#")).host.lowercase() } catch (_: Exception) { "" }
-                        val dedupKey = if (category == "Детские" || category == "Музыка" || category == "Кино и сериалы") {
-                            normalizeName(currentName) + "_" + category + "_" + hostKey
+                        val streamIdKey = l.substringBefore("?").lowercase()
+                        val dedupKey = if (category == "Детские" || category == "Кино и сериалы" || category == "Музыка" || category == "Познавательные" || category == "Развлечения") {
+                            normalizeName(currentName) + "_" + category + "_" + streamIdKey.hashCode()
                         } else {
                             normalizeName(currentName) + "_" + category
                         }
