@@ -83,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var dualPipPlayer: ExoPlayer? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var httpDataSourceFactory: DefaultHttpDataSource.Factory? = null
 
     private lateinit var playerContainerFrame: FrameLayout
     private lateinit var playerView: PlayerView
@@ -326,17 +327,16 @@ class MainActivity : AppCompatActivity() {
         return if (dynamicCategories.isNotEmpty()) dynamicCategories else defaultTenCategories
     }
 
-    // Расширенный список живых российских и тематических источников для Детских и Музыки
+    // Незаблокированные в РФ зеркала jsdelivr CDN + актуальные российские и европейские базы
     private val openRusSources = listOf(
+        "https://cdn.jsdelivr.net/gh/Free-TV/IPTV@master/playlists/playlist_russia.m3u8",
+        "https://cdn.jsdelivr.net/gh/smolnp/iptvru@gh-pages/playlist.m3u8",
+        "https://cdn.jsdelivr.net/gh/ipstreet312/freeiptv@master/all.m3u",
+        "https://cdn.jsdelivr.net/gh/Dimonovich/IPTV@master/IPTV.m3u",
         "https://iptv-org.github.io/iptv/languages/rus.m3u",
         "https://iptv-org.github.io/iptv/countries/ru.m3u",
-        "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_russia.m3u8",
-        "https://raw.githubusercontent.com/smolnp/iptvru/gh-pages/playlist.m3u8",
-        "https://raw.githubusercontent.com/ipstreet312/freeiptv/master/all.m3u",
-        "https://raw.githubusercontent.com/Dimonovich/IPTV/master/IPTV.m3u",
         "https://iptv-org.github.io/iptv/countries/by.m3u",
         "https://iptv-org.github.io/iptv/countries/kz.m3u",
-        "https://iptv-org.github.io/iptv/countries/am.m3u",
         "https://iptv-org.github.io/iptv/categories/kids.m3u",
         "https://iptv-org.github.io/iptv/categories/animation.m3u",
         "https://iptv-org.github.io/iptv/categories/family.m3u",
@@ -347,7 +347,9 @@ class MainActivity : AppCompatActivity() {
         "https://iptv-org.github.io/iptv/categories/sports.m3u",
         "https://iptv-org.github.io/iptv/categories/science.m3u",
         "https://iptv-org.github.io/iptv/categories/documentary.m3u",
-        "https://iptv-org.github.io/iptv/categories/entertainment.m3u"
+        "https://iptv-org.github.io/iptv/categories/entertainment.m3u",
+        "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_russia.m3u8",
+        "https://raw.githubusercontent.com/ipstreet312/freeiptv/master/all.m3u"
     )
 
     private val epgUrls = listOf(
@@ -655,7 +657,6 @@ class MainActivity : AppCompatActivity() {
         btnOsdNightMode.text = "🌙 $brightnessPercent%"
         btnOsdChannelActions.text = "✎ Канал"
 
-        // Пункт 3: Обновляем и фон, и рамку, и текст кнопок OSD, чтобы они никогда не становились белыми на белом
         for (btn in listOf(btnOsdTop, btnOsdFav, btnOsdDualToggle, btnOsdRewind, btnOsdEpgList, btnOsdSettings, btnOsdNightMode, btnOsdChannelActions)) {
             btn.typeface = t.boldFont
             btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f * scale)
@@ -1528,7 +1529,6 @@ class MainActivity : AppCompatActivity() {
                 val dx = e2.x - e1.x; val dy = e2.y - e1.y
                 val curMenu = menuHistory.lastOrNull()
 
-                // Пункт 4: Если открыта Карусель в SETTINGS или палец свайпает по карусели — не закрываем меню!
                 if (curMenu == "SETTINGS" && (currentTheme().isCarouselMenu || isPointInsideVisibleView(e1.rawX, e1.rawY, carouselScrollView))) {
                     return false
                 }
@@ -2237,7 +2237,13 @@ class MainActivity : AppCompatActivity() {
         uiHandler.post(ticker)
     }
 
-    // Бесшовное переподключение с умным поиском рабочего зеркала по названию канала или резервного CDN
+    private fun applyHeadersToDataSourceForUrl(urlStr: String) {
+        val activeAgent = CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
+        val hdrs = CoreEngines.headersForStreamUrl(urlStr)
+        httpDataSourceFactory?.setUserAgent(activeAgent)
+        httpDataSourceFactory?.setDefaultRequestProperties(hdrs)
+    }
+
     private fun reconnectCurrentStreamSilently() {
         val ch = currentChannel ?: return
         val p = player ?: return
@@ -2259,6 +2265,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 cleanUrl
             }
+            applyHeadersToDataSourceForUrl(targetUrl)
             p.setMediaItem(createLiveMediaItem(targetUrl), false)
             p.prepare()
             p.play()
@@ -2333,15 +2340,16 @@ class MainActivity : AppCompatActivity() {
             .setEnableDecoderFallback(true)
 
         val activeAgent = CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        val dsFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(activeAgent)
-            .setDefaultRequestProperties(mapOf("Accept" to "*/*", "Connection" to "keep-alive"))
+            .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(currentUrl ?: "https://smotrim.ru"))
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(12000)
             .setReadTimeoutMs(20000)
+        httpDataSourceFactory = dsFactory
 
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(httpDataSourceFactory)
+            .setDataSourceFactory(dsFactory)
             .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(6))
 
         val audioAttrs = AudioAttributes.Builder()
@@ -2416,6 +2424,7 @@ class MainActivity : AppCompatActivity() {
         applyScreenAspectMode()
 
         if (currentUrl != null) {
+            applyHeadersToDataSourceForUrl(currentUrl)
             newPlayer.setMediaItem(createLiveMediaItem(currentUrl))
             newPlayer.prepare()
             newPlayer.play()
@@ -2435,8 +2444,11 @@ class MainActivity : AppCompatActivity() {
                 preloaderExecutor.submit {
                     if (isAnalyzerRunning) return@submit
                     try {
-                        val conn = URL(neighbor.url.substringBefore("#")).openConnection() as HttpURLConnection
+                        val cleanUrl = neighbor.url.substringBefore("#")
+                        val hdrs = CoreEngines.headersForStreamUrl(cleanUrl)
+                        val conn = URL(cleanUrl).openConnection() as HttpURLConnection
                         conn.setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
+                        for ((k, v) in hdrs) conn.setRequestProperty(k, v)
                         conn.connectTimeout = 3000; conn.readTimeout = 3000
                         if (conn.responseCode in 200..299) {
                             val buf = ByteArray(128)
@@ -2889,11 +2901,10 @@ class MainActivity : AppCompatActivity() {
         return try {
             val cleanUrl = urlStr.substringBefore("#")
             val parsed = URL(cleanUrl)
-            val origin = "${parsed.protocol}://${parsed.host}"
+            val hdrs = CoreEngines.headersForStreamUrl(cleanUrl)
             conn = (parsed.openConnection() as HttpURLConnection).apply {
                 setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
-                setRequestProperty("Accept", "*/*")
-                setRequestProperty("Referer", "$origin/")
+                for ((k, v) in hdrs) setRequestProperty(k, v)
                 instanceFollowRedirects = true
                 connectTimeout = 4200
                 readTimeout = 4200
@@ -3071,8 +3082,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                         val targetMap = LinkedHashMap<String, Channel>()
-                        val sourcesToLoad = if (strictRuOnly) openRusSources.take(15) else openRusSources
-                        for (srcUrl in sourcesToLoad) {
+                        for (srcUrl in openRusSources) {
                             if (myGen != playlistLoadGeneration) return@thread
                             try {
                                 val reader = CoreEngines.openStreamWithBypass(srcUrl, userAgentIndex, dohEnabled, 6500).bufferedReader()
@@ -3088,7 +3098,7 @@ class MainActivity : AppCompatActivity() {
                         }
                         for (ch in targetMap.values) {
                             val hostKey = try { URL(ch.url.substringBefore("#")).host.lowercase() } catch (_: Exception) { "" }
-                            val key = if (ch.category == "Детские" || ch.category == "Музыка") {
+                            val key = if (ch.category == "Детские" || ch.category == "Музыка" || ch.category == "Кино и сериалы") {
                                 CoreEngines.normalizeName(ch.name) + "_" + ch.category + "_" + hostKey
                             } else {
                                 CoreEngines.normalizeName(ch.name) + "_" + ch.category
@@ -3180,9 +3190,9 @@ class MainActivity : AppCompatActivity() {
     private fun charAlphabetGroup(name: String): Int {
         val firstChar = name.trim().firstOrNull { it.isLetterOrDigit() } ?: return 3
         return when {
-            firstChar in 'а'..'я' || firstChar in 'А'..'Я' || firstChar == 'ё' || firstChar == 'Ё' -> 0 // Сначала А-Я
-            firstChar in 'a'..'z' || firstChar in 'A'..'Z' -> 1 // Затем A-Z
-            else -> 2 // Цифры (1HD, 2TV, 360) и символы в самом конце
+            firstChar in 'а'..'я' || firstChar in 'А'..'Я' || firstChar == 'ё' || firstChar == 'Ё' -> 0
+            firstChar in 'a'..'z' || firstChar in 'A'..'Z' -> 1
+            else -> 2
         }
     }
 
@@ -3231,6 +3241,7 @@ class MainActivity : AppCompatActivity() {
     private val executeDebouncedPlayRunnable = Runnable {
         val target = pendingDebouncedChannel ?: return@Runnable
         try {
+            applyHeadersToDataSourceForUrl(target.url)
             player?.setMediaItem(createLiveMediaItem(target.url), false)
             player?.prepare()
             player?.play()
@@ -3333,7 +3344,7 @@ class MainActivity : AppCompatActivity() {
             .putStringSet("favorites", favoriteUrls.toSet())
             .putStringSet("top_urls", topUrls.toSet())
             .putStringSet("manual_disabled_urls_v19", manualDisabledUrls.toSet())
-            .putStringSet("auto_disabled_urls_v29", autoDisabledUrls.toSet())
+            .putStringSet("auto_disabled_urls_v30", autoDisabledUrls.toSet())
             .putStringSet("disabled_cats", disabledCategories.toSet())
             .apply()
     }
@@ -3362,12 +3373,15 @@ class MainActivity : AppCompatActivity() {
         activePlaylistIndex = prefs.getInt("active_playlist", 0)
         epgUrl = prefs.getString("epg_url", epgUrl) ?: epgUrl
         lastSavedChannelUrl = prefs.getString("last_channel_url", "") ?: ""
-        if (lastSavedChannelUrl.contains("sc.id-tv.kz")) lastSavedChannelUrl = ""
+        if (lastSavedChannelUrl.contains("sc.id-tv.kz") || lastSavedChannelUrl.contains("ott-cdn.ucom.am")) {
+            lastSavedChannelUrl = ""
+        }
 
-        favoriteUrls.clear(); favoriteUrls.addAll((prefs.getStringSet("favorites", emptySet()) ?: emptySet()).filterNot { it.contains("sc.id-tv.kz") })
-        topUrls.clear(); topUrls.addAll((prefs.getStringSet("top_urls", emptySet()) ?: emptySet()).filterNot { it.contains("sc.id-tv.kz") })
+        val cleanFilter: (String) -> Boolean = { !it.contains("sc.id-tv.kz") && !it.contains("ott-cdn.ucom.am") }
+        favoriteUrls.clear(); favoriteUrls.addAll((prefs.getStringSet("favorites", emptySet()) ?: emptySet()).filter(cleanFilter))
+        topUrls.clear(); topUrls.addAll((prefs.getStringSet("top_urls", emptySet()) ?: emptySet()).filter(cleanFilter))
         manualDisabledUrls.clear(); manualDisabledUrls.addAll(prefs.getStringSet("manual_disabled_urls_v19", emptySet()) ?: emptySet())
-        autoDisabledUrls.clear(); autoDisabledUrls.addAll(prefs.getStringSet("auto_disabled_urls_v29", emptySet()) ?: emptySet())
+        autoDisabledUrls.clear(); autoDisabledUrls.addAll(prefs.getStringSet("auto_disabled_urls_v30", emptySet()) ?: emptySet())
         disabledCategories.clear(); disabledCategories.addAll(prefs.getStringSet("disabled_cats", emptySet()) ?: emptySet())
 
         customCategoryMap.clear()
