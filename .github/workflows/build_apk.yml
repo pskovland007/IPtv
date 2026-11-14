@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: tivilook-build-\${{ github.ref }}
+  group: tivilook-build
   cancel-in-progress: true
 
 jobs:
@@ -61,17 +61,17 @@ jobs:
           fi
           cp app/permanent_key.jks ~/.android/debug.keystore || true
           gradle assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk TiViLook-v2.7.\${GITHUB_RUN_NUMBER}.apk
+          cp app/build/outputs/apk/release/app-release.apk TiViLook-latest.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TiViLook-v2.7.\${{ github.run_number }}
-          path: TiViLook-v2.7.\${{ github.run_number }}.apk
+          name: TiViLook-APK
+          path: TiViLook-latest.apk
 
       - name: Publish APK to GitHub Releases for Auto-Update
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.7.\${{ github.run_number }}
-          name: TiViLook v2.7.\${{ github.run_number }}
-          files: TiViLook-v2.7.\${{ github.run_number }}.apk
+          tag_name: v2.7.${{ github.run_number }}
+          name: TiViLook v2.7.${{ github.run_number }}
+          files: TiViLook-latest.apk
