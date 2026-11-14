@@ -192,7 +192,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fullEpgTitle: TextView
     private lateinit var fullEpgListView: ListView
 
-    private lateinit var settingsSelectedLabel: TextView
     private lateinit var subModalTitle: TextView
     private lateinit var subModalTopButtons: LinearLayout
     private lateinit var subModalList: ListView
@@ -342,7 +341,6 @@ class MainActivity : AppCompatActivity() {
             }.start()
     }
 
-    // Пункт 2: Левая панель всегда фиксированной ширины, чтобы не загромождать экран при увеличении шрифта
     private fun setPlayerMiniPreviewMode(mini: Boolean) {
         val dm = resources.displayMetrics
         if (mini) {
@@ -563,7 +561,6 @@ class MainActivity : AppCompatActivity() {
         val t = currentTheme()
         val scale = uiScaleFactor()
         val dm = resources.displayMetrics
-        // Пункт 2: Левая панель со списком и группами всегда фиксированной ширины (увеличивается только текст внутри неё)
         sidePanel.layoutParams = FrameLayout.LayoutParams(
             700.coerceAtMost((dm.widthPixels * 0.48f).toInt()),
             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -597,8 +594,6 @@ class MainActivity : AppCompatActivity() {
         fullEpgTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f * scale)
         clockTextView.typeface = t.boldFont
         clockTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f * scale)
-        settingsSelectedLabel.setTextColor(t.textPrimaryColor); settingsSelectedLabel.typeface = t.boldFont
-        settingsSelectedLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f * scale)
         infoTextView.setTextColor(t.textPrimaryColor); infoTextView.typeface = t.normalFont
         infoTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f * scale)
         currentChannelBanner.setTextColor(t.textPrimaryColor); currentChannelBanner.typeface = t.boldFont
@@ -621,7 +616,7 @@ class MainActivity : AppCompatActivity() {
         for (cap in allGridCaptions) {
             cap.typeface = t.normalFont
             cap.setTextColor(t.textPrimaryColor)
-            cap.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
+            cap.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f * scale)
         }
 
         updateCategoriesList()
@@ -1040,34 +1035,30 @@ class MainActivity : AppCompatActivity() {
         fullEpgOverlay.addView(fullEpgListView)
         root.addView(fullEpgOverlay)
 
+        // Главное меню настроек: увеличенные отступы между плитками и без нижней текстовой подсказки
         settingsTileOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE; setPadding(48, 30, 48, 30)
+            setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE; setPadding(54, 34, 54, 34)
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         }
-        settingsSelectedLabel = TextView(this).apply {
-            text = "Плейлисты"; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-            typeface = themeBoldFont(); gravity = Gravity.CENTER; setPadding(0, 14, 0, 0)
-        }
 
-        data class GridTileSpec(val iconType: String, val baseHex: String, val accentHex: String, val shortCaption: String, val fullTitle: String, val action: () -> Unit)
+        data class GridTileSpec(val iconType: String, val baseHex: String, val accentHex: String, val shortCaption: String, val action: () -> Unit)
 
-        // Пункт 3: Плитка называется коротко и ясно «Вид»
         val gridSpecs = listOf(
-            GridTileSpec("PLAYLISTS", "#1B8A6B", "#FFB300", "Плейлисты", "Управление плейлистами (2 встроенных + свои)") { navigateToMenu("PLAYLISTS") },
-            GridTileSpec("EDITOR", "#2E5B9A", "#00E676", "Редактор", "Редактор групп и каналов") { navigateToMenu("CHANNEL_EDITOR_GROUPS") },
-            GridTileSpec("ANALYZER", "#5E35B1", "#00E5FF", "Тест каналов", "Быстрый тест и автоскрытие нерабочих") { navigateToMenu("ANALYZER_GROUPS") },
-            GridTileSpec("THEMES", "#1E4E79", "#FF8F00", "Темы и Размер", "Темы, Прозрачность и Размер элементов для ТВ") { navigateToMenu("THEMES") },
-            GridTileSpec("BUFFER", "#D84315", "#FFD600", "Буфер", "Размер буфера и Машина времени") { navigateToMenu("BUFFER") },
-            GridTileSpec("DECODER", "#37474F", "#00B0FF", "Декодер", "Декодер, AFR и Антивыгорание") { navigateToMenu("DECODER") },
-            GridTileSpec("EPG_GRID", "#00695C", "#FF4081", "Телегид", "Полная программа передач с видео-превью") { navigateToMenu("FULL_EPG") },
-            GridTileSpec("TOP_CHANNELS", "#283593", "#FFC107", "ТОП каналы", "Каналы, закреплённые в ТОПе") { navigateToMenu("TOP_MANAGER") },
-            GridTileSpec("FAVORITES", "#AD1457", "#FFD54F", "Избранное", "★ Избранные каналы") {
+            GridTileSpec("PLAYLISTS", "#1B8A6B", "#FFB300", "Плейлисты") { navigateToMenu("PLAYLISTS") },
+            GridTileSpec("EDITOR", "#2E5B9A", "#00E676", "Редактор") { navigateToMenu("CHANNEL_EDITOR_GROUPS") },
+            GridTileSpec("ANALYZER", "#5E35B1", "#00E5FF", "Тест каналов") { navigateToMenu("ANALYZER_GROUPS") },
+            GridTileSpec("THEMES", "#1E4E79", "#FF8F00", "Темы") { navigateToMenu("THEMES") },
+            GridTileSpec("BUFFER", "#D84315", "#FFD600", "Буфер") { navigateToMenu("BUFFER") },
+            GridTileSpec("DECODER", "#37474F", "#00B0FF", "Декодер") { navigateToMenu("DECODER") },
+            GridTileSpec("EPG_GRID", "#00695C", "#FF4081", "Телегид") { navigateToMenu("FULL_EPG") },
+            GridTileSpec("TOP_CHANNELS", "#283593", "#FFC107", "ТОП каналы") { navigateToMenu("TOP_MANAGER") },
+            GridTileSpec("FAVORITES", "#AD1457", "#FFD54F", "Избранное") {
                 selectCategory(0); isSideShowingChannels = true; navigateToMenu("SIDE")
             },
-            GridTileSpec("AUDIO", "#0277BD", "#69F0AE", "Звук и DRC", "Дорожка, Ночной DRC и Усиление до 200%") { navigateToMenu("AUDIO") },
-            GridTileSpec("CONTROL_MODE", "#00838F", "#FFD54F", "Управление", "Режим: Сенсор или Пульт ТВ") { showFirstRunControlPicker(forceShow = true) },
-            GridTileSpec("MORE", "#4A148C", "#FFAB00", "Вид", "Вид, Экран и Обновление") { navigateToMenu("MORE_SETTINGS") }
+            GridTileSpec("AUDIO", "#0277BD", "#69F0AE", "Звук и DRC") { navigateToMenu("AUDIO") },
+            GridTileSpec("CONTROL_MODE", "#00838F", "#FFD54F", "Управление") { showFirstRunControlPicker(forceShow = true) },
+            GridTileSpec("MORE", "#4A148C", "#FFAB00", "Вид") { navigateToMenu("MORE_SETTINGS") }
         )
 
         gridContainerLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
@@ -1085,9 +1076,10 @@ class MainActivity : AppCompatActivity() {
                 allGridTiles.add(tileIcon)
 
                 val captionView = TextView(this).apply {
-                    text = spec.shortCaption; setTextColor(Color.parseColor("#CCCCCC")); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
-                    typeface = themeFont(); gravity = Gravity.CENTER; isSingleLine = true
-                    layoutParams = LinearLayout.LayoutParams(184, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    text = spec.shortCaption; setTextColor(Color.parseColor("#CCCCCC")); setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+                    typeface = themeFont(); gravity = Gravity.CENTER; isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
+                    setPadding(0, 6, 0, 0)
+                    layoutParams = LinearLayout.LayoutParams(220, ViewGroup.LayoutParams.WRAP_CONTENT)
                 }
                 allGridCaptions.add(captionView)
 
@@ -1095,14 +1087,16 @@ class MainActivity : AppCompatActivity() {
                     orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
                     isFocusable = true; isFocusableInTouchMode = false; isClickable = true
                     id = 5000 + specIdx
-                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(14, 6, 14, 6) }
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                        setMargins(26, 10, 26, 10)
+                    }
                     addView(tileIcon); addView(captionView)
                     setOnFocusChangeListener { _, hasFocus ->
                         tileIcon.isTileFocused = hasFocus
                         captionView.setTextColor(if (hasFocus) currentTheme().accentColor else currentTheme().textPrimaryColor)
-                        if (hasFocus) { settingsSelectedLabel.text = spec.fullTitle; resetMenuInactivityTimer() }
+                        if (hasFocus) resetMenuInactivityTimer()
                     }
-                    setOnClickListener { settingsSelectedLabel.text = spec.fullTitle; resetMenuInactivityTimer(); spec.action() }
+                    setOnClickListener { resetMenuInactivityTimer(); spec.action() }
                 }
                 cellViewsMatrix[rowIdx][colIdx] = cellBox
                 rowLayout.addView(cellBox)
@@ -1141,19 +1135,19 @@ class MainActivity : AppCompatActivity() {
             val cCaption = TextView(this).apply {
                 text = spec.shortCaption; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 typeface = themeBoldFont(); gravity = Gravity.CENTER; isSingleLine = true
-                layoutParams = LinearLayout.LayoutParams(220, ViewGroup.LayoutParams.WRAP_CONTENT)
+                layoutParams = LinearLayout.LayoutParams(230, ViewGroup.LayoutParams.WRAP_CONTENT)
             }
             allGridCaptions.add(cCaption)
             val cBox = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
                 isFocusable = true; isFocusableInTouchMode = false; isClickable = true
                 id = 6000 + specIdx; scaleX = 0.82f; scaleY = 0.82f; alpha = 0.65f
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(22, 18, 22, 18) }
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(26, 18, 26, 18) }
                 addView(cTile); addView(cCaption)
                 setOnFocusChangeListener { v, hasFocus ->
                     cTile.isTileFocused = hasFocus
                     if (hasFocus) {
-                        settingsSelectedLabel.text = spec.fullTitle; resetMenuInactivityTimer()
+                        resetMenuInactivityTimer()
                         v.animate().scaleX(1.18f).scaleY(1.18f).alpha(1.0f).translationY(-12f).setDuration(260L).setInterpolator(OvershootInterpolator(1.4f)).start()
                         val scrollX = (v.left + v.right) / 2 - carouselScrollView.width / 2
                         carouselScrollView.smoothScrollTo(scrollX.coerceAtLeast(0), 0)
@@ -1173,7 +1167,6 @@ class MainActivity : AppCompatActivity() {
         carouselScrollView.addView(carouselRowLayout)
         settingsTileOverlay.addView(gridContainerLayout)
         settingsTileOverlay.addView(carouselScrollView)
-        settingsTileOverlay.addView(settingsSelectedLabel)
         root.addView(settingsTileOverlay)
 
         subModalOverlay = LinearLayout(this).apply {
@@ -1446,7 +1439,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Пункт 1: Если окно только что открылось и ещё не успело вычислить свои размеры (width == 0), считаем касание внутри окна!
     private fun isPointInsideVisibleView(x: Float, y: Float, v: View): Boolean {
         if (v.visibility != View.VISIBLE) return false
         if (v.width == 0 || v.height == 0) return true
@@ -1471,7 +1463,6 @@ class MainActivity : AppCompatActivity() {
             override fun onDown(e: MotionEvent): Boolean = false
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 if (firstRunModeOverlay.visibility == View.VISIBLE) return false
-                // Пункт 1: Защита от закрытия только что открытого на телефоне подменю (Плейлисты / Тест каналов)
                 if (System.currentTimeMillis() - lastMenuChangeMs < 500L) return true
                 if (isDualStreamActive && isPointInsideVisibleView(e.rawX, e.rawY, dualStreamContainer) && !isPointInsideVisibleView(e.rawX, e.rawY, dualCloseBtn)) {
                     swapMainAndDualStream()
@@ -1932,24 +1923,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun effectiveCategory(ch: Channel): String = customCategoryMap[ch.url] ?: ch.category
 
+    // Окно «Темы»: только выбор темы, кнопки размера и прозрачности убраны
     private fun openThemesSubModal() {
-        subModalTitle.text = "Темы, Размер элементов и Прозрачность"
+        subModalTitle.text = "Темы оформления"
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.VISIBLE
-        subModalTopButtons.visibility = View.VISIBLE
+        subModalTopButtons.visibility = View.GONE
         subModalTopButtons.removeAllViews()
-
-        val scaleName = when (uiScaleStep) { 0 -> "Обычный (Смартфон)"; 1 -> "Крупный (ТВ)"; else -> "Огромный (Большой ТВ)" }
-        val alphaName = when (uiAlphaStep) { 0 -> "Плотный (96%)"; 1 -> "Средний (84%)"; else -> "Стекло (68%)" }
-
-        subModalTopButtons.addView(makeModernButton("🔍 Размер: $scaleName") {
-            uiScaleStep = (uiScaleStep + 1) % 3
-            saveState(); applyCurrentThemeToAllPanels(); openThemesSubModal()
-        })
-        subModalTopButtons.addView(makeModernButton("💧 Прозрачность: $alphaName") {
-            uiAlphaStep = (uiAlphaStep + 1) % 3
-            saveState(); applyCurrentThemeToAllPanels(); openThemesSubModal()
-        })
 
         val items = themes.mapIndexed { idx, t ->
             if (idx == themeIndex) "[+]  ${t.name}   —   АКТИВНА"
@@ -2009,7 +1989,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        fullEpgListView.adapter = createRoundedSelectorAdapter(items, 16f, false) { pos -> fullEpgListView.selectedItemPosition == pos }
+        fullEpgListView.adapter = createRoundedSelectorAdapter(items, 16f, true) { pos -> fullEpgListView.selectedItemPosition == pos }
         animateMenuAppear(fullEpgOverlay)
         fullEpgListView.requestFocus()
         if (activeIndex > 0 && activeIndex < items.size) fullEpgListView.setSelection(activeIndex)
@@ -2022,7 +2002,6 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    // Пункт 3: Меню «Вид» от верхнего до нижнего края экрана (с небольшим отступом), всё в одну строку, с графическими переключателями
     private fun openMoreSettingsSubModal() {
         val dm = resources.displayMetrics
         subModalOverlay.layoutParams = FrameLayout.LayoutParams(
@@ -3037,7 +3016,7 @@ class MainActivity : AppCompatActivity() {
                             if (CoreEngines.isArabicOrIndianChannel(extra.name, extra.category, extra.url)) continue
                             if (strictRuOnly && !CoreEngines.isStrictlyRussianChannel(extra.name, extra.url, extra.category)) continue
                             val cleanTitle = CoreEngines.cleanChannelDisplayName(extra.name)
-                            if (existingKeys.add(CoreEngines.normalizeName(cleanTitle) + "_" + extra.category)) {
+                            if (existingKeys.add(CoreEngines.normalizeName(cleanTitle) + "_" + extra.category + "_" + extra.url.substringAfter("#", ""))) {
                                 result.add(Channel(cleanTitle, extra.url, customCategoryMap[extra.url] ?: extra.category, extra.tvgId))
                             }
                         }
