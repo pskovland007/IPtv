@@ -1,0 +1,34 @@
+[
+    {
+        "merged": "com.example.miboxiptv.app-merged_res-25:/drawable_ic_launcher.xml.flat",
+        "source": "com.example.miboxiptv.app-main-26:/drawable/ic_launcher.xml"
+    },
+    {
+        "merged": "com.example.miboxiptv.app-merged_res-25:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.example.miboxiptv.app-main-26:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.example.miboxiptv.app-merged_res-25:/drawable_ic_launcher_fg.xml.flat",
+        "source": "com.example.miboxiptv.app-main-26:/drawable/ic_launcher_fg.xml"
+    },
+    {
+        "merged": "com.example.miboxiptv.app-merged_res-25:/layout_player_texture_view.xml.flat",
+        "source": "com.example.miboxiptv.app-main-26:/layout/player_texture_view.xml"
+    },
+    {
+        "merged": "com.example.miboxiptv.app-merged_res-25:/drawable_ic_banner.xml.flat",
+        "source": "com.example.miboxiptv.app-main-26:/drawable/ic_banner.xml"
+    },
+    {
+        "merged": "com.example.miboxiptv.app-merged_res-25:/xml_file_paths.xml.flat",
+        "source": "com.example.miboxiptv.app-main-26:/xml/file_paths.xml"
+    },
+    {
+        "merged": "com.example.miboxiptv.app-merged_res-25:/layout_player_surface_view.xml.flat",
+        "source": "com.example.miboxiptv.app-main-26:/layout/player_surface_view.xml"
+    },
+    {
+        "merged": "com.example.miboxiptv.app-merged_res-25:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.example.miboxiptv.app-main-26:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    }
+]
