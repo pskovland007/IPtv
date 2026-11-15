@@ -22,8 +22,8 @@ android {
         applicationId "com.example.miboxiptv"
         minSdk 21
         targetSdk 33
-        versionCode 17247
-        versionName "2.7.47"
+        versionCode 17248
+        versionName "2.7.48"
     }
 
     buildTypes {
@@ -59,10 +59,10 @@ dependencies {
     implementation 'androidx.media3:media3-datasource:1.2.1'
 }
 
-// === ПОЛНАЯ АВТОМАТИЗАЦИЯ: БАННЕР + ФИКС МЕНЮ + РАЗДЕЛЕНИЕ MAINACTIVITY НА 2 ФАЙЛА ===
-tasks.register("autoModularizeAndPatch") {
+// === АВТОМАТИЧЕСКОЕ ИСПРАВЛЕНИЕ ЗАВИСАНИЯ ЛЕВОГО МЕНЮ (ФОКУС/MARQUEE) И ТВ-БАННЕРА ===
+tasks.register("autoFixLeftMenuHang") {
     doLast {
-        // 1. Авто-создание полноразмерного ТВ-баннера 320x180
+        // 1. Полноразмерный ТВ-баннер
         def drawableDir = file("src/main/res/drawable")
         drawableDir.mkdirs()
         new File(drawableDir, "tv_banner.xml").write('''<?xml version="1.0" encoding="utf-8"?>
@@ -85,7 +85,6 @@ tasks.register("autoModularizeAndPatch") {
     <path android:fillColor="#FFFFFF" android:pathData="M172,78m-6.5,0a6.5,6.5 0,1 1,13 0a6.5,6.5 0,1 1,-13 0" />
 </vector>''', "UTF-8")
 
-        // 2. Авто-прописывание баннера в AndroidManifest.xml
         def manifestFile = file("src/main/AndroidManifest.xml")
         if (manifestFile.exists()) {
             def mText = manifestFile.getText("UTF-8")
@@ -96,67 +95,24 @@ tasks.register("autoModularizeAndPatch") {
             }
         }
 
-        // 3. Авто-исправление и авто-разделение MainActivity.kt на MainActivity.kt + SettingsModals.kt
+        // 2. Убираем в CustomViews.kt перехват фокуса (override fun isFocused) и повторный setSingleLine(true), которые вешали RecyclerView!
         def pkgDir = file("src/main/java/com/example/miboxiptv")
-        def mainFile = new File(pkgDir, "MainActivity.kt")
-        def modalsFile = new File(pkgDir, "SettingsModals.kt")
+        def customViewsFile = new File(pkgDir, "CustomViews.kt")
+        if (customViewsFile.exists()) {
+            def cvText = customViewsFile.getText("UTF-8")
+            cvText = cvText.replace("override fun isFocused(): Boolean = forceMarqueeActive || super.isFocused()", "// isFocused override removed to prevent RecyclerView focus loop")
+            cvText = cvText.replace("setSingleLine(true)\n            maxLines = 1", "// layout-triggering calls removed from setter")
+            customViewsFile.write(cvText, "UTF-8")
+        }
 
+        // 3. Очищаем открытие левого меню в MainActivity.kt от лишних перестроений
+        def mainFile = new File(pkgDir, "MainActivity.kt")
         if (mainFile.exists()) {
             def kText = mainFile.getText("UTF-8")
             kText = kText.replace("fitSideListsToWholeRows()", "// fitSideListsToWholeRows() disabled")
-
-            def splitMarker = "private fun openPlaylistsSubModal()"
-            def endMarker = "private fun ensureDefaultPlaylists()"
-
-            if (!modalsFile.exists() && kText.contains(splitMarker) && kText.contains(endMarker)) {
-                // Делаем поля и функции внутри MainActivity доступными для файла-расширения SettingsModals.kt
-                kText = kText.replace("private var ", "internal var ")
-                             .replace("private val ", "internal val ")
-                             .replace("private lateinit var ", "internal lateinit var ")
-                             .replace("private fun ", "internal fun ")
-
-                def splitStartIdx = kText.indexOf("internal fun openPlaylistsSubModal()")
-                def splitEndIdx = kText.indexOf("internal fun ensureDefaultPlaylists()")
-
-                if (splitStartIdx > 0 && splitEndIdx > splitStartIdx) {
-                    def extractedBlock = kText.substring(splitStartIdx, splitEndIdx)
-                    def remainingMain = kText.substring(0, splitStartIdx) + kText.substring(splitEndIdx)
-
-                    // Превращаем все вынесенные методы в функции-расширения MainActivity.<method>
-                    def extensionBlock = extractedBlock.replace("internal fun ", "internal fun MainActivity.")
-
-                    def modalsHeader = '''package com.example.miboxiptv
-
-import android.graphics.Color
-import android.os.Environment
-import android.view.Gravity
-import android.view.View
-import android.widget.EditText
-import android.widget.LinearLayout
-import androidx.annotation.OptIn
-import androidx.media3.common.C
-import androidx.media3.common.TrackSelectionOverride
-import androidx.media3.common.util.UnstableApi
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
-import kotlin.concurrent.thread
-
-@OptIn(UnstableApi::class)
-'''
-                    modalsFile.write(modalsHeader + "\n" + extensionBlock, "UTF-8")
-                    mainFile.write(remainingMain, "UTF-8")
-                } else {
-                    mainFile.write(kText, "UTF-8")
-                }
-            } else {
-                mainFile.write(kText, "UTF-8")
-            }
+            mainFile.write(kText, "UTF-8")
         }
     }
 }
 
-preBuild.dependsOn("autoModularizeAndPatch")
+preBuild.dependsOn("autoFixLeftMenuHang")
