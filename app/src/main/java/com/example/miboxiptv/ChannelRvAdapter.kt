@@ -39,10 +39,7 @@ class ChannelRvAdapter(
         Color.parseColor("#00ACC1")
     )
 
-    fun getExactRowHeightPx(): Int {
-        val scale = getUiScaleFactor()
-        return (50f * scale).toInt()
-    }
+    fun getExactRowHeightPx(): Int = (50f * getUiScaleFactor()).toInt()
 
     fun submitChannels(newList: List<Channel>, initialFocusPos: Int) {
         items.clear()
@@ -57,12 +54,9 @@ class ChannelRvAdapter(
         val clean = name.replace(Regex("[^a-zA-Zа-яА-Я0-9 ]"), " ").trim()
         val parts = clean.split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (parts.size >= 2) {
-            val c1 = parts[0].first()
-            val c2 = parts[1].first()
-            return "$c1$c2".uppercase()
+            return "${parts[0].first()}${parts[1].first()}".uppercase()
         }
-        val single = parts.firstOrNull() ?: "TV"
-        return single.take(2).uppercase()
+        return (parts.firstOrNull() ?: "TV").take(2).uppercase()
     }
 
     private fun badgeColorForName(name: String): Int {
@@ -71,37 +65,25 @@ class ChannelRvAdapter(
     }
 
     inner class ChannelVH(val rowView: ChannelRowView) : RecyclerView.ViewHolder(rowView) {
-        val selectorBg = GradientDrawable().apply { cornerRadius = 16f }
-        val badgeBg = GradientDrawable().apply { cornerRadius = 8f }
+        private val selectorBg = GradientDrawable()
+        private val badgeBg = GradientDrawable()
 
         init {
             rowView.isFocusable = true
             rowView.isFocusableInTouchMode = false
             rowView.isClickable = true
             rowView.isLongClickable = true
-            rowView.badgeView.includeFontPadding = false
-            rowView.badgeView.setPadding(2, 0, 2, 0)
-            rowView.titleView.includeFontPadding = false
+            rowView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
 
             rowView.setOnFocusChangeListener { _, hasFocus ->
                 @Suppress("DEPRECATION")
                 val pos = adapterPosition
                 if (pos == RecyclerView.NO_POSITION || pos !in 0 until items.size) return@setOnFocusChangeListener
                 if (hasFocus) {
-                    val prev = highlightedPos
                     highlightedPos = pos
                     onChannelFocused(pos)
-                    bindStyle(items[pos], isSelectedRow = true)
-                    if (prev != pos && prev in 0 until items.size) {
-                        val rv = rowView.parent as? RecyclerView
-                        val prevHolder = rv?.findViewHolderForAdapterPosition(prev) as? ChannelVH
-                        if (prevHolder != null) {
-                            prevHolder.bindStyle(items[prev], isSelectedRow = false)
-                        }
-                    }
-                } else {
-                    bindStyle(items[pos], isSelectedRow = false)
                 }
+                applyVisualState(items[pos], isSelectedRow = hasFocus)
             }
 
             rowView.setOnClickListener {
@@ -159,38 +141,44 @@ class ChannelRvAdapter(
             }
         }
 
-        fun bindStyle(ch: Channel, isSelectedRow: Boolean) {
+        fun bindData(ch: Channel, isSelectedRow: Boolean) {
+            val scale = getUiScaleFactor()
+            val monogram = extractMonogram(ch.name)
+            rowView.badgeView.text = monogram
+            rowView.badgeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, (if (monogram.length >= 2) 8.8f else 10.0f) * scale)
+
+            val prefix = (if (isTopUrl(ch.url)) "▲ " else "") + (if (isFavUrl(ch.url)) "★ " else "")
+            val fullTitle = prefix + ch.name
+            if (rowView.titleView.text.toString() != fullTitle) {
+                rowView.titleView.text = fullTitle
+            }
+            rowView.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.0f * scale)
+
+            applyVisualState(ch, isSelectedRow)
+        }
+
+        fun applyVisualState(ch: Channel, isSelectedRow: Boolean) {
             val t = getTheme()
             val scale = getUiScaleFactor()
             val isPlaying = (ch.url == getPlayingUrl())
 
-            val padV = (7f * scale).toInt()
-            rowView.setPadding(6, padV, 8, padV)
-
-            val monogram = extractMonogram(ch.name)
-            rowView.badgeView.text = monogram
-            val fontSp = if (monogram.length >= 2) 8.8f else 10.0f
-            rowView.badgeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSp * scale)
             badgeBg.cornerRadius = 8f * scale
             badgeBg.setColor(badgeColorForName(ch.name))
             badgeBg.setStroke(if (isSelectedRow) 2 else 1, if (isSelectedRow) Color.WHITE else Color.parseColor("#55FFFFFF"))
-            rowView.badgeView.setBackgroundDrawable(badgeBg)
+            rowView.badgeView.background = badgeBg
 
-            val prefix = (if (isTopUrl(ch.url)) "▲ " else "") + (if (isFavUrl(ch.url)) "★ " else "")
-            rowView.titleView.text = prefix + ch.name
             rowView.titleView.typeface = if (isSelectedRow || isPlaying) t.boldFont else t.normalFont
-            rowView.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.0f * scale)
-            rowView.titleView.forceMarqueeActive = isSelectedRow
+            rowView.titleView.isSelected = isSelectedRow
 
             if (isSelectedRow) {
                 rowView.titleView.setTextColor(t.textOnAccent)
                 selectorBg.cornerRadius = 15f * scale
                 selectorBg.setColor(t.accentColor)
                 selectorBg.setStroke(2, Color.WHITE)
-                rowView.setBackgroundDrawable(selectorBg)
+                rowView.background = selectorBg
             } else {
                 rowView.titleView.setTextColor(if (isPlaying) t.accentColor else t.textPrimaryColor)
-                rowView.setBackgroundDrawable(null)
+                rowView.background = null
             }
 
             if (isPlaying) {
@@ -204,19 +192,18 @@ class ChannelRvAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelVH {
         val scale = getUiScaleFactor()
+        val padV = (7f * scale).toInt()
+        val badgeW = (44f * scale).toInt()
+        val badgeH = (32f * scale).toInt()
         val rowView = ChannelRowView(parent.context).apply {
+            setPadding(6, padV, 8, padV)
             layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = 2
-            }
-            val badgeW = (44f * scale).toInt()
-            val badgeH = (32f * scale).toInt()
+            ).apply { bottomMargin = 2 }
+
             badgeView.layoutParams = FrameLayout.LayoutParams(
-                badgeW,
-                badgeH,
-                Gravity.START or Gravity.CENTER_VERTICAL
+                badgeW, badgeH, Gravity.START or Gravity.CENTER_VERTICAL
             ).apply { leftMargin = (8f * scale).toInt() }
 
             titleView.layoutParams = FrameLayout.LayoutParams(
@@ -233,8 +220,8 @@ class ChannelRvAdapter(
 
     override fun onBindViewHolder(holder: ChannelVH, position: Int) {
         val ch = items[position]
-        val isSel = holder.rowView.hasFocus() || (position == highlightedPos)
-        holder.bindStyle(ch, isSel)
+        val isSel = holder.rowView.hasFocus()
+        holder.bindData(ch, isSel)
     }
 
     override fun getItemCount(): Int = items.size
