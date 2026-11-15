@@ -22,8 +22,8 @@ android {
         applicationId "com.example.miboxiptv"
         minSdk 21
         targetSdk 33
-        versionCode 17246
-        versionName "2.7.46"
+        versionCode 17247
+        versionName "2.7.47"
     }
 
     buildTypes {
@@ -50,27 +50,25 @@ android {
 }
 
 dependencies {
-    implementation "androidx.core:core-ktx:1.12.0"
-    implementation "androidx.appcompat:appcompat:1.6.1"
-    implementation "androidx.recyclerview:recyclerview:1.3.2"
-    implementation "androidx.media3:media3-common:1.2.1"
-    implementation "androidx.media3:media3-datasource:1.2.1"
-    implementation "androidx.media3:media3-extractor:1.2.1"
-    implementation "androidx.media3:media3-exoplayer:1.2.1"
-    implementation "androidx.media3:media3-exoplayer-hls:1.2.1"
-    implementation "androidx.media3:media3-ui:1.2.1"
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.media3:media3-exoplayer:1.2.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.2.1'
+    implementation 'androidx.media3:media3-ui:1.2.1'
+    implementation 'androidx.media3:media3-datasource:1.2.1'
 }
-tasks.register("generateTvBannerAndLargeIcon") {
+
+// === ПОЛНАЯ АВТОМАТИЗАЦИЯ: БАННЕР + ФИКС МЕНЮ + РАЗДЕЛЕНИЕ MAINACTIVITY НА 2 ФАЙЛА ===
+tasks.register("autoModularizeAndPatch") {
     doLast {
+        // 1. Авто-создание полноразмерного ТВ-баннера 320x180
         def drawableDir = file("src/main/res/drawable")
         drawableDir.mkdirs()
-        def bannerFile = new File(drawableDir, "tv_banner.xml")
-        bannerFile.write('''<?xml version="1.0" encoding="utf-8"?>
+        new File(drawableDir, "tv_banner.xml").write('''<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="320dp"
-    android:height="180dp"
-    android:viewportWidth="320"
-    android:viewportHeight="180">
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
     <path android:fillColor="#0B1026" android:pathData="M0,0h320v180h-320z" />
     <path android:fillColor="#142850" android:pathData="M0,32 C110,10 210,35 320,8 L320,180 L0,180 Z" />
     <path android:fillColor="#006978" android:pathData="M0,70 C115,48 215,72 320,42 L320,180 L0,180 Z" />
@@ -87,14 +85,78 @@ tasks.register("generateTvBannerAndLargeIcon") {
     <path android:fillColor="#FFFFFF" android:pathData="M172,78m-6.5,0a6.5,6.5 0,1 1,13 0a6.5,6.5 0,1 1,-13 0" />
 </vector>''', "UTF-8")
 
+        // 2. Авто-прописывание баннера в AndroidManifest.xml
         def manifestFile = file("src/main/AndroidManifest.xml")
         if (manifestFile.exists()) {
-            def text = manifestFile.getText("UTF-8")
-            text = text.replace('android:icon="@mipmap/ic_launcher"', 'android:banner="@drawable/tv_banner"\n        android:icon="@drawable/tv_banner"')
-            text = text.replace('android:roundIcon="@mipmap/ic_launcher"', 'android:roundIcon="@drawable/tv_banner"')
-            manifestFile.write(text, "UTF-8")
+            def mText = manifestFile.getText("UTF-8")
+            if (!mText.contains("@drawable/tv_banner")) {
+                mText = mText.replace('android:icon="@mipmap/ic_launcher"', 'android:banner="@drawable/tv_banner"\n        android:icon="@drawable/tv_banner"')
+                mText = mText.replace('android:roundIcon="@mipmap/ic_launcher"', 'android:roundIcon="@drawable/tv_banner"')
+                manifestFile.write(mText, "UTF-8")
+            }
+        }
+
+        // 3. Авто-исправление и авто-разделение MainActivity.kt на MainActivity.kt + SettingsModals.kt
+        def pkgDir = file("src/main/java/com/example/miboxiptv")
+        def mainFile = new File(pkgDir, "MainActivity.kt")
+        def modalsFile = new File(pkgDir, "SettingsModals.kt")
+
+        if (mainFile.exists()) {
+            def kText = mainFile.getText("UTF-8")
+            kText = kText.replace("fitSideListsToWholeRows()", "// fitSideListsToWholeRows() disabled")
+
+            def splitMarker = "private fun openPlaylistsSubModal()"
+            def endMarker = "private fun ensureDefaultPlaylists()"
+
+            if (!modalsFile.exists() && kText.contains(splitMarker) && kText.contains(endMarker)) {
+                // Делаем поля и функции внутри MainActivity доступными для файла-расширения SettingsModals.kt
+                kText = kText.replace("private var ", "internal var ")
+                             .replace("private val ", "internal val ")
+                             .replace("private lateinit var ", "internal lateinit var ")
+                             .replace("private fun ", "internal fun ")
+
+                def splitStartIdx = kText.indexOf("internal fun openPlaylistsSubModal()")
+                def splitEndIdx = kText.indexOf("internal fun ensureDefaultPlaylists()")
+
+                if (splitStartIdx > 0 && splitEndIdx > splitStartIdx) {
+                    def extractedBlock = kText.substring(splitStartIdx, splitEndIdx)
+                    def remainingMain = kText.substring(0, splitStartIdx) + kText.substring(splitEndIdx)
+
+                    // Превращаем все вынесенные методы в функции-расширения MainActivity.<method>
+                    def extensionBlock = extractedBlock.replace("internal fun ", "internal fun MainActivity.")
+
+                    def modalsHeader = '''package com.example.miboxiptv
+
+import android.graphics.Color
+import android.os.Environment
+import android.view.Gravity
+import android.view.View
+import android.widget.EditText
+import android.widget.LinearLayout
+import androidx.annotation.OptIn
+import androidx.media3.common.C
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.util.UnstableApi
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
+
+@OptIn(UnstableApi::class)
+'''
+                    modalsFile.write(modalsHeader + "\n" + extensionBlock, "UTF-8")
+                    mainFile.write(remainingMain, "UTF-8")
+                } else {
+                    mainFile.write(kText, "UTF-8")
+                }
+            } else {
+                mainFile.write(kText, "UTF-8")
+            }
         }
     }
 }
 
-preBuild.dependsOn("generateTvBannerAndLargeIcon")
+preBuild.dependsOn("autoModularizeAndPatch")
