@@ -1,3 +1,12 @@
+import java.awt.Color as AwtColor
+import java.awt.Font
+import java.awt.GradientPaint
+import java.awt.RenderingHints
+import java.awt.geom.Ellipse2D
+import java.awt.geom.Path2D
+import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
+
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
@@ -22,8 +31,8 @@ android {
         applicationId "com.example.miboxiptv"
         minSdk 21
         targetSdk 33
-        versionCode 17249
-        versionName "2.7.49"
+        versionCode 17250
+        versionName "2.7.50"
     }
 
     buildTypes {
@@ -59,139 +68,276 @@ dependencies {
     implementation 'androidx.media3:media3-datasource:1.2.1'
 }
 
-tasks.register("autoFixSideMenuCrash") {
+// === НОВАЯ АРХИТЕКТУРА: ЗАМЕНА RECYCLERVIEW НА LISTVIEW + PNG БАННЕР + РАДАР ОШИБОК ===
+tasks.register("rebuildSideMenuArchitecture") {
     doLast {
         def pkgDir = file("src/main/java/com/example/miboxiptv")
 
-        // 1. Удаляем временный SettingsModals.kt, если он остался от прошлой сборки и вызывает конфликт
-        def oldModals = new File(pkgDir, "SettingsModals.kt")
-        if (oldModals.exists()) {
-            oldModals.delete()
-        }
+        // 1. Генерируем НАСТОЯЩИЙ растровый PNG-баннер 320x180 и крупную PNG-иконку 512x512 (ТВ-лаунчеры требуют растровый PNG!)
+        try {
+            def drawBanner = { int w, int h ->
+                BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)
+                def g = img.createGraphics()
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
-        // 2. Создаём полноразмерный ТВ-баннер
-        def drawableDir = file("src/main/res/drawable")
-        drawableDir.mkdirs()
-        new File(drawableDir, "tv_banner.xml").write('''<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="320dp" android:height="180dp"
-    android:viewportWidth="320" android:viewportHeight="180">
-    <path android:fillColor="#0B1026" android:pathData="M0,0h320v180h-320z" />
-    <path android:fillColor="#142850" android:pathData="M0,32 C110,10 210,35 320,8 L320,180 L0,180 Z" />
-    <path android:fillColor="#006978" android:pathData="M0,70 C115,48 215,72 320,42 L320,180 L0,180 Z" />
-    <path android:fillColor="#00A896" android:pathData="M0,112 C120,88 220,108 320,82 L320,180 L0,180 Z" />
-    <path android:fillColor="#4A148C" android:pathData="M0,148 C125,125 225,142 320,118 L320,180 L0,180 Z" />
-    <path android:fillColor="#AD1457" android:pathData="M0,172 C130,155 230,166 320,148 L320,180 L0,180 Z" />
-    <path android:fillColor="#090C15" android:pathData="M48,90 C95,18 225,18 272,90 C225,162 95,162 48,90 Z" />
-    <path android:fillColor="#E8F1F5" android:pathData="M64,90 C105,30 215,30 256,90 C215,150 105,150 64,90 Z" />
-    <path android:fillColor="#00E5FF" android:pathData="M160,90m-46,0a46,46 0,1 1,92 0a46,46 0,1 1,-92 0" />
-    <path android:fillColor="#00BFA5" android:pathData="M160,90m-38,0a38,38 0,1 1,76 0a38,38 0,1 1,-76 0" />
-    <path android:fillColor="#FFD54F" android:pathData="M160,44 A46,46 0 0,1 206,90 L160,90 Z" />
-    <path android:fillColor="#7C4DFF" android:pathData="M160,136 A46,46 0 0,1 114,90 L160,90 Z" />
-    <path android:fillColor="#05070B" android:pathData="M160,90m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0" />
-    <path android:fillColor="#FFFFFF" android:pathData="M172,78m-6.5,0a6.5,6.5 0,1 1,13 0a6.5,6.5 0,1 1,-13 0" />
-</vector>''', "UTF-8")
+                // Фон с яркими волнами
+                g.setPaint(new GradientPaint(0f, 0f, new AwtColor(11, 16, 38), w as float, h as float, new AwtColor(173, 20, 87)))
+                g.fillRect(0, 0, w, h)
 
+                g.setPaint(new GradientPaint(0f, (h * 0.2f) as float, new AwtColor(0, 105, 120, 210), w as float, (h * 0.8f) as float, new AwtColor(74, 20, 140, 210)))
+                g.fillOval((-w * 0.2) as int, (h * 0.15) as int, (w * 1.4) as int, (h * 1.1) as int)
+
+                double cx = w / 2.0
+                double cy = h / 2.0
+                double rx = Math.min(w, h) * 0.44
+                double ry = Math.min(w, h) * 0.28
+
+                // Контур глаза
+                Path2D outer = new Path2D.Double()
+                outer.moveTo(cx - rx * 1.15, cy)
+                outer.curveTo(cx - rx * 0.55, cy - ry * 1.85, cx + rx * 0.55, cy - ry * 1.85, cx + rx * 1.15, cy)
+                outer.curveTo(cx + rx * 0.55, cy + ry * 1.85, cx - rx * 0.55, cy + ry * 1.85, cx - rx * 1.15, cy)
+                outer.closePath()
+                g.setColor(new AwtColor(9, 12, 21))
+                g.fill(outer)
+
+                // Белок
+                Path2D inner = new Path2D.Double()
+                inner.moveTo(cx - rx, cy)
+                inner.curveTo(cx - rx * 0.48, cy - ry * 1.52, cx + rx * 0.48, cy - ry * 1.52, cx + rx, cy)
+                inner.curveTo(cx + rx * 0.48, cy + ry * 1.52, cx - rx * 0.48, cy + ry * 1.52, cx - rx, cy)
+                inner.closePath()
+                g.setColor(new AwtColor(232, 241, 245))
+                g.fill(inner)
+
+                // Радужка
+                double ir = ry * 1.02
+                g.setPaint(new GradientPaint((cx - ir) as float, (cy - ir) as float, new AwtColor(0, 229, 255), (cx + ir) as float, (cy + ir) as float, new AwtColor(255, 213, 79)))
+                g.fill(new Ellipse2D.Double(cx - ir, cy - ir, ir * 2, ir * 2))
+
+                // Зрачок и блик
+                double pr = ir * 0.50
+                g.setColor(AwtColor.BLACK)
+                g.fill(new Ellipse2D.Double(cx - pr, cy - pr, pr * 2, pr * 2))
+                g.setColor(AwtColor.WHITE)
+                g.fill(new Ellipse2D.Double(cx + pr * 0.22, cy - pr * 0.65, pr * 0.52, pr * 0.52))
+                g.dispose()
+                return img
+            }
+
+            def drawableDir = file("src/main/res/drawable")
+            drawableDir.mkdirs()
+            // Удаляем старый векторный tv_banner.xml, чтобы не конфликтовал с PNG
+            new File(drawableDir, "tv_banner.xml").delete()
+            ImageIO.write(drawBanner(320, 180), "PNG", new File(drawableDir, "tv_banner.png"))
+
+            // Перезаписываем все ic_launcher.png во всех папках mipmap крупной иконкой без полей!
+            def resDir = file("src/main/res")
+            resDir.eachDirMatch(~/mipmap-.*/) { dir ->
+                new File(dir, "ic_launcher.xml").delete()
+                new File(dir, "ic_launcher_round.xml").delete()
+                ImageIO.write(drawBanner(512, 512), "PNG", new File(dir, "ic_launcher.png"))
+                ImageIO.write(drawBanner(512, 512), "PNG", new File(dir, "ic_launcher_round.png"))
+            }
+        } catch (Throwable ignored) {}
+
+        // 2. Обновляем AndroidManifest.xml под PNG-баннер и стандартную иконку
         def manifestFile = file("src/main/AndroidManifest.xml")
         if (manifestFile.exists()) {
             def mText = manifestFile.getText("UTF-8")
-            if (!mText.contains("@drawable/tv_banner")) {
-                mText = mText.replace('android:icon="@mipmap/ic_launcher"', 'android:banner="@drawable/tv_banner"\n        android:icon="@drawable/tv_banner"')
-                mText = mText.replace('android:roundIcon="@mipmap/ic_launcher"', 'android:roundIcon="@drawable/tv_banner"')
-                manifestFile.write(mText, "UTF-8")
+            mText = mText.replace('android:icon="@drawable/tv_banner"', 'android:icon="@mipmap/ic_launcher"')
+            mText = mText.replace('android:roundIcon="@drawable/tv_banner"', 'android:roundIcon="@mipmap/ic_launcher"')
+            if (!mText.contains('android:banner="@drawable/tv_banner"')) {
+                mText = mText.replace('android:icon="@mipmap/ic_launcher"', 'android:banner="@drawable/tv_banner"\n        android:icon="@mipmap/ic_launcher"')
             }
+            manifestFile.write(mText, "UTF-8")
         }
 
-        // 3. Чистим CustomViews.kt от перехвата фокуса
-        def customViewsFile = new File(pkgDir, "CustomViews.kt")
-        if (customViewsFile.exists()) {
-            def cvText = customViewsFile.getText("UTF-8")
-            cvText = cvText.replace("override fun isFocused(): Boolean = forceMarqueeActive || super.isFocused()", "// removed focus override")
-            cvText = cvText.replace("setSingleLine(true)\n            maxLines = 1", "// removed layout trigger")
-            customViewsFile.write(cvText, "UTF-8")
-        }
-
-        // 4. Патчим MainActivity.kt: убираем молчаливое сворачивание при ошибке и защищаем showSideChannelsMode / showSideGroupsMode
+        // 3. Полностью переводим боковое меню в MainActivity.kt на единый неубиваемый ListView (categoryListView) + встраиваем экранный перехватчик ошибок!
         def mainFile = new File(pkgDir, "MainActivity.kt")
         if (mainFile.exists()) {
             def kText = mainFile.getText("UTF-8")
 
-            // Убираем глушилку, которая сворачивала приложение при любом исключении в UI
-            kText = kText.replace("Thread.setDefaultUncaughtExceptionHandler { _, _ -> }", "// UncaughtExceptionHandler removed so UI does not silently close")
-            kText = kText.replace("fitSideListsToWholeRows()", "// fitSideListsToWholeRows() disabled")
+            // Вместо тихого закрытия при ошибке выводим окно с точным текстом сбоя на экран
+            def crashCatcherCode = '''Thread.setDefaultUncaughtExceptionHandler { _, e ->
+            Looper.prepare()
+            Toast.makeText(applicationContext, "СБОЙ: ${e.javaClass.simpleName}: ${e.message}", Toast.LENGTH_LONG).show()
+            Looper.loop()
+        }'''
+            kText = kText.replace("Thread.setDefaultUncaughtExceptionHandler { _, _ -> }", crashCatcherCode)
+            kText = kText.replace("// UncaughtExceptionHandler removed so UI does not silently close", crashCatcherCode)
 
-            // Заменяем showSideChannelsMode на полностью безопасный вариант с try-catch
-            def startMarker = "private fun showSideChannelsMode("
-            def startMarkerInternal = "internal fun showSideChannelsMode("
-            def endMarker = "private fun playSplashEyeAnimation()"
-            def endMarkerInternal = "internal fun playSplashEyeAnimation()"
+            // Заменяем обработчики categoryListView и методы showSideChannelsMode / showSideGroupsMode
+            // Теперь И группы, И каналы отображаются в одном и том же 100% стабильном categoryListView (ListView)!
+            def oldBlockStart = "categoryAdapter = createRoundedSelectorAdapter("
+            def oldBlockEnd = "applyCurrentThemeToAllPanels()"
 
-            int sIdx = kText.indexOf(startMarker)
-            if (sIdx < 0) sIdx = kText.indexOf(startMarkerInternal)
-            int eIdx = kText.indexOf(endMarker)
-            if (eIdx < 0) eIdx = kText.indexOf(endMarkerInternal)
+            int bs = kText.indexOf(oldBlockStart)
+            int be = kText.indexOf(oldBlockEnd)
+            if (bs > 0 && be > bs) {
+                def unifiedListViewLogic = '''categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 15.5f, true, fixedRowHeight = true) { pos ->
+            !isLeftRailVisible && pos == (if (isSideShowingChannels) focusedChannelPos else focusedCategoryPos)
+        }
+        categoryListView.adapter = categoryAdapter
 
-            if (sIdx > 0 && eIdx > sIdx) {
-                def safeSideMethods = '''private fun showSideChannelsMode(focusCurrentChannelIfSameGroup: Boolean = true) {
-        try {
-            isSideShowingChannels = true
-            isLeftRailVisible = false
-            leftIconRail.visibility = View.GONE
-            categoryListView.visibility = View.GONE
-            channelRecyclerView.visibility = View.VISIBLE
-
-            val snapshot = displayedChannels.toList()
-            if (snapshot.isNotEmpty()) {
-                val activeIdxInGroup = if (focusCurrentChannelIfSameGroup) {
-                    snapshot.indexOfFirst { it.url == currentChannel?.url }
-                } else -1
-                val targetPos = if (activeIdxInGroup >= 0) activeIdxInGroup else 0
-                focusedChannelPos = targetPos
-                channelRvAdapter.submitChannels(snapshot, targetPos)
-                channelRecyclerView.post {
-                    try {
-                        channelLayoutManager.scrollToPositionWithOffset(targetPos, 120)
-                        val vh = channelRecyclerView.findViewHolderForAdapterPosition(targetPos)
-                        if (vh != null) vh.itemView.requestFocus() else channelRecyclerView.requestFocus()
-                    } catch (_: Throwable) {}
+        categoryListView.setOnItemClickListener { _, _, position, _ ->
+            resetMenuInactivityTimer()
+            if (isSideShowingChannels) {
+                val list = displayedChannels.toList()
+                if (position in list.indices) {
+                    focusedChannelPos = position
+                    playChannelObj(list[position], immediate = true)
+                    if (controlMode != 1) closeAllMenus()
                 }
             } else {
-                focusedChannelPos = 0
-                channelRvAdapter.submitChannels(emptyList(), 0)
+                focusedCategoryPos = position
+                selectCategory(position)
+                showSideChannelsMode(focusCurrentChannelIfSameGroup = true)
             }
-        } catch (t: Throwable) {
-            Toast.makeText(this, "Ошибка списка: ${t.message}", Toast.LENGTH_LONG).show()
+        }
+        categoryListView.setOnItemLongClickListener { _, _, position, _ ->
+            resetMenuInactivityTimer()
+            if (isSideShowingChannels) {
+                val list = displayedChannels.toList()
+                if (position in list.indices) {
+                    focusedChannelPos = position
+                    toggleFavorite(list[position])
+                    showSideChannelsMode(focusCurrentChannelIfSameGroup = false)
+                }
+                true
+            } else false
+        }
+        categoryListView.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                resetMenuInactivityTimer()
+                if (isSideShowingChannels) {
+                    focusedChannelPos = position
+                } else {
+                    focusedCategoryPos = position
+                    selectCategory(position)
+                }
+                refreshSimpleListHighlightInPlace(categoryListView, position)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        categoryListView.setOnKeyListener { _, keyCode, event ->
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                resetMenuInactivityTimer()
+                val count = categoryAdapter.count
+                val curPos = if (isSideShowingChannels) focusedChannelPos else focusedCategoryPos
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        if (isSideShowingChannels) {
+                            showSideGroupsMode()
+                        } else {
+                            showLeftIconRailFromGroups()
+                        }
+                        return@setOnKeyListener true
+                    }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        if (isLeftRailVisible) {
+                            hideLeftIconRailToGroups()
+                        } else if (!isSideShowingChannels) {
+                            selectCategory(focusedCategoryPos.coerceAtLeast(0))
+                            showSideChannelsMode(focusCurrentChannelIfSameGroup = true)
+                        } else {
+                            closeAllMenus()
+                        }
+                        return@setOnKeyListener true
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> if (count > 0 && curPos <= 0) {
+                        val lastIdx = count - 1
+                        if (isSideShowingChannels) focusedChannelPos = lastIdx else { focusedCategoryPos = lastIdx; selectCategory(lastIdx) }
+                        categoryListView.setSelection(lastIdx)
+                        refreshSimpleListHighlightInPlace(categoryListView, lastIdx)
+                        return@setOnKeyListener true
+                    }
+                    KeyEvent.KEYCODE_DPAD_DOWN -> if (count > 0 && curPos >= count - 1) {
+                        if (isSideShowingChannels) focusedChannelPos = 0 else { focusedCategoryPos = 0; selectCategory(0) }
+                        categoryListView.setSelection(0)
+                        refreshSimpleListHighlightInPlace(categoryListView, 0)
+                        return@setOnKeyListener true
+                    }
+                }
+            }
+            false
+        }
+
+        '''
+                kText = kText.substring(0, bs) + unifiedListViewLogic + kText.substring(be)
+            }
+
+            // Теперь заменяем showSideChannelsMode и showSideGroupsMode так, чтобы оба работали через надёжный categoryListView!
+            int sIdx = kText.indexOf("private fun showSideChannelsMode(")
+            if (sIdx < 0) sIdx = kText.indexOf("internal fun showSideChannelsMode(")
+            int eIdx = kText.indexOf("private fun playSplashEyeAnimation()")
+            if (eIdx < 0) eIdx = kText.indexOf("internal fun playSplashEyeAnimation()")
+
+            if (sIdx > 0 && eIdx > sIdx) {
+                def newSideMethods = '''private fun showSideChannelsMode(focusCurrentChannelIfSameGroup: Boolean = true) {
+        isSideShowingChannels = true
+        isLeftRailVisible = false
+        leftIconRail.visibility = View.GONE
+        channelRecyclerView.visibility = View.GONE
+        categoryListView.visibility = View.VISIBLE
+
+        val list = displayedChannels.toList()
+        val activeIdx = if (focusCurrentChannelIfSameGroup) list.indexOfFirst { it.url == currentChannel?.url } else focusedChannelPos
+        val targetPos = if (activeIdx in list.indices) activeIdx else 0
+        focusedChannelPos = targetPos
+
+        val formattedChannels = if (list.isEmpty()) {
+            listOf("[-]   В этой категории пока нет каналов")
+        } else {
+            list.mapIndexed { idx, ch ->
+                val isPlaying = (ch.url == currentChannel?.url)
+                val playPrefix = if (isPlaying) "[+]   " else ""
+                val topBadge = if (topUrls.contains(ch.url)) "▲ " else ""
+                val favBadge = if (favoriteUrls.contains(ch.url)) "★ " else ""
+                "$playPrefix$topBadge$favBadge${idx + 1}. ${ch.name}"
+            }
+        }
+        categoryAdapter.clear()
+        categoryAdapter.addAll(formattedChannels)
+        categoryAdapter.notifyDataSetChanged()
+
+        categoryListView.post {
+            if (formattedChannels.isNotEmpty()) {
+                categoryListView.setSelectionFromTop(targetPos, (categoryListView.height / 3).coerceAtLeast(80))
+                categoryListView.requestFocus()
+                refreshSimpleListHighlightInPlace(categoryListView, targetPos)
+            }
         }
     }
 
     private fun showSideGroupsMode() {
-        try {
-            isSideShowingChannels = false
-            isLeftRailVisible = false
-            leftIconRail.visibility = View.GONE
-            focusedCategoryPos = currentCategoryIndex.coerceIn(0, (categoryAdapter.count - 1).coerceAtLeast(0))
-            updateCategoriesList()
-            channelRecyclerView.visibility = View.GONE
-            categoryListView.visibility = View.VISIBLE
-            categoryListView.post {
-                try {
-                    categoryListView.setSelection(focusedCategoryPos)
-                    categoryListView.requestFocus()
-                    refreshSimpleListHighlightInPlace(categoryListView, focusedCategoryPos)
-                } catch (_: Throwable) {}
-            }
-        } catch (t: Throwable) {
-            Toast.makeText(this, "Ошибка групп: ${t.message}", Toast.LENGTH_LONG).show()
+        isSideShowingChannels = false
+        isLeftRailVisible = false
+        leftIconRail.visibility = View.GONE
+        channelRecyclerView.visibility = View.GONE
+        categoryListView.visibility = View.VISIBLE
+
+        updateCategoriesList()
+        val targetPos = currentCategoryIndex.coerceIn(0, (categoryAdapter.count - 1).coerceAtLeast(0))
+        focusedCategoryPos = targetPos
+
+        categoryListView.post {
+            categoryListView.setSelectionFromTop(targetPos, (categoryListView.height / 3).coerceAtLeast(80))
+            categoryListView.requestFocus()
+            refreshSimpleListHighlightInPlace(categoryListView, targetPos)
         }
     }
 
     '''
-                kText = kText.substring(0, sIdx) + safeSideMethods + kText.substring(eIdx)
+                kText = kText.substring(0, sIdx) + newSideMethods + kText.substring(eIdx)
             }
+
+            // Чтобы updateCategoriesList() не перезатирал список каналов, когда открыты каналы:
+            kText = kText.replace("private fun updateCategoriesList() {", "private fun updateCategoriesList() {\n        if (isSideShowingChannels && sidePanel.visibility == View.VISIBLE) return")
 
             mainFile.write(kText, "UTF-8")
         }
     }
 }
 
-preBuild.dependsOn("autoFixSideMenuCrash")
+preBuild.dependsOn("rebuildSideMenuArchitecture")
