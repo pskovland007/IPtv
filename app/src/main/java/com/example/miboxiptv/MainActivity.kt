@@ -17,6 +17,8 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.text.TextUtils
+import android.transition.ChangeBounds
+import android.transition.TransitionManager
 import android.util.TypedValue
 import android.view.GestureDetector
 import android.view.Gravity
@@ -30,7 +32,7 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import android.view.animation.OvershootInterpolator
+import android.view.animation.DecelerateInterpolator
 import android.widget.*
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
@@ -78,6 +80,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.GZIPInputStream
 import kotlin.concurrent.thread
 import kotlin.math.abs
+import kotlin.system.exitProcess
 
 @OptIn(UnstableApi::class)
 class MainActivity : AppCompatActivity() {
@@ -86,6 +89,7 @@ class MainActivity : AppCompatActivity() {
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var httpDataSourceFactory: DefaultHttpDataSource.Factory? = null
 
+    private lateinit var rootFrame: FrameLayout
     private lateinit var playerContainerFrame: FrameLayout
     private lateinit var playerView: PlayerView
     private lateinit var dualStreamContainer: FrameLayout
@@ -93,6 +97,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dualStreamLabel: TextView
     private lateinit var dualCloseBtn: TextView
     private lateinit var nightDimOverlay: View
+    private lateinit var crtTurnOffView: CrtTurnOffView
     private lateinit var categoryListView: ListView
     private lateinit var channelRecyclerView: RecyclerView
     private lateinit var channelLayoutManager: LinearLayoutManager
@@ -132,7 +137,7 @@ class MainActivity : AppCompatActivity() {
 
     private var uiScaleStep = 1
     private var uiAlphaStep = 1
-    private var currentAnimatedAlphaInt = 214
+    private var currentAnimatedAlphaInt = 212
     private var alphaAnimator: ValueAnimator? = null
     private var cameraCutoutSafeOffset = false
 
@@ -208,6 +213,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var currentChannelBanner: TextView
 
     private val uiHandler = Handler(Looper.getMainLooper())
+    private var isWatchdogTickerActive = false
     private val allChannels = CopyOnWriteArrayList<Channel>()
     private val displayedChannels = CopyOnWriteArrayList<Channel>()
     private val dynamicCategories = CopyOnWriteArrayList<String>()
@@ -256,7 +262,6 @@ class MainActivity : AppCompatActivity() {
         strength = Collator.PRIMARY
     }
 
-    // Тема 0 «Материал Дизайн» переведена на благородный серо-синий (Slate Blue) фон
     private val themes = listOf(
         AppThemeStyle(
             0, "Материал Дизайн",
@@ -380,9 +385,7 @@ class MainActivity : AppCompatActivity() {
         "https://iptv-org.github.io/iptv/categories/sports.m3u",
         "https://iptv-org.github.io/iptv/categories/science.m3u",
         "https://iptv-org.github.io/iptv/categories/documentary.m3u",
-        "https://iptv-org.github.io/iptv/categories/entertainment.m3u",
-        "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_russia.m3u8",
-        "https://raw.githubusercontent.com/ipstreet312/freeiptv/master/all.m3u"
+        "https://iptv-org.github.io/iptv/categories/entertainment.m3u"
     )
 
     private val epgUrls = listOf(
@@ -407,7 +410,7 @@ class MainActivity : AppCompatActivity() {
     private fun collapseAnalyzerToTopBar() {
         subModalOverlay.animate()
             .translationY(-480f).scaleX(0.35f).scaleY(0.25f).alpha(0f)
-            .setDuration(380L)
+            .setDuration(360L)
             .withEndAction {
                 subModalOverlay.translationY = 0f; subModalOverlay.scaleX = 1f; subModalOverlay.scaleY = 1f; subModalOverlay.alpha = 1f
                 closeAllMenus()
@@ -415,8 +418,21 @@ class MainActivity : AppCompatActivity() {
             }.start()
     }
 
+    // Пункт 9: Плавная трансформация экрана предпросмотра ТВ при открытии и закрытии списка каналов
+    private var isPlayerCurrentlyMini = false
+
     private fun setPlayerMiniPreviewMode(mini: Boolean) {
+        if (isPlayerCurrentlyMini == mini) return
+        isPlayerCurrentlyMini = mini
         val dm = resources.displayMetrics
+        try {
+            val transition = ChangeBounds().apply {
+                duration = 310L
+                interpolator = DecelerateInterpolator(1.3f)
+            }
+            TransitionManager.beginDelayedTransition(rootFrame, transition)
+        } catch (_: Exception) {}
+
         if (mini) {
             val curMenu = menuHistory.lastOrNull()
             val sideWidthPx = 700.coerceAtMost((dm.widthPixels * 0.48f).toInt())
@@ -437,7 +453,6 @@ class MainActivity : AppCompatActivity() {
                 cornerRadius = 18f
                 setStroke(2, ambilightColor(145))
             })
-            playerContainerFrame.requestLayout()
         } else {
             playerContainerFrame.layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -446,7 +461,6 @@ class MainActivity : AppCompatActivity() {
             )
             playerContainerFrame.setPadding(0, 0, 0, 0)
             playerContainerFrame.setBackgroundDrawable(null)
-            playerContainerFrame.requestLayout()
         }
     }
 
@@ -535,22 +549,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun animateMenuAppear(view: View, fromX: Float = 0f, fromY: Float = 36f) {
+    // Пункт 9: Плавное и мягкое появление всех меню без резких скачков
+    private fun animateMenuAppear(view: View, fromX: Float = 0f, fromY: Float = 26f) {
         view.animate().cancel()
         view.visibility = View.VISIBLE
         view.alpha = 0f
-        view.translationX = fromX
-        view.translationY = fromY
-        view.scaleX = 0.92f
-        view.scaleY = 0.92f
+        view.translationX = fromX * 0.65f
+        view.translationY = fromY * 0.65f
+        view.scaleX = 0.95f
+        view.scaleY = 0.95f
         view.animate()
             .alpha(1f)
             .translationX(0f)
             .translationY(0f)
             .scaleX(1f)
             .scaleY(1f)
-            .setDuration(280L)
-            .setInterpolator(OvershootInterpolator(0.85f))
+            .setDuration(270L)
+            .setInterpolator(DecelerateInterpolator(1.5f))
             .start()
     }
 
@@ -599,36 +614,50 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
-    private fun applyAutoFrameRateIfNeeded() {
-        if (!afrEnabled || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        try {
-            val fps = player?.videoFormat?.frameRate ?: return
-            if (fps <= 0f) return
-            val targetHz = if (fps in 23.5f..25.5f || fps in 49.0f..50.5f) 50f else 60f
-            val display = windowManager.defaultDisplay
-            val currentMode = display.mode
-            val bestMode = display.supportedModes.firstOrNull {
-                it.physicalWidth == currentMode.physicalWidth &&
-                    it.physicalHeight == currentMode.physicalHeight &&
-                    abs(it.refreshRate - targetHz) < 1.2f
-            }
-            if (bestMode != null && bestMode.modeId != window.attributes.preferredDisplayModeId) {
-                val lp = window.attributes
-                lp.preferredDisplayModeId = bestMode.modeId
-                window.attributes = lp
-            }
-        } catch (_: Exception) {}
-    }
-
+    // Пункт 1: Сдвиг пикселей (Pixel Orbiter) для видео + защита плазмы для часов и антенны сигнала (±10px X, ±6px Y)
     private fun stepPixelOrbiter() {
-        if (!pixelOrbiterEnabled || menuHistory.isNotEmpty()) {
+        if (!pixelOrbiterEnabled) {
             playerView.translationX = 0f; playerView.translationY = 0f
+            clockTextView.translationX = 0f; clockTextView.translationY = 0f
+            signalContainer.translationX = 0f; signalContainer.translationY = 0f
             return
         }
-        orbiterStep = (orbiterStep + 1) % 4
-        val shifts = listOf(Pair(2f, 0f), Pair(0f, 2f), Pair(-2f, 0f), Pair(0f, -2f))
-        playerView.translationX = shifts[orbiterStep].first
-        playerView.translationY = shifts[orbiterStep].second
+        orbiterStep = (orbiterStep + 1) % 8
+        val videoShifts = listOf(
+            Pair(2f, 0f), Pair(2f, 2f), Pair(0f, 2f), Pair(-2f, 2f),
+            Pair(-2f, 0f), Pair(-2f, -2f), Pair(0f, -2f), Pair(2f, -2f)
+        )
+        val hudShifts = listOf(
+            Pair(0f, 0f), Pair(5f, 3f), Pair(10f, 5f), Pair(6f, -4f),
+            Pair(0f, -6f), Pair(-6f, -4f), Pair(-10f, 3f), Pair(-5f, 6f)
+        )
+        if (menuHistory.isEmpty()) {
+            playerView.translationX = videoShifts[orbiterStep].first
+            playerView.translationY = videoShifts[orbiterStep].second
+        } else {
+            playerView.translationX = 0f; playerView.translationY = 0f
+        }
+        val hx = hudShifts[orbiterStep].first
+        val hy = hudShifts[orbiterStep].second
+        clockTextView.animate().translationX(hx).translationY(hy).setDuration(900L).start()
+        signalContainer.animate().translationX(-hx).translationY(hy).setDuration(900L).start()
+    }
+
+    // Пункт 7 и Пункт 3: Выключение с эффектом кинескопа и полным закрытием процесса без дублей в памяти
+    private fun powerOffAppWithCrtEffect() {
+        closeAllMenus()
+        try { player?.pause() } catch (_: Exception) {}
+        try { dualPipPlayer?.pause() } catch (_: Exception) {}
+        crtTurnOffView.playCrtAnimation {
+            try { player?.release(); player = null } catch (_: Exception) {}
+            try { dualPipPlayer?.release(); dualPipPlayer = null } catch (_: Exception) {}
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                finishAndRemoveTask()
+            } else {
+                finish()
+            }
+            exitProcess(0)
+        }
     }
 
     private fun styleButtonForCurrentTheme(btn: TextView, isFocused: Boolean) {
@@ -657,7 +686,7 @@ class MainActivity : AppCompatActivity() {
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.TOP or Gravity.START
-        ).apply { setMargins(leftMargin + 6, 18, 0, 0) }
+        ).apply { setMargins(leftMargin + 10, 20, 0, 0) }
 
         sidePanel.setBackgroundDrawable(makeThemedPanelBg())
         leftIconRail.setBackgroundDrawable(makeThemedSubBg())
@@ -798,6 +827,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Пункт 8: Плавное затухание и уменьшение крайних иконок карусели у границ окна
+    private fun updateCarouselEdgeTransforms() {
+        val svW = carouselScrollView.width
+        if (svW <= 0) return
+        val scrollX = carouselScrollView.scrollX
+        val viewCenter = scrollX + svW / 2f
+        val maxDist = svW * 0.48f
+
+        for (cell in carouselCells) {
+            val cellCenter = (cell.left + cell.right) / 2f
+            val dist = abs(cellCenter - viewCenter)
+            val edgeFactor = (1f - (dist / maxDist).coerceIn(0f, 1f))
+            if (cell.hasFocus()) {
+                cell.alpha = 1.0f
+            } else {
+                cell.alpha = (0.28f + 0.62f * edgeFactor).coerceIn(0.28f, 0.90f)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -810,7 +859,7 @@ class MainActivity : AppCompatActivity() {
         currentAnimatedAlphaInt = targetPanelAlphaInt()
         initTouchGestureDetector()
 
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        rootFrame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
 
         playerContainerFrame = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
@@ -824,7 +873,7 @@ class MainActivity : AppCompatActivity() {
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
         }
         playerContainerFrame.addView(playerView)
-        root.addView(playerContainerFrame)
+        rootFrame.addView(playerContainerFrame)
 
         dualStreamContainer = FrameLayout(this).apply {
             visibility = View.GONE
@@ -856,15 +905,17 @@ class MainActivity : AppCompatActivity() {
         dualStreamContainer.addView(dualPlayerView)
         dualStreamContainer.addView(dualStreamLabel)
         dualStreamContainer.addView(dualCloseBtn)
-        root.addView(dualStreamContainer)
+        rootFrame.addView(dualStreamContainer)
 
         clockTextView = TextView(this).apply {
-            setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f); typeface = themeBoldFont()
-            setBackgroundDrawable(GradientDrawable().apply { setColor(Color.parseColor("#900B0914")); cornerRadius = 14f; setStroke(1, Color.parseColor("#25FFFFFF")) })
+            setTextColor(Color.parseColor("#DCE4EE"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            typeface = themeBoldFont()
+            setBackgroundDrawable(GradientDrawable().apply { setColor(Color.parseColor("#780B0914")); cornerRadius = 14f; setStroke(1, Color.parseColor("#22FFFFFF")) })
             setPadding(16, 6, 16, 6)
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { setMargins(leftSafeMarginPx() + 6, 18, 0, 0) }
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { setMargins(leftSafeMarginPx() + 10, 20, 0, 0) }
         }
-        root.addView(clockTextView)
+        rootFrame.addView(clockTextView)
 
         analyzerStatusBanner = TextView(this).apply {
             setTextColor(Color.parseColor("#00E5FF")); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f); typeface = themeBoldFont()
@@ -872,13 +923,13 @@ class MainActivity : AppCompatActivity() {
             setPadding(22, 8, 22, 8); visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { setMargins(0, 18, 0, 0) }
         }
-        root.addView(analyzerStatusBanner)
+        rootFrame.addView(analyzerStatusBanner)
 
         signalContainer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setBackgroundDrawable(GradientDrawable().apply { setColor(Color.parseColor("#900B0914")); cornerRadius = 14f; setStroke(1, Color.parseColor("#25FFFFFF")) })
+            setBackgroundDrawable(GradientDrawable().apply { setColor(Color.parseColor("#780B0914")); cornerRadius = 14f; setStroke(1, Color.parseColor("#22FFFFFF")) })
             setPadding(14, 8, 14, 8)
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, 18, 22, 0) }
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, 20, 26, 0) }
         }
         reloadIconIndicator = TextView(this).apply {
             text = "↻"; setTextColor(Color.parseColor("#00E5FF")); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
@@ -895,7 +946,7 @@ class MainActivity : AppCompatActivity() {
             signalBars.add(bar); barsBox.addView(bar)
         }
         signalContainer.addView(barsBox)
-        root.addView(signalContainer)
+        rootFrame.addView(signalContainer)
 
         sidePanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -985,7 +1036,7 @@ class MainActivity : AppCompatActivity() {
         singleColumnFrame.addView(categoryListView)
         singleColumnFrame.addView(channelRecyclerView)
         sidePanel.addView(singleColumnFrame)
-        root.addView(sidePanel)
+        rootFrame.addView(sidePanel)
 
         infoPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
@@ -1001,7 +1052,7 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f); typeface = themeFont(); setLineSpacing(5f, 1f)
         }
         infoPanel.addView(infoTextView)
-        root.addView(infoPanel)
+        rootFrame.addView(infoPanel)
 
         centerOsdPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
@@ -1082,7 +1133,7 @@ class MainActivity : AppCompatActivity() {
             visibility = View.GONE; setPadding(0, 12, 0, 4)
         }
         centerOsdPanel.addView(zappingRowContainer)
-        root.addView(centerOsdPanel)
+        rootFrame.addView(centerOsdPanel)
 
         fullEpgOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
@@ -1103,16 +1154,17 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
         }
         fullEpgOverlay.addView(fullEpgListView)
-        root.addView(fullEpgOverlay)
+        rootFrame.addView(fullEpgOverlay)
 
         settingsTileOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE; setPadding(54, 34, 54, 34)
+            setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE; setPadding(34, 30, 34, 30)
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         }
 
         data class GridTileSpec(val iconType: String, val baseHex: String, val accentHex: String, val shortCaption: String, val action: () -> Unit)
 
+        // Пункт 6: Последняя плитка переименована из «Вид» в «Общие»
         val gridSpecs = listOf(
             GridTileSpec("PLAYLISTS", "#1B8A6B", "#FFB300", "Плейлисты") { navigateToMenu("PLAYLISTS") },
             GridTileSpec("EDITOR", "#2E5B9A", "#00E676", "Редактор") { navigateToMenu("CHANNEL_EDITOR_GROUPS") },
@@ -1127,7 +1179,7 @@ class MainActivity : AppCompatActivity() {
             },
             GridTileSpec("AUDIO", "#0277BD", "#69F0AE", "Звук и DRC") { navigateToMenu("AUDIO") },
             GridTileSpec("CONTROL_MODE", "#00838F", "#FFD54F", "Управление") { showFirstRunControlPicker(forceShow = true) },
-            GridTileSpec("MORE", "#4A148C", "#FFAB00", "Вид") { navigateToMenu("MORE_SETTINGS") }
+            GridTileSpec("MORE", "#4A148C", "#FFAB00", "Общие") { navigateToMenu("MORE_SETTINGS") }
         )
 
         gridContainerLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
@@ -1157,11 +1209,12 @@ class MainActivity : AppCompatActivity() {
                     isFocusable = true; isFocusableInTouchMode = false; isClickable = true
                     id = 5000 + specIdx
                     layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                        setMargins(26, 10, 26, 10)
+                        setMargins(22, 10, 22, 10)
                     }
                     addView(tileIcon); addView(captionView)
-                    setOnFocusChangeListener { _, hasFocus ->
+                    setOnFocusChangeListener { v, hasFocus ->
                         tileIcon.isTileFocused = hasFocus
+                        v.animate().scaleX(if (hasFocus) 1.08f else 1.0f).scaleY(if (hasFocus) 1.08f else 1.0f).setDuration(180L).start()
                         captionView.setTextColor(if (hasFocus) currentTheme().accentColor else currentTheme().textPrimaryColor)
                         if (hasFocus) resetMenuInactivityTimer()
                     }
@@ -1183,10 +1236,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Пункт 8: Карусель с плотной посадкой, растворением по краям и половинками крайних иконок
         carouselScrollView = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false; visibility = View.GONE
-            clipChildren = false; clipToPadding = false; setPadding(80, 36, 80, 36)
-            layoutParams = LinearLayout.LayoutParams(1160, ViewGroup.LayoutParams.WRAP_CONTENT)
+            isHorizontalFadingEdgeEnabled = true
+            setFadingEdgeLength(145)
+            overScrollMode = View.OVER_SCROLL_NEVER
+            clipChildren = false; clipToPadding = false
+            setPadding(110, 42, 110, 42)
+            layoutParams = LinearLayout.LayoutParams(1020, ViewGroup.LayoutParams.WRAP_CONTENT)
+            viewTreeObserver.addOnScrollChangedListener { updateCarouselEdgeTransforms() }
         }
         carouselRowLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
@@ -1198,31 +1257,39 @@ class MainActivity : AppCompatActivity() {
             val spec = gridSpecs[specIdx]
             val cTile = ThemedTileView(this, spec.iconType, spec.baseHex, spec.accentHex).apply {
                 themeStyleId = currentTheme().id
-                layoutParams = LinearLayout.LayoutParams(210, 210)
+                layoutParams = LinearLayout.LayoutParams(192, 192)
             }
             allGridTiles.add(cTile)
             val cCaption = TextView(this).apply {
                 text = spec.shortCaption; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 typeface = themeBoldFont(); gravity = Gravity.CENTER; isSingleLine = true
-                layoutParams = LinearLayout.LayoutParams(230, ViewGroup.LayoutParams.WRAP_CONTENT)
+                setPadding(0, 8, 0, 0)
+                layoutParams = LinearLayout.LayoutParams(204, ViewGroup.LayoutParams.WRAP_CONTENT)
             }
             allGridCaptions.add(cCaption)
             val cBox = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
                 isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-                id = 6000 + specIdx; scaleX = 0.90f; scaleY = 0.90f; alpha = 0.85f
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(26, 18, 26, 18) }
+                id = 6000 + specIdx; scaleX = 0.88f; scaleY = 0.88f; alpha = 0.72f
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(10, 18, 10, 18)
+                }
                 addView(cTile); addView(cCaption)
                 setOnFocusChangeListener { v, hasFocus ->
                     cTile.isTileFocused = hasFocus
                     if (hasFocus) {
                         resetMenuInactivityTimer()
-                        v.animate().scaleX(1.18f).scaleY(1.18f).alpha(1.0f).translationY(-12f).setDuration(260L).setInterpolator(OvershootInterpolator(1.4f)).start()
-                        val scrollX = (v.left + v.right) / 2 - carouselScrollView.width / 2
-                        carouselScrollView.smoothScrollTo(scrollX.coerceAtLeast(0), 0)
+                        cCaption.setTextColor(currentTheme().accentColor)
+                        v.animate().scaleX(1.24f).scaleY(1.24f).alpha(1.0f).translationY(-14f)
+                            .setDuration(240L).setInterpolator(DecelerateInterpolator(1.4f)).start()
+                        val targetScrollX = (v.left + v.right) / 2 - carouselScrollView.width / 2
+                        ObjectAnimator_smoothScrollCarousel(targetScrollX.coerceAtLeast(0))
                     } else {
-                        v.animate().scaleX(0.90f).scaleY(0.90f).alpha(0.85f).translationY(0f).setDuration(200L).start()
+                        cCaption.setTextColor(currentTheme().textPrimaryColor)
+                        v.animate().scaleX(0.88f).scaleY(0.88f).translationY(0f)
+                            .setDuration(210L).setInterpolator(DecelerateInterpolator(1.2f)).start()
                     }
+                    carouselScrollView.postDelayed({ updateCarouselEdgeTransforms() }, 60L)
                 }
                 setOnClickListener { resetMenuInactivityTimer(); spec.action() }
             }
@@ -1236,7 +1303,7 @@ class MainActivity : AppCompatActivity() {
         carouselScrollView.addView(carouselRowLayout)
         settingsTileOverlay.addView(gridContainerLayout)
         settingsTileOverlay.addView(carouselScrollView)
-        root.addView(settingsTileOverlay)
+        rootFrame.addView(settingsTileOverlay)
 
         subModalOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
@@ -1273,21 +1340,21 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         subModalOverlay.addView(subModalList)
-        root.addView(subModalOverlay)
+        rootFrame.addView(subModalOverlay)
 
         currentChannelBanner = TextView(this).apply {
             setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f); typeface = themeBoldFont()
             setBackgroundDrawable(makeThemedPanelBg()); setPadding(22, 12, 22, 12); visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.START).apply { setMargins(26, 0, 26, 26) }
         }
-        root.addView(currentChannelBanner)
+        rootFrame.addView(currentChannelBanner)
 
         firstRunModeOverlay = FrameLayout(this).apply {
             setBackgroundColor(Color.parseColor("#E608070D")); visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         buildFirstRunControlPickerView()
-        root.addView(firstRunModeOverlay)
+        rootFrame.addView(firstRunModeOverlay)
 
         splashOverlay = FrameLayout(this).apply {
             setBackgroundColor(Color.BLACK)
@@ -1298,22 +1365,26 @@ class MainActivity : AppCompatActivity() {
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
         }
         splashOverlay.addView(splashEyeView)
-        root.addView(splashOverlay)
+        rootFrame.addView(splashOverlay)
 
         nightDimOverlay = View(this).apply {
             setBackgroundColor(Color.argb(95, 18, 21, 28)); visibility = View.GONE
             isClickable = false; isFocusable = false
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
-        root.addView(nightDimOverlay)
+        rootFrame.addView(nightDimOverlay)
 
-        setContentView(root)
+        crtTurnOffView = CrtTurnOffView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
+        rootFrame.addView(crtTurnOffView)
+
+        setContentView(rootFrame)
 
         playSplashEyeAnimation()
         initPlayer()
         applyScreenAspectMode()
         applyBrightnessLevel()
-        startClockAndWatchdogUpdater()
 
         categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17f, true) { pos -> !isSideShowingChannels && !isLeftRailVisible && pos == focusedCategoryPos }
         categoryListView.adapter = categoryAdapter
@@ -1358,6 +1429,26 @@ class MainActivity : AppCompatActivity() {
         applyCurrentThemeToAllPanels()
         loadActivePlaylist(autoPlayLast = true)
         loadEpgOncePerDayInBackground(forceRefresh = false)
+    }
+
+    private var carouselScrollAnimator: ValueAnimator? = null
+
+    private fun ObjectAnimator_smoothScrollCarousel(targetX: Int) {
+        carouselScrollAnimator?.cancel()
+        val startX = carouselScrollView.scrollX
+        if (startX == targetX) {
+            updateCarouselEdgeTransforms()
+            return
+        }
+        carouselScrollAnimator = ValueAnimator.ofInt(startX, targetX).apply {
+            duration = 250L
+            interpolator = DecelerateInterpolator(1.3f)
+            addUpdateListener { anim ->
+                carouselScrollView.scrollTo(anim.animatedValue as Int, 0)
+                updateCarouselEdgeTransforms()
+            }
+            start()
+        }
     }
 
     private fun showLeftIconRailFromGroups() {
@@ -1764,6 +1855,7 @@ class MainActivity : AppCompatActivity() {
         settingsTileOverlay.setBackgroundDrawable(makeThemedPanelBg())
         fullEpgOverlay.setBackgroundDrawable(makeThemedPanelBg())
 
+        currentChannelBanner.animate().cancel()
         currentChannelBanner.visibility = View.GONE
         subModalTopButtons.visibility = View.GONE
         subModalTopButtons.removeAllViews()
@@ -1783,7 +1875,7 @@ class MainActivity : AppCompatActivity() {
             "SIDE" -> {
                 setPlayerMiniPreviewMode(true)
                 clockTextView.visibility = View.GONE
-                animateMenuAppear(sidePanel, -80f, 0f)
+                animateMenuAppear(sidePanel, -65f, 0f)
                 val cats = activeCategoryList()
                 if (openChannelsDirectlyWithCurrentFocus && currentChannel != null) {
                     openChannelsDirectlyWithCurrentFocus = false
@@ -1799,20 +1891,21 @@ class MainActivity : AppCompatActivity() {
             "INFO" -> {
                 adjustInfoPanelMarginForDualStream()
                 updateStreamInfoText()
-                animateMenuAppear(infoPanel, 60f, 0f)
+                animateMenuAppear(infoPanel, 50f, 0f)
             }
-            "OSD" -> { updateCenterOsdContent(); animateMenuAppear(centerOsdPanel, 0f, 50f); btnOsdTop.requestFocus() }
+            "OSD" -> { updateCenterOsdContent(); animateMenuAppear(centerOsdPanel, 0f, 40f); btnOsdTop.requestFocus() }
             "BRIGHTNESS_MENU" -> openBrightnessSubModal()
             "POWER_AND_SLEEP_MENU" -> openPowerAndSleepSubModal()
             "CHANNEL_ACTIONS" -> openChannelActionsSubModal()
             "MOVE_CHANNEL_CATEGORY" -> openMoveChannelCategorySubModal()
             "FULL_EPG" -> openFullScreenChannelEpg()
             "SETTINGS" -> {
-                animateMenuAppear(settingsTileOverlay, 0f, 35f)
+                animateMenuAppear(settingsTileOverlay, 0f, 28f)
                 if (currentTheme().isCarouselMenu) {
                     gridContainerLayout.visibility = View.GONE
                     carouselScrollView.visibility = View.VISIBLE
                     carouselCells.firstOrNull()?.requestFocus()
+                    carouselScrollView.postDelayed({ updateCarouselEdgeTransforms() }, 50L)
                 } else {
                     carouselScrollView.visibility = View.GONE
                     gridContainerLayout.visibility = View.VISIBLE
@@ -1891,23 +1984,25 @@ class MainActivity : AppCompatActivity() {
         startDualStreamChannel(mainCh)
     }
 
+    // Пункт 7: При выборе закрытия приложения запускается анимация выключения кинескопного телевизора
     private fun openPowerAndSleepSubModal() {
         subModalTitle.text = "Выключение и Таймер сна"
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.VISIBLE
 
         val sleepOpts = listOf(0, 30, 60, 90, 120)
-        val items = mutableListOf("[-]   Закрыть приложение TiViLook прямо сейчас")
+        val items = mutableListOf("[-]   Выключить телевизор TiViLook прямо сейчас")
         for (m in sleepOpts) {
             val sel = if (sleepTimerMinutesLeft == m) "[+]   " else "[-]   "
-            if (m == 0) items.add("${sel}Таймер сна:   Выключен")
-            else items.add("${sel}Таймер сна:   Выключить через $m минут")
+            if (m == 0) items.add("${sel}Таймер сна   •   Выключен")
+            else items.add("${sel}Таймер сна   •   Выключить через $m минут")
         }
         updateSubModalListItems(items)
 
         subModalList.setOnItemClickListener { _, _, which, _ ->
-            if (which == 0) finish()
-            else {
+            if (which == 0) {
+                powerOffAppWithCrtEffect()
+            } else {
                 setSleepTimer(sleepOpts.getOrElse(which - 1) { 0 })
                 navigateBackInMenu()
             }
@@ -1926,8 +2021,9 @@ class MainActivity : AppCompatActivity() {
         val tick = object : Runnable {
             override fun run() {
                 sleepTimerMinutesLeft--
-                if (sleepTimerMinutesLeft <= 0) finish()
-                else {
+                if (sleepTimerMinutesLeft <= 0) {
+                    powerOffAppWithCrtEffect()
+                } else {
                     if (sleepTimerMinutesLeft == 1) player?.volume = 0.35f
                     uiHandler.postDelayed(this, 60_000L)
                 }
@@ -1938,14 +2034,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openBrightnessSubModal() {
-        subModalTitle.text = "🌙 Уровень яркости экрана"
+        subModalTitle.text = "Уровень яркости экрана"
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val levels = listOf(100, 75, 50, 25)
         val descriptions = listOf(
-            "100%   •   Дневной режим (полная яркость)",
-            "75%     •   Вечерний режим (мягкое приглушение)",
-            "50%     •   Ночной режим (среднее приглушение)",
-            "25%     •   Глубокая ночь (защита глаз в темноте)"
+            "Яркость экрана: 100%   •   Дневной режим",
+            "Яркость экрана: 75%     •   Вечерний режим",
+            "Яркость экрана: 50%     •   Ночной режим",
+            "Яркость экрана: 25%     •   Глубокая ночь (защита плазмы)"
         )
         updateSubModalListItems(levels.mapIndexed { idx, lvl -> (if (brightnessPercent == lvl) "[+]   " else "[-]   ") + descriptions[idx] })
         subModalList.setOnItemClickListener { _, _, which, _ ->
@@ -1958,12 +2054,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun openChannelActionsSubModal() {
         val ch = currentChannel ?: return
-        subModalTitle.text = "✎ Управление каналом: ${ch.name}"
+        subModalTitle.text = "Управление каналом: ${ch.name}"
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val items = listOf(
-            "[-]   Исключить этот канал из списка (возврат через Редактор)",
-            "📂   Переместить в другую категорию   •   Сейчас: ${effectiveCategory(ch)}",
-            if (isDualStreamActive) "[ON]   Двойной эфир (2-й экран)   •   Нажмите для отключения" else "[OFF]   Двойной эфир (2-й экран)   •   Открыть канал во 2-м окне"
+            "[-]   Исключить этот канал из списка   •   Возврат через Редактор",
+            "[>]   Переместить в другую категорию   •   Сейчас: ${effectiveCategory(ch)}",
+            if (isDualStreamActive) "[ON]   Двойной эфир (2-й экран)   •   Активен" else "[OFF]   Двойной эфир (2-й экран)   •   Выключен"
         )
         updateSubModalListItems(items)
         subModalList.setOnItemClickListener { _, _, which, _ ->
@@ -1986,7 +2082,7 @@ class MainActivity : AppCompatActivity() {
         val ch = currentChannel ?: return
         val targetCats = activeCategoryList().drop(2)
         val curCat = effectiveCategory(ch)
-        subModalTitle.text = "📂 Переместить «${ch.name}» в категорию:"
+        subModalTitle.text = "Переместить «${ch.name}» в категорию:"
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         updateSubModalListItems(targetCats.map { c -> (if (c == curCat) "[+]   " else "[-]   ") + c })
         subModalList.setOnItemClickListener { _, _, which, _ ->
@@ -2005,14 +2101,14 @@ class MainActivity : AppCompatActivity() {
     private fun effectiveCategory(ch: Channel): String = customCategoryMap[ch.url] ?: ch.category
 
     private fun openThemesSubModal() {
-        subModalTitle.text = "Темы оформления (у каждой темы свои уникальные иконки)"
+        subModalTitle.text = "Темы оформления"
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.GONE
         subModalTopButtons.removeAllViews()
 
         val items = themes.mapIndexed { idx, t ->
-            if (idx == themeIndex) "[+]   ${t.name}   •   АКТИВНА"
+            if (idx == themeIndex) "[+]   ${t.name}   •   Активна"
             else "[-]   ${t.name}"
         }
         updateSubModalListItems(items)
@@ -2026,7 +2122,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openTopManagerSubModal(inPlace: Boolean = false) {
-        subModalTitle.text = "▲ Каналы в ТОПе групп (${topUrls.size})"
+        subModalTitle.text = "Каналы в ТОПе групп (${topUrls.size})"
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
         if (topUrls.isNotEmpty()) {
@@ -2037,7 +2133,7 @@ class MainActivity : AppCompatActivity() {
         val topChans = allChannels.filter { topUrls.contains(it.url) }
         updateSubModalListItems(
             if (topChans.isEmpty()) listOf("[-]   В ТОПе пока нет закреплённых каналов")
-            else topChans.map { "[+]   ▲ ${it.name}   •   ${effectiveCategory(it)}" },
+            else topChans.map { "[+]   ${it.name}   •   ${effectiveCategory(it)}" },
             smoothToggle = inPlace
         )
         subModalList.setOnItemClickListener { _, _, idx, _ ->
@@ -2053,22 +2149,22 @@ class MainActivity : AppCompatActivity() {
         val dateFmt = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault())
         val now = System.currentTimeMillis()
 
-        fullEpgTitle.text = "▤ Программа передач: " + (ch?.name ?: "Канал не выбран")
+        fullEpgTitle.text = "Программа передач: " + (ch?.name ?: "Канал не выбран")
         val items = mutableListOf<String>()
         var activeIndex = 0
 
         if (progs.isEmpty()) {
-            items.add("Расписание для канала «${ch?.name ?: ""}» обновляется в фоне...")
+            items.add("[?]   Расписание для канала «${ch?.name ?: ""}» обновляется в фоне...")
         } else {
             progs.forEachIndexed { idx, p ->
                 val isNow = now in p.startMs..p.stopMs
                 if (isNow) activeIndex = idx
                 val prefix = when {
-                    isNow -> "[+] СЕЙЧАС   "
-                    p.stopMs < now -> "[-] Прошло   "
-                    else -> "[?] Далее     "
+                    isNow -> "[+]   Сейчас   •   "
+                    p.stopMs < now -> "[-]   Прошло   •   "
+                    else -> "[>]   Далее     •   "
                 }
-                val timeRange = dateFmt.format(Date(p.startMs)) + " — " + dateFmt.format(Date(p.stopMs))
+                val timeRange = dateFmt.format(Date(p.startMs)) + " – " + dateFmt.format(Date(p.stopMs))
                 items.add("$prefix$timeRange   •   ${p.title}")
             }
         }
@@ -2086,7 +2182,7 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    // Все пункты в одну строку + плавное переключение inPlace без мигания окна + отступ под вырез камеры
+    // Пункт 6 и Пункт 4: Раздел «Общие» с единым выровненным стилем всех строк ([+], [ON]/[OFF], [>]) и отдельным включением баннера каналов
     private fun openMoreSettingsSubModal(inPlace: Boolean = false) {
         val dm = resources.displayMetrics
         subModalOverlay.layoutParams = FrameLayout.LayoutParams(
@@ -2101,53 +2197,55 @@ class MainActivity : AppCompatActivity() {
             1f
         )
 
-        subModalTitle.text = "Вид, Экран и Система"
+        subModalTitle.text = "Общие настройки"
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.VISIBLE
 
-        val scaleDots = when (uiScaleStep) {
-            0 -> "● ○ ○   Обычный (Смартфон)"
-            1 -> "○ ● ○   Крупный (ТВ)"
-            else -> "○ ○ ●   Огромный (Большой ТВ)"
+        val scaleText = when (uiScaleStep) {
+            0 -> "Обычный (Смартфон)"
+            1 -> "Крупный (Телевизор)"
+            else -> "Огромный (Большой ТВ)"
         }
-        val alphaDots = when (uiAlphaStep) {
-            0 -> "● ○ ○   Плотный (96%)"
-            1 -> "○ ● ○   Средний (84%)"
-            else -> "○ ○ ●   Стекло (65%)"
+        val alphaText = when (uiAlphaStep) {
+            0 -> "Плотный (96%)"
+            1 -> "Средний (84%)"
+            else -> "Стекло (65%)"
         }
-        val ambiDots = when (ambilightMode) {
-            0 -> "[OFF]   Подсветка Ambilight:   Выключена"
-            1 -> "[ON]   Подсветка Ambilight:   Цвет группы (● ○ ○)"
-            2 -> "[ON]   Подсветка Ambilight:   Спектр (○ ● ○)"
-            else -> "[ON]   Подсветка Ambilight:   Кадр видео (○ ○ ●)"
+        val ambiRow = when (ambilightMode) {
+            0 -> "[OFF]   Подсветка Ambilight   •   Выключена"
+            1 -> "[ON]   Подсветка Ambilight   •   Цвет группы"
+            2 -> "[ON]   Подсветка Ambilight   •   Спектр"
+            else -> "[ON]   Подсветка Ambilight   •   Кадр видео"
         }
-        val aspectDots = when (screenAspectMode) {
-            0 -> "● ○ ○   По размеру экрана"
-            1 -> "○ ● ○   Растянуть 16:9"
-            else -> "○ ○ ●   Кинозум"
+        val aspectText = when (screenAspectMode) {
+            0 -> "По размеру экрана"
+            1 -> "Растянуть 16:9"
+            else -> "Кинозум"
         }
-        val cutoutToggle = if (cameraCutoutSafeOffset) "[ON]   Отступ под вырез камеры слева (Смартфон):   ВКЛ" else "[OFF]   Отступ под вырез камеры слева (Смартфон):   ВЫКЛ"
-        val bannerToggle = if (showChannelBannerOnSwitch) "[ON]   Баннер при переключении:   Показывать ($menuHideDelaySec сек)" else "[OFF]   Баннер при переключении:   Скрыт ($menuHideDelaySec сек)"
-        val dualToggle = if (isDualStreamActive) "[ON]   Двойной эфир (2-й экран PiP):   Активен" else "[OFF]   Двойной эфир (2-й экран PiP):   Выключен"
-        val dohToggle = if (dohEnabled) "[ON]   Обход блокировок DoH (Cloudflare 1.1.1.1):   ВКЛ" else "[OFF]   Обход блокировок DoH (Системный DNS):   ВЫКЛ"
-        val dropToggle = if (onDropBehavior == 0) "[+]   При обрыве потока:   ● ○ Бесшовный перезапуск" else "[+]   При обрыве потока:   ○ ● Переключить на следующий"
-        val sleepInfo = if (sleepTimerMinutesLeft > 0) "[ON]   Таймер сна и Выход:   Через $sleepTimerMinutesLeft мин   ▸" else "[OFF]   Таймер сна и Выход:   Выключен   ▸"
+        val cutoutRow = if (cameraCutoutSafeOffset) "[ON]   Отступ под камеру слева (Смартфон)   •   Включён" else "[OFF]   Отступ под камеру слева (Смартфон)   •   Выключен"
+        val bannerRow = if (showChannelBannerOnSwitch) "[ON]   Баннер названия при переключении   •   Показывать" else "[OFF]   Баннер названия при переключении   •   Скрыт"
+        val delayRow = "[+]   Автоскрытие меню и баннера   •   Через $menuHideDelaySec сек"
+        val dualRow = if (isDualStreamActive) "[ON]   Двойной эфир (2-й экран PiP)   •   Активен" else "[OFF]   Двойной эфир (2-й экран PiP)   •   Выключен"
+        val dohRow = if (dohEnabled) "[ON]   Обход блокировок DoH (Cloudflare)   •   Включён" else "[OFF]   Обход блокировок DoH (Системный DNS)   •   Выключен"
+        val dropRow = if (onDropBehavior == 0) "[+]   При обрыве потока   •   Бесшовный перезапуск" else "[+]   При обрыве потока   •   Следующий канал"
+        val sleepRow = if (sleepTimerMinutesLeft > 0) "[ON]   Таймер сна и Выключение   •   Через $sleepTimerMinutesLeft мин" else "[>]   Таймер сна и Выключение   •   Открыть меню"
 
         val items = listOf(
-            "🔍   Размер текста и меню:   $scaleDots",
-            "💧   Прозрачность меню:   $alphaDots",
-            ambiDots,
-            "🖥   Формат картинки:   $aspectDots",
-            cutoutToggle,
-            "🌙   Яркость экрана:   $brightnessPercent%   ▸",
-            bannerToggle,
-            dualToggle,
-            "⏪   Машина времени:   Отмотать прямой эфир на -30 сек",
-            dohToggle,
-            dropToggle,
-            sleepInfo,
-            "🔄   Телепрограмма EPG:   Обновить расписание сейчас",
-            "🚀   Обновление TiViLook:   Проверить и установить с GitHub"
+            "[+]   Размер текста и меню   •   $scaleText",
+            "[+]   Прозрачность меню   •   $alphaText",
+            ambiRow,
+            "[+]   Формат изображения   •   $aspectText",
+            cutoutRow,
+            bannerRow,
+            delayRow,
+            dualRow,
+            dohRow,
+            dropRow,
+            "[>]   Яркость экрана   •   Сейчас: $brightnessPercent%",
+            "[>]   Машина времени   •   Отмотать эфир на -30 сек",
+            sleepRow,
+            "[>]   Телепрограмма EPG   •   Обновить расписание сейчас",
+            "[>]   Обновление TiViLook   •   Проверить и установить с GitHub"
         )
         updateSubModalListItems(items, smoothToggle = inPlace)
 
@@ -2158,22 +2256,19 @@ class MainActivity : AppCompatActivity() {
                 2 -> { ambilightMode = (ambilightMode + 1) % 4; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true) }
                 3 -> { screenAspectMode = (screenAspectMode + 1) % 3; applyScreenAspectMode(); saveState(); openMoreSettingsSubModal(inPlace = true) }
                 4 -> { cameraCutoutSafeOffset = !cameraCutoutSafeOffset; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true) }
-                5 -> navigateToMenu("BRIGHTNESS_MENU")
+                5 -> { showChannelBannerOnSwitch = !showChannelBannerOnSwitch; saveState(); openMoreSettingsSubModal(inPlace = true) }
                 6 -> {
-                    when (menuHideDelaySec) {
-                        4 -> menuHideDelaySec = 8
-                        8 -> menuHideDelaySec = 12
-                        else -> { menuHideDelaySec = 4; showChannelBannerOnSwitch = !showChannelBannerOnSwitch }
-                    }
+                    menuHideDelaySec = when (menuHideDelaySec) { 4 -> 8; 8 -> 12; else -> 4 }
                     saveState(); openMoreSettingsSubModal(inPlace = true)
                 }
                 7 -> { toggleDualStreamWithCurrentOrNeighbor(); openMoreSettingsSubModal(inPlace = true) }
-                8 -> { rewindLiveBufferSeconds(30); closeAllMenus() }
-                9 -> { dohEnabled = !dohEnabled; saveState(); initPlayer(); openMoreSettingsSubModal(inPlace = true) }
-                10 -> { onDropBehavior = (onDropBehavior + 1) % 2; saveState(); openMoreSettingsSubModal(inPlace = true) }
-                11 -> navigateToMenu("POWER_AND_SLEEP_MENU")
-                12 -> { loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu() }
-                13 -> checkAndInstallAppUpdateFromGithub()
+                8 -> { dohEnabled = !dohEnabled; saveState(); initPlayer(); openMoreSettingsSubModal(inPlace = true) }
+                9 -> { onDropBehavior = (onDropBehavior + 1) % 2; saveState(); openMoreSettingsSubModal(inPlace = true) }
+                10 -> navigateToMenu("BRIGHTNESS_MENU")
+                11 -> { rewindLiveBufferSeconds(30); closeAllMenus() }
+                12 -> navigateToMenu("POWER_AND_SLEEP_MENU")
+                13 -> { loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu() }
+                14 -> checkAndInstallAppUpdateFromGithub()
             }
         }
         if (!inPlace) {
@@ -2234,67 +2329,81 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startClockAndWatchdogUpdater() {
-        val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-        var tickCounter = 0
-        val ticker = object : Runnable {
-            override fun run() {
-                try {
-                    tickCounter++
-                    ambilightHue = (ambilightHue + 8f) % 360f
-                    if (ambilightMode == 3 && tickCounter % 2 == 0) sampleVideoFrameColorIfPossible()
-                    if (tickCounter % 60 == 0) stepPixelOrbiter()
+    private var watchdogTickCounter = 0
+    private val timeFmtTicker = SimpleDateFormat("HH:mm", Locale.getDefault())
 
-                    clockTextView.text = timeFmt.format(Date())
-                    val activeBars = updateSignalIndicator()
+    private val watchdogTickerRunnable = object : Runnable {
+        override fun run() {
+            if (!isWatchdogTickerActive) return
+            try {
+                watchdogTickCounter++
+                ambilightHue = (ambilightHue + 8f) % 360f
+                if (ambilightMode == 3 && watchdogTickCounter % 2 == 0) sampleVideoFrameColorIfPossible()
+                if (watchdogTickCounter % 20 == 0) stepPixelOrbiter()
 
-                    if (menuHistory.isNotEmpty() && ambilightMode != 0 && alphaAnimator?.isRunning != true) {
-                        when (menuHistory.last()) {
-                            "SIDE" -> sidePanel.setBackgroundDrawable(makeThemedPanelBg())
-                            "OSD" -> centerOsdPanel.setBackgroundDrawable(makeThemedPanelBg())
-                            "SETTINGS" -> settingsTileOverlay.setBackgroundDrawable(makeThemedPanelBg())
-                            "FULL_EPG" -> fullEpgOverlay.setBackgroundDrawable(makeThemedPanelBg())
-                            "INFO" -> infoPanel.setBackgroundDrawable(makeThemedPanelBg())
-                            else -> subModalOverlay.setBackgroundDrawable(makeThemedPanelBg())
-                        }
+                clockTextView.text = timeFmtTicker.format(Date())
+                updateSignalIndicator()
+
+                if (menuHistory.isNotEmpty() && ambilightMode != 0 && alphaAnimator?.isRunning != true) {
+                    when (menuHistory.last()) {
+                        "SIDE" -> sidePanel.setBackgroundDrawable(makeThemedPanelBg())
+                        "OSD" -> centerOsdPanel.setBackgroundDrawable(makeThemedPanelBg())
+                        "SETTINGS" -> settingsTileOverlay.setBackgroundDrawable(makeThemedPanelBg())
+                        "FULL_EPG" -> fullEpgOverlay.setBackgroundDrawable(makeThemedPanelBg())
+                        "INFO" -> infoPanel.setBackgroundDrawable(makeThemedPanelBg())
+                        else -> subModalOverlay.setBackgroundDrawable(makeThemedPanelBg())
                     }
+                }
 
-                    val p = player
-                    if (p != null && currentChannel != null) {
-                        val state = p.playbackState
-                        val curPos = p.currentPosition
-                        val isFrozen = (state == Player.STATE_BUFFERING || state == Player.STATE_IDLE ||
-                            (state == Player.STATE_READY && p.isPlaying && curPos == lastRenderedFramePositionMs && p.totalBufferedDuration < 1200L))
-                        lastRenderedFramePositionMs = curPos
+                // Пункт 2: Watchdog перезапускает поток ТОЛЬКО если видео реально зависло (STATE_BUFFERING/IDLE дольше 14 сек), не дергая живые потоки с коротким HLS-окном!
+                val p = player
+                if (p != null && currentChannel != null) {
+                    val state = p.playbackState
+                    val curPos = p.currentPosition
+                    val isTrulyStalled = (state == Player.STATE_BUFFERING || state == Player.STATE_IDLE ||
+                        (state == Player.STATE_READY && p.isPlaying && curPos == lastRenderedFramePositionMs && p.totalBufferedDuration < 400L))
+                    lastRenderedFramePositionMs = curPos
 
-                        if (isFrozen || activeBars <= 1) {
-                            lowSignalStuckSeconds += 2
-                            if (lowSignalStuckSeconds >= 10) {
-                                lowSignalStuckSeconds = 0
-                                consecutiveDropFailures++
-                                if (onDropBehavior == 1 && consecutiveDropFailures >= 2) {
-                                    consecutiveDropFailures = 0
-                                    switchChannelByOffset(+1)
-                                } else {
-                                    if (antiBlockEnabled) userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
-                                    reloadIconIndicator.visibility = View.VISIBLE
-                                    uiHandler.postDelayed({ reloadIconIndicator.visibility = View.GONE }, 2500L)
-                                    reconnectCurrentStreamSilently()
-                                }
-                            }
-                        } else {
+                    if (isTrulyStalled) {
+                        lowSignalStuckSeconds += 2
+                        if (lowSignalStuckSeconds >= 14) {
                             lowSignalStuckSeconds = 0
-                            consecutiveDropFailures = 0
+                            consecutiveDropFailures++
+                            if (onDropBehavior == 1 && consecutiveDropFailures >= 2) {
+                                consecutiveDropFailures = 0
+                                switchChannelByOffset(+1)
+                            } else {
+                                if (antiBlockEnabled) userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
+                                reloadIconIndicator.visibility = View.VISIBLE
+                                uiHandler.postDelayed({ reloadIconIndicator.visibility = View.GONE }, 2200L)
+                                reconnectCurrentStreamSilently()
+                            }
                         }
+                    } else {
+                        lowSignalStuckSeconds = 0
+                        consecutiveDropFailures = 0
                     }
+                }
 
-                    if (infoPanel.visibility == View.VISIBLE) updateStreamInfoText()
-                    if (centerOsdPanel.visibility == View.VISIBLE) updateCenterOsdContent()
-                } catch (_: Exception) {}
-                uiHandler.postDelayed(this, 1500)
+                if (infoPanel.visibility == View.VISIBLE) updateStreamInfoText()
+                if (centerOsdPanel.visibility == View.VISIBLE) updateCenterOsdContent()
+            } catch (_: Exception) {}
+            if (isWatchdogTickerActive) {
+                uiHandler.postDelayed(this, 1500L)
             }
         }
-        uiHandler.post(ticker)
+    }
+
+    private fun startClockAndWatchdogUpdater() {
+        if (isWatchdogTickerActive) return
+        isWatchdogTickerActive = true
+        uiHandler.removeCallbacks(watchdogTickerRunnable)
+        uiHandler.post(watchdogTickerRunnable)
+    }
+
+    private fun stopClockAndWatchdogUpdater() {
+        isWatchdogTickerActive = false
+        uiHandler.removeCallbacks(watchdogTickerRunnable)
     }
 
     private fun applyHeadersToDataSourceForUrl(urlStr: String) {
@@ -2332,33 +2441,26 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
+    // Пункт 2: Быстрый старт со штатного края HLS без искусственной 28-секундной отмотки назад
     private fun createLiveMediaItem(url: String): MediaItem {
         val cleanUrl = url.substringBefore("#")
-        val targetOffset = when (bufferLevel) { 0 -> 10000L; 1 -> 18000L; 2 -> 28000L; else -> 40000L }
         return MediaItem.Builder()
             .setUri(cleanUrl)
-            .setLiveConfiguration(
-                MediaItem.LiveConfiguration.Builder()
-                    .setTargetOffsetMs(targetOffset)
-                    .setMinOffsetMs(4000L)
-                    .setMaxOffsetMs(120000L)
-                    .setMinPlaybackSpeed(0.97f)
-                    .setMaxPlaybackSpeed(1.03f)
-                    .build()
-            ).build()
+            .build()
     }
 
+    // Пункт 2: Адекватная шкала сигнала для коротких HLS-плейлистов (зелёный уже от 2 сек буфера)
     private fun updateSignalIndicator(): Int {
         val p = player
         val state = p?.playbackState ?: Player.STATE_IDLE
-        val bufSec = ((p?.totalBufferedDuration ?: 0L) / 1000L).toInt()
+        val bufMs = p?.totalBufferedDuration ?: 0L
         val (activeBars, activeColor) = when {
             state == Player.STATE_IDLE -> Pair(1, Color.parseColor("#FF5252"))
-            state == Player.STATE_BUFFERING && bufSec == 0 -> Pair(1, Color.parseColor("#FF5252"))
-            state == Player.STATE_BUFFERING -> Pair(2, Color.parseColor("#FFD740"))
-            state == Player.STATE_READY && bufSec >= 5 -> Pair(4, Color.parseColor("#00E676"))
-            state == Player.STATE_READY && bufSec >= 2 -> Pair(3, Color.parseColor("#69F0AE"))
-            state == Player.STATE_READY -> Pair(2, Color.parseColor("#FFD740"))
+            state == Player.STATE_BUFFERING && bufMs < 300L -> Pair(2, Color.parseColor("#FFD740"))
+            state == Player.STATE_BUFFERING -> Pair(3, Color.parseColor("#69F0AE"))
+            state == Player.STATE_READY && bufMs >= 2200L -> Pair(4, Color.parseColor("#00E676"))
+            state == Player.STATE_READY && bufMs >= 800L -> Pair(3, Color.parseColor("#69F0AE"))
+            state == Player.STATE_READY -> Pair(3, Color.parseColor("#00E676"))
             else -> Pair(1, Color.parseColor("#FF5252"))
         }
         val inactiveColor = Color.parseColor("#35FFFFFF")
@@ -2376,18 +2478,19 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release(); loudnessEnhancer = null } catch (_: Exception) {}
         try { player?.release() } catch (_: Exception) {}
 
+        // Пункт 2: Снижен стартовый порог буфера (650 мс) для мгновенного включения каналов
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(12000, 30000, 1000, 2000)
-            1 -> listOf(22000, 55000, 1500, 3000)
-            2 -> listOf(38000, 85000, 2000, 3800)
-            else -> listOf(60000, 130000, 2800, 5000)
+            0 -> listOf(10000, 28000, 500, 1200)
+            1 -> listOf(18000, 45000, 600, 1500)
+            2 -> listOf(28000, 75000, 650, 1800)
+            else -> listOf(45000, 110000, 800, 2200)
         }
         val targetBytes = if (bufferLevel >= 3) 96 * 1024 * 1024 else 64 * 1024 * 1024
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
             .setTargetBufferBytes(targetBytes)
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setBackBuffer(90000, true)
+            .setBackBuffer(60000, true)
             .build()
 
         val extensionMode = when (decoderMode) {
@@ -2404,8 +2507,8 @@ class MainActivity : AppCompatActivity() {
             .setUserAgent(activeAgent)
             .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(currentUrl ?: "https://smotrim.ru"))
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(12000)
-            .setReadTimeoutMs(20000)
+            .setConnectTimeoutMs(10000)
+            .setReadTimeoutMs(18000)
         httpDataSourceFactory = dsFactory
 
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
@@ -2434,7 +2537,7 @@ class MainActivity : AppCompatActivity() {
         newPlayer.addListener(object : Player.Listener {
             override fun onRenderedFirstFrame() {
                 applyAudioEnhancements()
-                applyAutoFrameRateIfNeeded()
+                updateSignalIndicator()
             }
             override fun onTracksChanged(tracks: Tracks) {
                 var builder = newPlayer.trackSelectionParameters.buildUpon()
@@ -2471,6 +2574,7 @@ class MainActivity : AppCompatActivity() {
                 if (changed) newPlayer.trackSelectionParameters = builder.build()
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
+                updateSignalIndicator()
                 if (playbackState == Player.STATE_ENDED) reconnectCurrentStreamSilently()
             }
             override fun onPlayerError(error: PlaybackException) {
@@ -2491,8 +2595,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Пункт 2: Умная избирательная предзагрузка соседей (не трогает односессионные ключи rostelekom.xyz / iptv, чтобы сервер не рвал соединение)
+    private fun isSingleConnectionTokenStream(urlStr: String): Boolean {
+        val low = urlStr.lowercase()
+        return low.contains("rostelekom.xyz") || low.contains("/iptv/")
+    }
+
     private fun preloadNeighboringChannels(activeChannel: Channel) {
-        if (isAnalyzerRunning) return
+        if (isAnalyzerRunning || isSingleConnectionTokenStream(activeChannel.url)) return
         val snapshot = displayedChannels.toList()
         if (snapshot.size < 2) return
         val idx = snapshot.indexOfFirst { it.url == activeChannel.url }
@@ -2500,22 +2610,24 @@ class MainActivity : AppCompatActivity() {
         val neighbors = listOf(snapshot[(idx - 1 + snapshot.size) % snapshot.size], snapshot[(idx + 1) % snapshot.size])
         synchronized(preloadedLock) { preloadedNeighbors.clear() }
         for (neighbor in neighbors) {
+            if (isSingleConnectionTokenStream(neighbor.url)) continue
             try {
                 preloaderExecutor.submit {
                     if (isAnalyzerRunning) return@submit
                     try {
                         val cleanUrl = neighbor.url.substringBefore("#")
+                        val parsed = URL(cleanUrl)
+                        if (dohEnabled) CoreEngines.resolveHostViaCloudflareDoH(parsed.host, true)
                         val hdrs = CoreEngines.headersForStreamUrl(cleanUrl)
-                        val conn = URL(cleanUrl).openConnection() as HttpURLConnection
-                        conn.setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
-                        for ((k, v) in hdrs) conn.setRequestProperty(k, v)
-                        conn.connectTimeout = 3000; conn.readTimeout = 3000
-                        if (conn.responseCode in 200..299) {
-                            val buf = ByteArray(128)
-                            conn.inputStream.read(buf)
-                            conn.disconnect()
-                            synchronized(preloadedLock) { preloadedNeighbors.add(neighbor.url) }
+                        val conn = (parsed.openConnection() as HttpURLConnection).apply {
+                            requestMethod = "HEAD"
+                            setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
+                            for ((k, v) in hdrs) setRequestProperty(k, v)
+                            connectTimeout = 2500; readTimeout = 2500
                         }
+                        conn.responseCode
+                        conn.disconnect()
+                        synchronized(preloadedLock) { preloadedNeighbors.add(neighbor.url) }
                     } catch (_: Exception) {}
                 }
             } catch (_: Exception) {}
@@ -2531,7 +2643,7 @@ class MainActivity : AppCompatActivity() {
         val norm = CoreEngines.normalizeName(ch.name)
         if (norm.isNotEmpty()) {
             epgByName[norm]?.let { if (it.isNotEmpty()) return it.toList() }
-            val withoutHd = norm.removeSuffix("hd").removeSuffix("fhd").removeSuffix("50fps").trim()
+            val withoutHd = norm.removeSuffix("hd").removeSuffix("fhd").removeSuffix("50fps").removeSuffix("50").trim()
             if (withoutHd.isNotEmpty()) {
                 epgByName[withoutHd]?.let { if (it.isNotEmpty()) return it.toList() }
             }
@@ -2699,7 +2811,12 @@ class MainActivity : AppCompatActivity() {
         val vBitrate = if (vFormat != null && vFormat.bitrate > 0) String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f) else "Адаптивный HLS"
 
         val bufSec = p.totalBufferedDuration / 1000L
-        val preloadedCount = synchronized(preloadedLock) { preloadedNeighbors.size }
+        val preloadNote = if (ch != null && isSingleConnectionTokenStream(ch.url)) {
+            "Отключена (защита 1-сессионного ключа)"
+        } else {
+            val preloadedCount = synchronized(preloadedLock) { preloadedNeighbors.size }
+            "$preloadedCount из 2 ⚡"
+        }
 
         val (epg, _) = getCurrentAndNextEpg(ch)
         val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -2709,8 +2826,8 @@ class MainActivity : AppCompatActivity() {
             "Группа: " + (if (ch != null) effectiveCategory(ch) else "-") + "\n\n" +
             "Разрешение: " + width + "x" + height + " " + fps + " (" + vCodec + ")\n" +
             "Поток: " + vBitrate + "\n" +
-            "Буфер: " + bufSec + " сек (Машина времени: 90с)\n" +
-            "Предзагрузка соседних: " + preloadedCount + " из 2 ⚡" +
+            "Буфер: " + bufSec + " сек (Машина времени: 60с)\n" +
+            "Предзагрузка соседних: " + preloadNote +
             epgLine
     }
 
@@ -2720,8 +2837,8 @@ class MainActivity : AppCompatActivity() {
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val snapshot = playlists.toList()
         val items = snapshot.mapIndexed { idx, p -> (if (idx == activePlaylistIndex) "[+]   " else "[-]   ") + p.title }.toMutableList()
-        items.add("➕   Добавить свой плейлист по ссылке (с сохранением его групп)")
-        items.add("📂   Проводник: выбрать файл .m3u/.m3u8 с устройства / USB")
+        items.add("[>]   Добавить свой плейлист по ссылке   •   Сохранение групп")
+        items.add("[>]   Проводник   •   Выбрать файл .m3u/.m3u8 с устройства или USB")
         if (snapshot.size > 2 && activePlaylistIndex >= 2) items.add("[-]   Удалить выбранный пользовательский плейлист")
         updateSubModalListItems(items)
 
@@ -2747,7 +2864,7 @@ class MainActivity : AppCompatActivity() {
     private fun openFolderExplorerModal(dir: File) {
         requestStoragePermissionsIfNeeded()
         currentBrowseDir = dir
-        subModalTitle.text = "📂 Проводник: " + dir.absolutePath
+        subModalTitle.text = "Проводник: " + dir.absolutePath
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
 
@@ -2760,13 +2877,13 @@ class MainActivity : AppCompatActivity() {
 
         val entries = mutableListOf<Pair<String, File?>>()
         val parent = dir.parentFile
-        if (parent != null && parent.canRead()) entries.add(Pair("⬆  .. [На уровень вверх]", parent))
+        if (parent != null && parent.canRead()) entries.add(Pair("[>]   .. [На уровень вверх]", parent))
         val rawChildren = try { dir.listFiles()?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
-        for (d in rawChildren.filter { it.isDirectory && !it.name.startsWith(".") }.sortedBy { it.name.lowercase() }) entries.add(Pair("📁  " + d.name, d))
+        for (d in rawChildren.filter { it.isDirectory && !it.name.startsWith(".") }.sortedBy { it.name.lowercase() }) entries.add(Pair("[>]   Папка: " + d.name, d))
         for (f in rawChildren.filter { it.isFile && (it.name.endsWith(".m3u", true) || it.name.endsWith(".m3u8", true) || it.name.endsWith(".txt", true)) }.sortedBy { it.name.lowercase() }) {
-            entries.add(Pair("📄  " + f.name + "  (" + (f.length() / 1024) + " КБ)", f))
+            entries.add(Pair("[+]   Файл: " + f.name + "   •   " + (f.length() / 1024) + " КБ", f))
         }
-        if (entries.isEmpty()) entries.add(Pair("Папка пуста или нет доступа", null))
+        if (entries.isEmpty()) entries.add(Pair("[-]   Папка пуста или нет доступа", null))
 
         updateSubModalListItems(entries.map { it.first })
         subModalList.setOnItemClickListener { _, _, idx, _ ->
@@ -2845,7 +2962,7 @@ class MainActivity : AppCompatActivity() {
         val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
         val aliveTotal = aliveChannelsAtomic.get()
         val deadTotal = deadChannelsAtomic.get()
-        subModalTitle.text = colorizeStatusText("Быстрый тест (16 потоков)  •  [+] $aliveTotal   [-] $deadTotal (скрываются авто)")
+        subModalTitle.text = colorizeStatusText("Быстрый тест   •   [+] $aliveTotal   [-] $deadTotal (скрываются авто)")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
             subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
@@ -2863,7 +2980,7 @@ class MainActivity : AppCompatActivity() {
         val groupNames = listOf("Все каналы") + activeCategoryList().drop(2)
         updateSubModalListItems(groupNames.map { gName ->
             val groupChans = if (gName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == gName }
-            "📂   $gName (${groupChans.size} кан.)   —   [+] ${groupChans.count { channelHealthMap[it.url] == true }}    [-] ${groupChans.count { channelHealthMap[it.url] == false }}"
+            "[>]   $gName (${groupChans.size} кан.)   •   [+] ${groupChans.count { channelHealthMap[it.url] == true }}    [-] ${groupChans.count { channelHealthMap[it.url] == false }}"
         })
         subModalList.setOnItemClickListener { _, _, idx, _ ->
             if (idx in groupNames.indices) { selectedAnalyzerCategory = groupNames[idx]; navigateToMenu("ANALYZER_GROUP_VIEW") }
@@ -2887,8 +3004,8 @@ class MainActivity : AppCompatActivity() {
             if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ Свернуть в фон") { collapseAnalyzerToTopBar() })
         }
         updateSubModalListItems(groupChans.mapIndexed { i, ch ->
-            val status = when (channelHealthMap[ch.url]) { true -> "[+] Работает"; false -> "[-] Скрыт"; null -> "[?] Очередь" }
-            "${i + 1}.   $status   —   ${ch.name}"
+            val status = when (channelHealthMap[ch.url]) { true -> "[+]   Работает"; false -> "[-]   Скрыт"; null -> "[?]   Очередь" }
+            "$status   •   ${i + 1}. ${ch.name}"
         })
         subModalList.setOnItemClickListener { _, _, idx, _ -> if (idx in groupChans.indices) { playChannelObj(groupChans[idx], immediate = true); closeAllMenus() } }
         if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
@@ -2911,7 +3028,7 @@ class MainActivity : AppCompatActivity() {
         resetMenuInactivityTimer()
 
         thread(priority = Thread.NORM_PRIORITY) {
-            val pool = Executors.newFixedThreadPool(16)
+            val pool = Executors.newFixedThreadPool(8)
             var lastUiUpdateMs = 0L
             for (ch in snapshot) {
                 pool.submit {
@@ -3003,18 +3120,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Окно Буфер: все пункты в одну строку + крупные индикаторы + плавное обновление inPlace без мигания
     private fun openBufferSubModal(inPlace: Boolean = false) {
         subModalTitle.text = "Буфер подкачки и Машина времени"
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val opts = listOf(
-            "Маленький буфер (12–30 сек)   •   Быстрый старт",
-            "Средний буфер (22–55 сек)   •   Баланс",
-            "Большой буфер (38–85 сек)   •   Стабильный поток",
-            "Максимальный буфер (60–130 сек)   •   Защита от обрывов"
+            "Маленький буфер (10–28 сек)   •   Мгновенный старт",
+            "Средний буфер (18–45 сек)   •   Оптимальный баланс",
+            "Большой буфер (28–75 сек)   •   Стабильный поток",
+            "Максимальный буфер (45–110 сек)   •   Защита от помех"
         ).mapIndexed { i, t -> (if (i == bufferLevel) "[+]   " else "[-]   ") + t }.toMutableList()
-        opts.add("⏪   Машина времени:   Отмотать прямой эфир на -20 сек")
-        opts.add("⏪   Машина времени:   Отмотать прямой эфир на -45 сек")
+        opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -20 сек")
+        opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -45 сек")
         updateSubModalListItems(opts, smoothToggle = inPlace)
         subModalList.setOnItemClickListener { _, _, which, _ ->
             when (which) {
@@ -3026,42 +3142,40 @@ class MainActivity : AppCompatActivity() {
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
     }
 
-    // Окно Декодер: крупные кружки [+]/[-] и переключатели [ON]/[OFF] + плавная смена состояния без мигания окна
     private fun openDecoderSubModal(inPlace: Boolean = false) {
-        subModalTitle.text = "Декодер, Частота экрана (AFR) и Защита Плазмы"
+        subModalTitle.text = "Декодер и Защита Плазмы"
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val opts = listOf(
             "Аппаратный декодер (MediaCodec HW)   •   Минимальная нагрузка",
             "Автоматический декодер (HW + FFmpeg)   •   Рекомендуется",
             "Программный декодер (Приоритет SW)   •   Совместимость"
         ).mapIndexed { i, t -> (if (i == decoderMode) "[+]   " else "[-]   ") + t }.toMutableList()
-        opts.add(if (afrEnabled) "[ON]   Автоподстройка частоты экрана AFR (50/60 Гц):   ВКЛ" else "[OFF]   Автоподстройка частоты экрана AFR (50/60 Гц):   ВЫКЛ")
-        opts.add(if (pixelOrbiterEnabled) "[ON]   Защита от выгорания экрана (Pixel Orbiter):   ВКЛ" else "[OFF]   Защита от выгорания экрана (Pixel Orbiter):   ВЫКЛ")
+        opts.add(if (pixelOrbiterEnabled) "[ON]   Сдвиг пикселей часов, антенны и экрана (Pixel Orbiter)   •   Включён" else "[OFF]   Сдвиг пикселей часов, антенны и экрана (Pixel Orbiter)   •   Выключен")
+        opts.add(if (afrEnabled) "[ON]   Авточастота кадров AFR (50/60 Гц)   •   Включена" else "[OFF]   Авточастота кадров AFR (50/60 Гц)   •   Выключена")
         updateSubModalListItems(opts, smoothToggle = inPlace)
         subModalList.setOnItemClickListener { _, _, which, _ ->
             when (which) {
                 in 0..2 -> { decoderMode = which; saveState(); initPlayer(); openDecoderSubModal(inPlace = true) }
-                3 -> { afrEnabled = !afrEnabled; saveState(); applyAutoFrameRateIfNeeded(); openDecoderSubModal(inPlace = true) }
-                4 -> { pixelOrbiterEnabled = !pixelOrbiterEnabled; saveState(); stepPixelOrbiter(); openDecoderSubModal(inPlace = true) }
+                3 -> { pixelOrbiterEnabled = !pixelOrbiterEnabled; saveState(); stepPixelOrbiter(); openDecoderSubModal(inPlace = true) }
+                4 -> { afrEnabled = !afrEnabled; saveState(); openDecoderSubModal(inPlace = true) }
             }
         }
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
     }
 
-    // Окно Звук: все пункты в одну строку + плавное переключение без мигания
     private fun openAudioSubModal(inPlace: Boolean = false) {
         val p = player ?: return
         subModalTitle.text = "Звук, Выравнивание (DRC) и Усиление"
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val labels = mutableListOf<String>()
-        labels.add(if (drcNightAudioEnabled) "[ON]   Выравнивание громкости (Night Audio / DRC):   ВКЛ" else "[OFF]   Выравнивание громкости (Night Audio / DRC):   ВЫКЛ")
-        val boostDots = when (audioBoostPercent) {
-            100 -> "● ○ ○ ○   100% (Штатный уровень)"
-            130 -> "○ ● ○ ○   130% (+3.5 дБ)"
-            160 -> "○ ○ ● ○   160% (+7.0 дБ)"
-            else -> "○ ○ ○ ●   200% (+11 дБ Максимум)"
+        labels.add(if (drcNightAudioEnabled) "[ON]   Выравнивание громкости (Night Audio / DRC)   •   Включено" else "[OFF]   Выравнивание громкости (Night Audio / DRC)   •   Выключено")
+        val boostText = when (audioBoostPercent) {
+            100 -> "100% (Штатный уровень)"
+            130 -> "130% (+3.5 дБ)"
+            160 -> "160% (+7.0 дБ)"
+            else -> "200% (+11 дБ Максимум)"
         }
-        labels.add("🔊   Усиление громкости (Audio Boost):   $boostDots")
+        labels.add("[+]   Усиление громкости (Audio Boost)   •   $boostText")
 
         val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
         val overrides = mutableListOf<TrackSelectionOverride>()
@@ -3161,7 +3275,7 @@ class MainActivity : AppCompatActivity() {
                             if (CoreEngines.isArabicOrIndianChannel(extra.name, extra.category, extra.url)) continue
                             if (strictRuOnly && !CoreEngines.isStrictlyRussianChannel(extra.name, extra.url, extra.category)) continue
                             val cleanTitle = CoreEngines.cleanChannelDisplayName(extra.name)
-                            if (existingKeys.add(CoreEngines.normalizeName(cleanTitle) + "_" + extra.category + "_" + extra.url.substringAfter("#", ""))) {
+                            if (existingKeys.add(CoreEngines.normalizeName(cleanTitle) + "_" + extra.category + "_" + extra.url.hashCode())) {
                                 result.add(Channel(cleanTitle, extra.url, customCategoryMap[extra.url] ?: extra.category, extra.tvgId))
                             }
                         }
@@ -3181,12 +3295,7 @@ class MainActivity : AppCompatActivity() {
                             } catch (_: Exception) {}
                         }
                         for (ch in targetMap.values) {
-                            val hostKey = try { URL(ch.url.substringBefore("#")).host.lowercase() } catch (_: Exception) { "" }
-                            val key = if (ch.category == "Детские" || ch.category == "Музыка" || ch.category == "Кино и сериалы") {
-                                CoreEngines.normalizeName(ch.name) + "_" + ch.category + "_" + hostKey
-                            } else {
-                                CoreEngines.normalizeName(ch.name) + "_" + ch.category
-                            }
+                            val key = CoreEngines.normalizeName(ch.name) + "_" + ch.category + "_" + ch.url.substringBefore("?").hashCode()
                             if (existingKeys.add(key)) result.add(ch)
                         }
                         result
@@ -3331,7 +3440,7 @@ class MainActivity : AppCompatActivity() {
             player?.play()
         } catch (_: Exception) {}
         uiHandler.removeCallbacks(preloadNeighborsRunnable)
-        if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 1500L)
+        if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 2000L)
     }
 
     private fun playChannelObj(channel: Channel, immediate: Boolean = false, silentSwap: Boolean = false) {
@@ -3358,7 +3467,7 @@ class MainActivity : AppCompatActivity() {
         if (immediate) {
             executeDebouncedPlayRunnable.run()
         } else {
-            uiHandler.postDelayed(executeDebouncedPlayRunnable, 140L)
+            uiHandler.postDelayed(executeDebouncedPlayRunnable, 90L)
         }
 
         val topBadge = if (topUrls.contains(channel.url)) "▲ " else ""
@@ -3380,16 +3489,38 @@ class MainActivity : AppCompatActivity() {
 
     private val preloadNeighborsRunnable = Runnable { currentChannel?.let { preloadNeighboringChannels(it) } }
 
+    // Пункт 4: Надёжный показ нижнего баннера канала со сбросом прозрачности и масштаба
     private fun showBanner(text: String) {
-        if (menuHistory.isNotEmpty() || !showChannelBannerOnSwitch) { currentChannelBanner.visibility = View.GONE; return }
-        currentChannelBanner.text = text
-        currentChannelBanner.setBackgroundDrawable(makeThemedPanelBg())
-        animateMenuAppear(currentChannelBanner, 0f, 18f)
+        if (menuHistory.isNotEmpty() || !showChannelBannerOnSwitch) {
+            currentChannelBanner.visibility = View.GONE
+            return
+        }
         currentChannelBanner.removeCallbacks(hideBannerRunnable)
-        currentChannelBanner.postDelayed(hideBannerRunnable, (menuHideDelaySec * 500L).coerceIn(2500L, 6000L))
+        currentChannelBanner.animate().cancel()
+        currentChannelBanner.text = text
+        currentChannelBanner.setTextColor(currentTheme().textPrimaryColor)
+        currentChannelBanner.setBackgroundDrawable(makeThemedPanelBg())
+        currentChannelBanner.alpha = 1f
+        currentChannelBanner.scaleX = 1f
+        currentChannelBanner.scaleY = 1f
+        currentChannelBanner.translationX = 0f
+        currentChannelBanner.translationY = 14f
+        currentChannelBanner.visibility = View.VISIBLE
+        currentChannelBanner.bringToFront()
+        currentChannelBanner.animate()
+            .translationY(0f)
+            .setDuration(200L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+        currentChannelBanner.postDelayed(hideBannerRunnable, (menuHideDelaySec * 500L).coerceIn(2800L, 6000L))
     }
 
-    private val hideBannerRunnable = Runnable { currentChannelBanner.visibility = View.GONE }
+    private val hideBannerRunnable = Runnable {
+        currentChannelBanner.animate().alpha(0f).setDuration(220L).withEndAction {
+            currentChannelBanner.visibility = View.GONE
+            currentChannelBanner.alpha = 1f
+        }.start()
+    }
 
     private fun saveState() {
         val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
@@ -3421,7 +3552,7 @@ class MainActivity : AppCompatActivity() {
             .putBoolean("doh_enabled_v23", dohEnabled)
             .putInt("on_drop_v23", onDropBehavior)
             .putInt("menu_hide_sec_v23", menuHideDelaySec)
-            .putBoolean("show_banner_v23", showChannelBannerOnSwitch)
+            .putBoolean("show_banner_v32", showChannelBannerOnSwitch)
             .putBoolean("anti_block_ru", antiBlockEnabled)
             .putInt("ua_index", userAgentIndex)
             .putString("epg_url", epgUrl)
@@ -3453,7 +3584,7 @@ class MainActivity : AppCompatActivity() {
         dohEnabled = prefs.getBoolean("doh_enabled_v23", true)
         onDropBehavior = prefs.getInt("on_drop_v23", 0)
         menuHideDelaySec = prefs.getInt("menu_hide_sec_v23", 8)
-        showChannelBannerOnSwitch = prefs.getBoolean("show_banner_v23", true)
+        showChannelBannerOnSwitch = prefs.getBoolean("show_banner_v32", true)
         antiBlockEnabled = prefs.getBoolean("anti_block_ru", true)
         userAgentIndex = prefs.getInt("ua_index", 0)
         activePlaylistIndex = prefs.getInt("active_playlist", 0)
@@ -3584,15 +3715,22 @@ class MainActivity : AppCompatActivity() {
         return super.onKeyDown(keyCode, event)
     }
 
+    override fun onStart() {
+        super.onStart()
+        startClockAndWatchdogUpdater()
+    }
+
     override fun onResume() {
         super.onResume()
         enableTrueFullScreenImmersion()
-        if (player == null) initPlayer()
+        startClockAndWatchdogUpdater()
+        if (player == null) initPlayer() else player?.play()
         if (allChannels.isEmpty()) loadActivePlaylist(autoPlayLast = true)
     }
 
     override fun onStop() {
         super.onStop()
+        stopClockAndWatchdogUpdater()
         player?.pause()
         dualPipPlayer?.pause()
     }
@@ -3600,7 +3738,9 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         isAnalyzerRunning = false
+        stopClockAndWatchdogUpdater()
         alphaAnimator?.cancel()
+        carouselScrollAnimator?.cancel()
         preloaderExecutor.shutdownNow()
         uiHandler.removeCallbacksAndMessages(null)
         try { loudnessEnhancer?.release() } catch (_: Exception) {}
