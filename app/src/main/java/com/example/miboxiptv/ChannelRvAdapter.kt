@@ -5,6 +5,7 @@ import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
@@ -40,7 +41,7 @@ class ChannelRvAdapter(
 
     fun getExactRowHeightPx(): Int {
         val scale = getUiScaleFactor()
-        return (52f * scale).toInt()
+        return (50f * scale).toInt()
     }
 
     fun submitChannels(newList: List<Channel>, initialFocusPos: Int) {
@@ -70,8 +71,8 @@ class ChannelRvAdapter(
     }
 
     inner class ChannelVH(val rowView: ChannelRowView) : RecyclerView.ViewHolder(rowView) {
-        val selectorBg = GradientDrawable().apply { cornerRadius = 18f }
-        val badgeBg = GradientDrawable().apply { cornerRadius = 10f }
+        val selectorBg = GradientDrawable().apply { cornerRadius = 16f }
+        val badgeBg = GradientDrawable().apply { cornerRadius = 8f }
 
         init {
             rowView.isFocusable = true
@@ -92,10 +93,10 @@ class ChannelRvAdapter(
                     onChannelFocused(pos)
                     bindStyle(items[pos], isSelectedRow = true)
                     if (prev != pos && prev in 0 until items.size) {
-                        rowView.post {
-                            if (prev in 0 until items.size && prev != highlightedPos) {
-                                try { notifyItemChanged(prev) } catch (_: Exception) {}
-                            }
+                        val rv = rowView.parent as? RecyclerView
+                        val prevHolder = rv?.findViewHolderForAdapterPosition(prev) as? ChannelVH
+                        if (prevHolder != null) {
+                            prevHolder.bindStyle(items[prev], isSelectedRow = false)
                         }
                     }
                 } else {
@@ -163,26 +164,12 @@ class ChannelRvAdapter(
             val scale = getUiScaleFactor()
             val isPlaying = (ch.url == getPlayingUrl())
 
-            val rowH = getExactRowHeightPx()
-            val curLp = rowView.layoutParams
-            if (curLp == null || curLp.height != rowH) {
-                rowView.layoutParams = RecyclerView.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    rowH
-                )
-            }
-
-            val badgeW = (44f * scale).toInt()
-            val badgeH = (32f * scale).toInt()
-            rowView.badgeView.layoutParams = FrameLayout.LayoutParams(
-                badgeW,
-                badgeH,
-                Gravity.START or Gravity.CENTER_VERTICAL
-            ).apply { leftMargin = (10f * scale).toInt() }
+            val padV = (7f * scale).toInt()
+            rowView.setPadding(6, padV, 8, padV)
 
             val monogram = extractMonogram(ch.name)
             rowView.badgeView.text = monogram
-            val fontSp = if (monogram.length >= 2) 9.0f else 10.2f
+            val fontSp = if (monogram.length >= 2) 8.8f else 10.0f
             rowView.badgeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSp * scale)
             badgeBg.cornerRadius = 8f * scale
             badgeBg.setColor(badgeColorForName(ch.name))
@@ -192,19 +179,8 @@ class ChannelRvAdapter(
             val prefix = (if (isTopUrl(ch.url)) "▲ " else "") + (if (isFavUrl(ch.url)) "★ " else "")
             rowView.titleView.text = prefix + ch.name
             rowView.titleView.typeface = if (isSelectedRow || isPlaying) t.boldFont else t.normalFont
-            rowView.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.2f * scale)
+            rowView.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.0f * scale)
             rowView.titleView.forceMarqueeActive = isSelectedRow
-
-            val leftTitleMargin = (10f * scale).toInt() + badgeW + (12f * scale).toInt()
-            val rightTitleMargin = if (isPlaying) (44f * scale).toInt() else (14f * scale).toInt()
-            rowView.titleView.layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER_VERTICAL
-            ).apply {
-                leftMargin = leftTitleMargin
-                rightMargin = rightTitleMargin
-            }
 
             if (isSelectedRow) {
                 rowView.titleView.setTextColor(t.textOnAccent)
@@ -219,15 +195,39 @@ class ChannelRvAdapter(
 
             if (isPlaying) {
                 rowView.eqView.barColor = if (isSelectedRow) t.textOnAccent else t.accentColor
-                rowView.eqView.visibility = android.view.View.VISIBLE
+                rowView.eqView.visibility = View.VISIBLE
             } else {
-                rowView.eqView.visibility = android.view.View.GONE
+                rowView.eqView.visibility = View.GONE
             }
         }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelVH {
-        val rowView = ChannelRowView(parent.context)
+        val scale = getUiScaleFactor()
+        val rowView = ChannelRowView(parent.context).apply {
+            layoutParams = RecyclerView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = 2
+            }
+            val badgeW = (44f * scale).toInt()
+            val badgeH = (32f * scale).toInt()
+            badgeView.layoutParams = FrameLayout.LayoutParams(
+                badgeW,
+                badgeH,
+                Gravity.START or Gravity.CENTER_VERTICAL
+            ).apply { leftMargin = (8f * scale).toInt() }
+
+            titleView.layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER_VERTICAL
+            ).apply {
+                leftMargin = (8f * scale).toInt() + badgeW + (12f * scale).toInt()
+                rightMargin = (42f * scale).toInt()
+            }
+        }
         return ChannelVH(rowView)
     }
 
