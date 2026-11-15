@@ -320,11 +320,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun uiScaleFactor(): Float = when (uiScaleStep) {
         0 -> 1.0f
-        1 -> 1.16f
-        else -> 1.30f
+        1 -> 1.15f
+        else -> 1.28f
     }
 
-    private fun exactModalRowHeightPx(): Int = (52f * uiScaleFactor()).toInt()
+    private fun exactModalRowHeightPx(): Int = (50f * uiScaleFactor()).toInt()
 
     private fun targetPanelAlphaInt(): Int = when (uiAlphaStep) {
         0 -> 244
@@ -463,38 +463,6 @@ class MainActivity : AppCompatActivity() {
                 .setDuration(240L)
                 .setInterpolator(DecelerateInterpolator(1.3f))
                 .start()
-        }
-    }
-
-    private var currentSideListHeightPx = 560
-
-    private fun fitSideListsToWholeRows() {
-        val dm = resources.displayMetrics
-        val availH = (dm.heightPixels - 72).coerceAtLeast(320)
-        val chRowH = if (::channelRvAdapter.isInitialized) channelRvAdapter.getExactRowHeightPx().coerceAtLeast(38) else (52f * uiScaleFactor()).toInt()
-        val exactChRows = (availH / chRowH).coerceAtLeast(5)
-        val exactChHeight = exactChRows * chRowH + 16
-        currentSideListHeightPx = exactChHeight
-
-        if (::channelRecyclerView.isInitialized) {
-            val lp = channelRecyclerView.layoutParams as? FrameLayout.LayoutParams
-                ?: FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, exactChHeight, Gravity.CENTER_VERTICAL)
-            lp.width = FrameLayout.LayoutParams.MATCH_PARENT
-            lp.height = exactChHeight
-            lp.gravity = Gravity.CENTER_VERTICAL
-            channelRecyclerView.layoutParams = lp
-        }
-
-        val catRowH = exactModalRowHeightPx().coerceAtLeast(38)
-        val exactCatRows = (availH / catRowH).coerceAtLeast(5)
-        val exactCatHeight = exactCatRows * catRowH + 16
-        if (::categoryListView.isInitialized) {
-            val lp = categoryListView.layoutParams as? FrameLayout.LayoutParams
-                ?: FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, exactCatHeight, Gravity.CENTER_VERTICAL)
-            lp.width = FrameLayout.LayoutParams.MATCH_PARENT
-            lp.height = exactCatHeight
-            lp.gravity = Gravity.CENTER_VERTICAL
-            categoryListView.layoutParams = lp
         }
     }
 
@@ -675,7 +643,6 @@ class MainActivity : AppCompatActivity() {
         signalContainer.animate().translationX(-hx).translationY(hy).setDuration(900L).start()
     }
 
-    // Синхронное сохранение последнего канала (.commit()) перед выключением кинескопа!
     private fun powerOffAppWithCrtEffect() {
         saveLastChannelOnly(syncCommit = true)
         saveState(syncCommit = true)
@@ -715,8 +682,6 @@ class MainActivity : AppCompatActivity() {
             FrameLayout.LayoutParams.MATCH_PARENT,
             Gravity.START
         ).apply { setMargins(leftMargin, 16, 0, 16) }
-
-        fitSideListsToWholeRows()
 
         clockTextView.layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -1028,7 +993,7 @@ class MainActivity : AppCompatActivity() {
             isScrollbarFadingEnabled = false
             selector = ColorDrawable(Color.TRANSPARENT); isSmoothScrollbarEnabled = false
             setBackgroundDrawable(makeThemedSubBg()); setPadding(8, 8, 8, 8); visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER_VERTICAL)
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
 
         channelLayoutManager = LinearLayoutManager(this)
@@ -1070,9 +1035,9 @@ class MainActivity : AppCompatActivity() {
             overScrollMode = View.OVER_SCROLL_NEVER
             setBackgroundDrawable(makeThemedSubBg())
             setPadding(8, 8, 8, 8)
-            clipToPadding = true
+            clipToPadding = false
             visibility = View.VISIBLE
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER_VERTICAL)
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
 
         singleColumnFrame.addView(categoryListView)
@@ -1622,7 +1587,6 @@ class MainActivity : AppCompatActivity() {
         centerCard?.requestFocus()
     }
 
-    // Пункт 4: При нажатии OK на 3-й строке (например, Прозрачность) сохраняем точное смещение selectedRowTopPx и НЕ вызываем setSelection(targetPos), чтобы строка не улетала наверх!
     private fun updateSubModalListItems(newItems: List<String>, smoothToggle: Boolean = false, preservePositionIndex: Int = -1) {
         val targetPos = when {
             preservePositionIndex in newItems.indices -> preservePositionIndex
@@ -1823,7 +1787,6 @@ class MainActivity : AppCompatActivity() {
         isLeftRailVisible = false
         leftIconRail.visibility = View.GONE
         categoryListView.visibility = View.GONE
-        fitSideListsToWholeRows()
         channelRecyclerView.visibility = View.VISIBLE
 
         if (displayedChannels.isNotEmpty()) {
@@ -1834,9 +1797,7 @@ class MainActivity : AppCompatActivity() {
 
             focusedChannelPos = targetPos
             channelRvAdapter.submitChannels(displayedChannels.toList(), targetPos)
-            val rowH = channelRvAdapter.getExactRowHeightPx().coerceAtLeast(38)
-            val centerOffset = ((currentSideListHeightPx / 2) - (rowH / 2)).coerceAtLeast(0)
-            channelLayoutManager.scrollToPositionWithOffset(targetPos, centerOffset)
+            channelLayoutManager.scrollToPositionWithOffset(targetPos, (channelRecyclerView.height / 3).coerceAtLeast(90))
             channelRecyclerView.post {
                 val vh = channelRecyclerView.findViewHolderForAdapterPosition(targetPos)
                 if (vh != null) {
@@ -1857,7 +1818,6 @@ class MainActivity : AppCompatActivity() {
         leftIconRail.visibility = View.GONE
         focusedCategoryPos = currentCategoryIndex
         updateCategoriesList()
-        fitSideListsToWholeRows()
         channelRecyclerView.visibility = View.GONE
         categoryListView.visibility = View.VISIBLE
         categoryListView.setSelection(currentCategoryIndex)
@@ -2052,7 +2012,6 @@ class MainActivity : AppCompatActivity() {
             "ADD_URL" -> openAddUrlSubModal()
         }
     }
-
     private fun rewindLiveBufferSeconds(sec: Int) {
         val p = player ?: return
         val cur = p.currentPosition
@@ -3368,7 +3327,6 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
-    // Сохранение targetStartupUrl при старте, чтобы не перезатирать последний канал на «Первый канал» до догрузки внешних баз!
     private fun loadActivePlaylist(autoPlayLast: Boolean) {
         ensureDefaultPlaylists()
         val entry = playlists[activePlaylistIndex]
@@ -3628,7 +3586,6 @@ class MainActivity : AppCompatActivity() {
 
     private val preloadNeighborsRunnable = Runnable { currentChannel?.let { preloadNeighboringChannels(it) } }
 
-    // Пункт 2: Баннер никогда не показывается поверх заставки с глазом (splashOverlay)
     private fun showBanner(text: String) {
         if (menuHistory.isNotEmpty() || !showChannelBannerOnSwitch || splashOverlay.visibility == View.VISIBLE) {
             currentChannelBanner.visibility = View.GONE
@@ -3660,7 +3617,6 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    // Пункт 3: Синхронная запись последнего канала (.commit()) гарантирует сохранение даже перед exitProcess(0)
     private fun saveLastChannelOnly(syncCommit: Boolean = false) {
         if (lastSavedChannelUrl.isEmpty()) return
         val editor = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
