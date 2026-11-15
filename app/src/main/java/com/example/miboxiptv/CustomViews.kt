@@ -7,6 +7,7 @@ import android.text.SpannableString
 import android.text.Spanned
 import android.text.TextUtils
 import android.text.style.ReplacementSpan
+import android.util.LruCache
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -95,8 +96,11 @@ class GraphicOrbSpan(private val orbType: Int) : ReplacementSpan() {
     }
 }
 
+private val statusTextCache = LruCache<String, CharSequence>(256)
+
 fun colorizeStatusText(raw: String): CharSequence {
     if (!raw.contains("[")) return raw
+    statusTextCache.get(raw)?.let { return it }
     val ss = SpannableString(raw)
     var i = 0
     while (i <= raw.length - 3) {
@@ -110,10 +114,10 @@ fun colorizeStatusText(raw: String): CharSequence {
             else -> i++
         }
     }
+    statusTextCache.put(raw, ss)
     return ss
 }
 
-// Анимация выключения кинескопного телевизора (CRT TV Turn-Off)
 class CrtTurnOffView(context: Context) : View(context) {
     private var progress: Float = 0f
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -152,7 +156,6 @@ class CrtTurnOffView(context: Context) : View(context) {
         val cx = w / 2f
         val cy = h / 2f
 
-        // 1) Чёрные шторки кинескопа схлопываются сверху и снизу к центру
         paint.style = Paint.Style.FILL
         paint.color = Color.BLACK
         if (progress < 0.48f) {
@@ -164,12 +167,10 @@ class CrtTurnOffView(context: Context) : View(context) {
             canvas.drawRect(0f, cy - openHalfH, cx - openHalfW, cy + openHalfH, paint)
             canvas.drawRect(cx + openHalfW, cy - openHalfH, w, cy + openHalfH, paint)
 
-            // Яркая люминофорная вспышка на границе сжатия
             paint.color = Color.argb((180 * p1).toInt(), 210, 240, 255)
             beamRect.set(cx - openHalfW, cy - openHalfH, cx + openHalfW, cy + openHalfH)
             canvas.drawRoundRect(beamRect, 8f, 8f, paint)
         } else if (progress < 0.82f) {
-            // 2) Горизонтальная белая нить сжимается в яркую центральную точку
             canvas.drawRect(0f, 0f, w, h, paint)
             val p2 = ((progress - 0.48f) / 0.34f).coerceIn(0f, 1f)
             val halfW = (w * 0.42f * (1f - p2)).coerceAtLeast(6f)
@@ -183,7 +184,6 @@ class CrtTurnOffView(context: Context) : View(context) {
             beamRect.set(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
             canvas.drawRoundRect(beamRect, 6f, 6f, paint)
         } else {
-            // 3) Точка люминофора плавно угасает в темноту
             canvas.drawRect(0f, 0f, w, h, paint)
             val p3 = ((progress - 0.82f) / 0.18f).coerceIn(0f, 1f)
             val dotR = 14f * (1f - p3)
@@ -233,14 +233,19 @@ class RedPowerIconButton(context: Context, onClickAction: () -> Unit) : View(con
 
 class LiveEqualizerView(context: Context) : View(context) {
     var barColor: Int = Color.parseColor("#00E676")
-        set(value) { field = value; invalidate() }
+        set(value) {
+            if (field != value) {
+                field = value
+                if (isShown) invalidate()
+            }
+        }
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val rect = RectF()
     private val phases = floatArrayOf(0.0f, 1.3f, 2.7f, 4.1f)
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (visibility != VISIBLE) return
+        if (!isShown) return
         val w = width.toFloat(); val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
         val t = System.currentTimeMillis() / 130.0
@@ -253,7 +258,7 @@ class LiveEqualizerView(context: Context) : View(context) {
             rect.set(left, h - barH, left + barW, h)
             canvas.drawRoundRect(rect, 3f, 3f, paint)
         }
-        postInvalidateDelayed(110L)
+        if (isShown) postInvalidateDelayed(120L)
     }
 }
 
@@ -277,6 +282,7 @@ class MarqueeRowTextView(context: Context) : TextView(context) {
     init {
         setSingleLine(true)
         maxLines = 1
+        includeFontPadding = false
         ellipsize = TextUtils.TruncateAt.END
     }
 
@@ -285,8 +291,8 @@ class MarqueeRowTextView(context: Context) : TextView(context) {
         val newStr = newText.toString()
         text = newText
         if (animateToggle && oldStr.isNotEmpty() && oldStr != newStr) {
-            alpha = 0.62f
-            animate().alpha(1f).setDuration(170L).start()
+            alpha = 0.65f
+            animate().alpha(1f).setDuration(150L).start()
         }
     }
 
@@ -296,11 +302,12 @@ class MarqueeRowTextView(context: Context) : TextView(context) {
 class ChannelRowView(context: Context) : FrameLayout(context) {
     val badgeView = TextView(context).apply {
         gravity = Gravity.CENTER
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        includeFontPadding = false
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
         setTextColor(Color.WHITE)
         typeface = Typeface.DEFAULT_BOLD
         setSingleLine(true)
-        layoutParams = LayoutParams(42, 36, Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = 14 }
+        layoutParams = LayoutParams(44, 34, Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = 12 }
     }
     val titleView = MarqueeRowTextView(context).apply {
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL).apply {
@@ -309,7 +316,7 @@ class ChannelRowView(context: Context) : FrameLayout(context) {
     }
     val eqView = LiveEqualizerView(context).apply {
         visibility = View.GONE
-        layoutParams = LayoutParams(30, 20, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = 12 }
+        layoutParams = LayoutParams(28, 18, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = 12 }
     }
     init {
         addView(badgeView)
@@ -416,10 +423,10 @@ class ThemedTileView(
         if (isTileFocused) {
             paint.style = Paint.Style.FILL
             paint.color = Color.parseColor("#3360A5FA")
-            canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
+            canvas.drawCircle(cx, cy, minDim * 0.45f, paint)
             paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
             paint.color = Color.parseColor("#60A5FA")
-            canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
+            canvas.drawCircle(cx, cy, minDim * 0.45f, paint)
         }
         paint.style = Paint.Style.FILL
         when (iconType) {
@@ -658,7 +665,7 @@ class ThemedTileView(
         )
         if (isTileFocused) {
             paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.8f; paint.shader = grad
-            canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
+            canvas.drawCircle(cx, cy, minDim * 0.45f, paint)
         }
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 4.5f
@@ -802,7 +809,7 @@ class ThemedTileView(
         val r = minDim * 0.36f
         if (isTileFocused) {
             paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.2f; paint.color = Color.WHITE
-            canvas.drawCircle(cx, cy, minDim * 0.46f, paint)
+            canvas.drawCircle(cx, cy, minDim * 0.45f, paint)
         }
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 2.2f
@@ -1218,9 +1225,9 @@ class ThemedTileView(
     }
 
     private fun drawCarousel3DIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
-        val discR = minDim * 0.41f
-        val topCy = cy - minDim * 0.04f
-        val r = discR * 0.65f
+        val discR = minDim * 0.38f
+        val topCy = cy - minDim * 0.035f
+        val r = discR * 0.64f
 
         val (topHex, edgeHex) = when (iconType) {
             "PLAYLISTS" -> Pair("#EF4444", "#991B1B")
@@ -1238,12 +1245,12 @@ class ThemedTileView(
         }
 
         paint.style = Paint.Style.FILL
-        paint.color = Color.parseColor("#66000000")
-        canvas.drawCircle(cx, topCy + minDim * 0.12f, discR, paint)
+        paint.color = Color.parseColor("#55000000")
+        canvas.drawCircle(cx, topCy + minDim * 0.105f, discR, paint)
         paint.color = Color.parseColor(edgeHex)
-        canvas.drawCircle(cx, topCy + minDim * 0.088f, discR, paint)
+        canvas.drawCircle(cx, topCy + minDim * 0.075f, discR, paint)
         paint.color = Color.parseColor("#F1F5F9")
-        canvas.drawCircle(cx, topCy + minDim * 0.044f, discR, paint)
+        canvas.drawCircle(cx, topCy + minDim * 0.038f, discR, paint)
         if (iconType == "THEMES") {
             paint.shader = LinearGradient(
                 cx - discR, topCy - discR, cx + discR, topCy + discR,
