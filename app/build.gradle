@@ -22,8 +22,8 @@ android {
         applicationId "com.example.miboxiptv"
         minSdk 21
         targetSdk 33
-        versionCode 17248
-        versionName "2.7.48"
+        versionCode 17249
+        versionName "2.7.49"
     }
 
     buildTypes {
@@ -59,10 +59,17 @@ dependencies {
     implementation 'androidx.media3:media3-datasource:1.2.1'
 }
 
-// === АВТОМАТИЧЕСКОЕ ИСПРАВЛЕНИЕ ЗАВИСАНИЯ ЛЕВОГО МЕНЮ (ФОКУС/MARQUEE) И ТВ-БАННЕРА ===
-tasks.register("autoFixLeftMenuHang") {
+tasks.register("autoFixSideMenuCrash") {
     doLast {
-        // 1. Полноразмерный ТВ-баннер
+        def pkgDir = file("src/main/java/com/example/miboxiptv")
+
+        // 1. Удаляем временный SettingsModals.kt, если он остался от прошлой сборки и вызывает конфликт
+        def oldModals = new File(pkgDir, "SettingsModals.kt")
+        if (oldModals.exists()) {
+            oldModals.delete()
+        }
+
+        // 2. Создаём полноразмерный ТВ-баннер
         def drawableDir = file("src/main/res/drawable")
         drawableDir.mkdirs()
         new File(drawableDir, "tv_banner.xml").write('''<?xml version="1.0" encoding="utf-8"?>
@@ -95,24 +102,96 @@ tasks.register("autoFixLeftMenuHang") {
             }
         }
 
-        // 2. Убираем в CustomViews.kt перехват фокуса (override fun isFocused) и повторный setSingleLine(true), которые вешали RecyclerView!
-        def pkgDir = file("src/main/java/com/example/miboxiptv")
+        // 3. Чистим CustomViews.kt от перехвата фокуса
         def customViewsFile = new File(pkgDir, "CustomViews.kt")
         if (customViewsFile.exists()) {
             def cvText = customViewsFile.getText("UTF-8")
-            cvText = cvText.replace("override fun isFocused(): Boolean = forceMarqueeActive || super.isFocused()", "// isFocused override removed to prevent RecyclerView focus loop")
-            cvText = cvText.replace("setSingleLine(true)\n            maxLines = 1", "// layout-triggering calls removed from setter")
+            cvText = cvText.replace("override fun isFocused(): Boolean = forceMarqueeActive || super.isFocused()", "// removed focus override")
+            cvText = cvText.replace("setSingleLine(true)\n            maxLines = 1", "// removed layout trigger")
             customViewsFile.write(cvText, "UTF-8")
         }
 
-        // 3. Очищаем открытие левого меню в MainActivity.kt от лишних перестроений
+        // 4. Патчим MainActivity.kt: убираем молчаливое сворачивание при ошибке и защищаем showSideChannelsMode / showSideGroupsMode
         def mainFile = new File(pkgDir, "MainActivity.kt")
         if (mainFile.exists()) {
             def kText = mainFile.getText("UTF-8")
+
+            // Убираем глушилку, которая сворачивала приложение при любом исключении в UI
+            kText = kText.replace("Thread.setDefaultUncaughtExceptionHandler { _, _ -> }", "// UncaughtExceptionHandler removed so UI does not silently close")
             kText = kText.replace("fitSideListsToWholeRows()", "// fitSideListsToWholeRows() disabled")
+
+            // Заменяем showSideChannelsMode на полностью безопасный вариант с try-catch
+            def startMarker = "private fun showSideChannelsMode("
+            def startMarkerInternal = "internal fun showSideChannelsMode("
+            def endMarker = "private fun playSplashEyeAnimation()"
+            def endMarkerInternal = "internal fun playSplashEyeAnimation()"
+
+            int sIdx = kText.indexOf(startMarker)
+            if (sIdx < 0) sIdx = kText.indexOf(startMarkerInternal)
+            int eIdx = kText.indexOf(endMarker)
+            if (eIdx < 0) eIdx = kText.indexOf(endMarkerInternal)
+
+            if (sIdx > 0 && eIdx > sIdx) {
+                def safeSideMethods = '''private fun showSideChannelsMode(focusCurrentChannelIfSameGroup: Boolean = true) {
+        try {
+            isSideShowingChannels = true
+            isLeftRailVisible = false
+            leftIconRail.visibility = View.GONE
+            categoryListView.visibility = View.GONE
+            channelRecyclerView.visibility = View.VISIBLE
+
+            val snapshot = displayedChannels.toList()
+            if (snapshot.isNotEmpty()) {
+                val activeIdxInGroup = if (focusCurrentChannelIfSameGroup) {
+                    snapshot.indexOfFirst { it.url == currentChannel?.url }
+                } else -1
+                val targetPos = if (activeIdxInGroup >= 0) activeIdxInGroup else 0
+                focusedChannelPos = targetPos
+                channelRvAdapter.submitChannels(snapshot, targetPos)
+                channelRecyclerView.post {
+                    try {
+                        channelLayoutManager.scrollToPositionWithOffset(targetPos, 120)
+                        val vh = channelRecyclerView.findViewHolderForAdapterPosition(targetPos)
+                        if (vh != null) vh.itemView.requestFocus() else channelRecyclerView.requestFocus()
+                    } catch (_: Throwable) {}
+                }
+            } else {
+                focusedChannelPos = 0
+                channelRvAdapter.submitChannels(emptyList(), 0)
+            }
+        } catch (t: Throwable) {
+            Toast.makeText(this, "Ошибка списка: ${t.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun showSideGroupsMode() {
+        try {
+            isSideShowingChannels = false
+            isLeftRailVisible = false
+            leftIconRail.visibility = View.GONE
+            focusedCategoryPos = currentCategoryIndex.coerceIn(0, (categoryAdapter.count - 1).coerceAtLeast(0))
+            updateCategoriesList()
+            channelRecyclerView.visibility = View.GONE
+            categoryListView.visibility = View.VISIBLE
+            categoryListView.post {
+                try {
+                    categoryListView.setSelection(focusedCategoryPos)
+                    categoryListView.requestFocus()
+                    refreshSimpleListHighlightInPlace(categoryListView, focusedCategoryPos)
+                } catch (_: Throwable) {}
+            }
+        } catch (t: Throwable) {
+            Toast.makeText(this, "Ошибка групп: ${t.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    '''
+                kText = kText.substring(0, sIdx) + safeSideMethods + kText.substring(eIdx)
+            }
+
             mainFile.write(kText, "UTF-8")
         }
     }
 }
 
-preBuild.dependsOn("autoFixLeftMenuHang")
+preBuild.dependsOn("autoFixSideMenuCrash")
