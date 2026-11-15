@@ -60,3 +60,41 @@ dependencies {
     implementation "androidx.media3:media3-exoplayer-hls:1.2.1"
     implementation "androidx.media3:media3-ui:1.2.1"
 }
+tasks.register("generateTvBannerAndLargeIcon") {
+    doLast {
+        def drawableDir = file("src/main/res/drawable")
+        drawableDir.mkdirs()
+        def bannerFile = new File(drawableDir, "tv_banner.xml")
+        bannerFile.write('''<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#0B1026" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#142850" android:pathData="M0,32 C110,10 210,35 320,8 L320,180 L0,180 Z" />
+    <path android:fillColor="#006978" android:pathData="M0,70 C115,48 215,72 320,42 L320,180 L0,180 Z" />
+    <path android:fillColor="#00A896" android:pathData="M0,112 C120,88 220,108 320,82 L320,180 L0,180 Z" />
+    <path android:fillColor="#4A148C" android:pathData="M0,148 C125,125 225,142 320,118 L320,180 L0,180 Z" />
+    <path android:fillColor="#AD1457" android:pathData="M0,172 C130,155 230,166 320,148 L320,180 L0,180 Z" />
+    <path android:fillColor="#090C15" android:pathData="M48,90 C95,18 225,18 272,90 C225,162 95,162 48,90 Z" />
+    <path android:fillColor="#E8F1F5" android:pathData="M64,90 C105,30 215,30 256,90 C215,150 105,150 64,90 Z" />
+    <path android:fillColor="#00E5FF" android:pathData="M160,90m-46,0a46,46 0,1 1,92 0a46,46 0,1 1,-92 0" />
+    <path android:fillColor="#00BFA5" android:pathData="M160,90m-38,0a38,38 0,1 1,76 0a38,38 0,1 1,-76 0" />
+    <path android:fillColor="#FFD54F" android:pathData="M160,44 A46,46 0 0,1 206,90 L160,90 Z" />
+    <path android:fillColor="#7C4DFF" android:pathData="M160,136 A46,46 0 0,1 114,90 L160,90 Z" />
+    <path android:fillColor="#05070B" android:pathData="M160,90m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M172,78m-6.5,0a6.5,6.5 0,1 1,13 0a6.5,6.5 0,1 1,-13 0" />
+</vector>''', "UTF-8")
+
+        def manifestFile = file("src/main/AndroidManifest.xml")
+        if (manifestFile.exists()) {
+            def text = manifestFile.getText("UTF-8")
+            text = text.replace('android:icon="@mipmap/ic_launcher"', 'android:banner="@drawable/tv_banner"\n        android:icon="@drawable/tv_banner"')
+            text = text.replace('android:roundIcon="@mipmap/ic_launcher"', 'android:roundIcon="@drawable/tv_banner"')
+            manifestFile.write(text, "UTF-8")
+        }
+    }
+}
+
+preBuild.dependsOn("generateTvBannerAndLargeIcon")
