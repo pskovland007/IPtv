@@ -17,8 +17,6 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.text.TextUtils
-import android.transition.ChangeBounds
-import android.transition.TransitionManager
 import android.util.TypedValue
 import android.view.GestureDetector
 import android.view.Gravity
@@ -203,12 +201,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fullEpgListView: ListView
 
     private lateinit var subModalTitle: TextView
+    private var subModalBaseTitleText: String = ""
     private lateinit var subModalTopButtons: LinearLayout
     private lateinit var subModalList: ListView
     private lateinit var subModalInputContainer: LinearLayout
     private lateinit var subModalAdapter: ArrayAdapter<String>
     private val subModalItems = mutableListOf<String>()
     private var animateNextSubModalChange = false
+    private var subModalHighlightedPos = 0
 
     private lateinit var currentChannelBanner: TextView
 
@@ -247,7 +247,7 @@ class MainActivity : AppCompatActivity() {
     private var pendingDebouncedChannel: Channel? = null
     private var lastSavedChannelUrl: String = ""
     private var activePlaylistIndex = 0
-    private var bufferLevel = 2
+    private var bufferLevel = 1
     private var decoderMode = 1
     private var themeIndex = 0
     private var screenAspectMode = 0
@@ -319,9 +319,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun uiScaleFactor(): Float = when (uiScaleStep) {
         0 -> 1.0f
-        1 -> 1.18f
-        else -> 1.36f
+        1 -> 1.16f
+        else -> 1.30f
     }
+
+    private fun exactModalRowHeightPx(): Int = (52f * uiScaleFactor()).toInt()
 
     private fun targetPanelAlphaInt(): Int = when (uiAlphaStep) {
         0 -> 244
@@ -336,22 +338,32 @@ class MainActivity : AppCompatActivity() {
         val endA = targetPanelAlphaInt()
         alphaAnimator?.cancel()
         alphaAnimator = ValueAnimator.ofInt(startA, endA).apply {
-            duration = 260L
+            duration = 250L
             addUpdateListener { anim ->
                 currentAnimatedAlphaInt = anim.animatedValue as Int
-                sidePanel.setBackgroundDrawable(makeThemedPanelBg())
-                leftIconRail.setBackgroundDrawable(makeThemedSubBg())
-                infoPanel.setBackgroundDrawable(makeThemedPanelBg())
-                centerOsdPanel.setBackgroundDrawable(makeThemedPanelBg())
-                settingsTileOverlay.setBackgroundDrawable(makeThemedPanelBg())
-                subModalOverlay.setBackgroundDrawable(makeThemedPanelBg())
-                fullEpgOverlay.setBackgroundDrawable(makeThemedPanelBg())
-                categoryListView.setBackgroundDrawable(makeThemedSubBg())
-                channelRecyclerView.setBackgroundDrawable(makeThemedSubBg())
-                subModalList.setBackgroundDrawable(makeThemedSubBg())
-                fullEpgListView.setBackgroundDrawable(makeThemedSubBg())
+                refreshPanelBackgroundsOnly()
             }
             start()
+        }
+    }
+
+    private fun refreshPanelBackgroundsOnly() {
+        if (sidePanel.visibility == View.VISIBLE) {
+            sidePanel.setBackgroundDrawable(makeThemedPanelBg())
+            leftIconRail.setBackgroundDrawable(makeThemedSubBg())
+            categoryListView.setBackgroundDrawable(makeThemedSubBg())
+            channelRecyclerView.setBackgroundDrawable(makeThemedSubBg())
+        }
+        if (infoPanel.visibility == View.VISIBLE) infoPanel.setBackgroundDrawable(makeThemedPanelBg())
+        if (centerOsdPanel.visibility == View.VISIBLE) centerOsdPanel.setBackgroundDrawable(makeThemedPanelBg())
+        if (settingsTileOverlay.visibility == View.VISIBLE) settingsTileOverlay.setBackgroundDrawable(makeThemedPanelBg())
+        if (subModalOverlay.visibility == View.VISIBLE) {
+            subModalOverlay.setBackgroundDrawable(makeThemedPanelBg())
+            subModalList.setBackgroundDrawable(makeThemedSubBg())
+        }
+        if (fullEpgOverlay.visibility == View.VISIBLE) {
+            fullEpgOverlay.setBackgroundDrawable(makeThemedPanelBg())
+            fullEpgListView.setBackgroundDrawable(makeThemedSubBg())
         }
     }
 
@@ -373,16 +385,10 @@ class MainActivity : AppCompatActivity() {
         "https://cdn.jsdelivr.net/gh/Dimonovich/IPTV@master/IPTV.m3u",
         "https://iptv-org.github.io/iptv/languages/rus.m3u",
         "https://iptv-org.github.io/iptv/countries/ru.m3u",
-        "https://iptv-org.github.io/iptv/countries/by.m3u",
-        "https://iptv-org.github.io/iptv/countries/kz.m3u",
         "https://iptv-org.github.io/iptv/categories/kids.m3u",
         "https://iptv-org.github.io/iptv/categories/animation.m3u",
-        "https://iptv-org.github.io/iptv/categories/family.m3u",
         "https://iptv-org.github.io/iptv/categories/music.m3u",
         "https://iptv-org.github.io/iptv/categories/movies.m3u",
-        "https://iptv-org.github.io/iptv/categories/series.m3u",
-        "https://iptv-org.github.io/iptv/categories/comedy.m3u",
-        "https://iptv-org.github.io/iptv/categories/sports.m3u",
         "https://iptv-org.github.io/iptv/categories/science.m3u",
         "https://iptv-org.github.io/iptv/categories/documentary.m3u",
         "https://iptv-org.github.io/iptv/categories/entertainment.m3u"
@@ -410,7 +416,7 @@ class MainActivity : AppCompatActivity() {
     private fun collapseAnalyzerToTopBar() {
         subModalOverlay.animate()
             .translationY(-480f).scaleX(0.35f).scaleY(0.25f).alpha(0f)
-            .setDuration(360L)
+            .setDuration(340L)
             .withEndAction {
                 subModalOverlay.translationY = 0f; subModalOverlay.scaleX = 1f; subModalOverlay.scaleY = 1f; subModalOverlay.alpha = 1f
                 closeAllMenus()
@@ -418,50 +424,70 @@ class MainActivity : AppCompatActivity() {
             }.start()
     }
 
-    // Пункт 9: Плавная трансформация экрана предпросмотра ТВ при открытии и закрытии списка каналов
+    // Пункт 3: Плавное уменьшение экрана ТВ через GPU-матрицу (scaleX/scaleY/translationX) без ресайза SurfaceView и без рывков эфира!
     private var isPlayerCurrentlyMini = false
 
     private fun setPlayerMiniPreviewMode(mini: Boolean) {
         if (isPlayerCurrentlyMini == mini) return
         isPlayerCurrentlyMini = mini
         val dm = resources.displayMetrics
-        try {
-            val transition = ChangeBounds().apply {
-                duration = 310L
-                interpolator = DecelerateInterpolator(1.3f)
-            }
-            TransitionManager.beginDelayedTransition(rootFrame, transition)
-        } catch (_: Exception) {}
+        playerContainerFrame.animate().cancel()
 
         if (mini) {
             val curMenu = menuHistory.lastOrNull()
-            val sideWidthPx = 700.coerceAtMost((dm.widthPixels * 0.48f).toInt())
+            val sideWidthPx = 680.coerceAtMost((dm.widthPixels * 0.46f).toInt())
             val leftMenuEdgePx = if (curMenu == "SIDE") {
-                sideWidthPx + leftSafeMarginPx() + 12
+                sideWidthPx + leftSafeMarginPx() + 16
             } else {
-                (dm.widthPixels * 0.52f).toInt()
+                (dm.widthPixels * 0.50f).toInt()
             }
-            val availW = (dm.widthPixels - leftMenuEdgePx - 28).coerceAtLeast(360)
-            val availH = (availW * 9f / 16f).toInt().coerceAtMost((dm.heightPixels * 0.82f).toInt())
+            val availW = (dm.widthPixels - leftMenuEdgePx - 24).coerceAtLeast(360)
+            val targetScale = (availW.toFloat() / dm.widthPixels.toFloat()).coerceIn(0.38f, 0.52f)
+            val targetCenterX = leftMenuEdgePx + availW / 2f
+            val shiftX = targetCenterX - dm.widthPixels / 2f
 
-            playerContainerFrame.layoutParams = FrameLayout.LayoutParams(availW, availH, Gravity.CENTER_VERTICAL or Gravity.END).apply {
-                setMargins(0, 0, 14, 0)
-            }
-            playerContainerFrame.setPadding(4, 4, 4, 4)
-            playerContainerFrame.setBackgroundDrawable(GradientDrawable().apply {
-                setColor(Color.BLACK)
-                cornerRadius = 18f
-                setStroke(2, ambilightColor(145))
-            })
+            playerContainerFrame.animate()
+                .scaleX(targetScale)
+                .scaleY(targetScale)
+                .translationX(shiftX)
+                .translationY(0f)
+                .setDuration(260L)
+                .setInterpolator(DecelerateInterpolator(1.4f))
+                .start()
         } else {
-            playerContainerFrame.layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                Gravity.CENTER
-            )
-            playerContainerFrame.setPadding(0, 0, 0, 0)
-            playerContainerFrame.setBackgroundDrawable(null)
+            playerContainerFrame.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .translationX(0f)
+                .translationY(0f)
+                .setDuration(240L)
+                .setInterpolator(DecelerateInterpolator(1.3f))
+                .start()
         }
+    }
+
+    // Пункт 1: Подгонка высоты бокового списка каналов и групп строго под целое число строк
+    private fun fitSideListsToWholeRows() {
+        val dm = resources.displayMetrics
+        val availH = dm.heightPixels - 72
+        val chRowH = if (::channelRvAdapter.isInitialized) channelRvAdapter.getExactRowHeightPx() else (54f * uiScaleFactor()).toInt()
+        val exactChRows = (availH / chRowH).coerceAtLeast(5)
+        val exactChHeight = exactChRows * chRowH + 16
+
+        channelRecyclerView.layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            exactChHeight,
+            Gravity.CENTER_VERTICAL
+        )
+
+        val catRowH = exactModalRowHeightPx()
+        val exactCatRows = (availH / catRowH).coerceAtLeast(5)
+        val exactCatHeight = exactCatRows * catRowH + 16
+        categoryListView.layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            exactCatHeight,
+            Gravity.CENTER_VERTICAL
+        )
     }
 
     private fun adjustInfoPanelMarginForDualStream() {
@@ -472,7 +498,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun sampleVideoFrameColorIfPossible() {
-        if (ambilightMode != 3 || isAnalyzerRunning || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        if (ambilightMode != 3 || isAnalyzerRunning || menuHistory.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
         try {
             val sv = playerView.videoSurfaceView as? SurfaceView ?: return
             if (!sv.holder.surface.isValid) return
@@ -549,23 +575,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Пункт 9: Плавное и мягкое появление всех меню без резких скачков
-    private fun animateMenuAppear(view: View, fromX: Float = 0f, fromY: Float = 26f) {
+    private fun animateMenuAppear(view: View, fromX: Float = 0f, fromY: Float = 24f) {
         view.animate().cancel()
         view.visibility = View.VISIBLE
         view.alpha = 0f
-        view.translationX = fromX * 0.65f
-        view.translationY = fromY * 0.65f
-        view.scaleX = 0.95f
-        view.scaleY = 0.95f
+        view.translationX = fromX * 0.6f
+        view.translationY = fromY * 0.6f
+        view.scaleX = 0.96f
+        view.scaleY = 0.96f
         view.animate()
             .alpha(1f)
             .translationX(0f)
             .translationY(0f)
             .scaleX(1f)
             .scaleY(1f)
-            .setDuration(270L)
-            .setInterpolator(DecelerateInterpolator(1.5f))
+            .setDuration(240L)
+            .setInterpolator(DecelerateInterpolator(1.4f))
             .start()
     }
 
@@ -614,7 +639,6 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
-    // Пункт 1: Сдвиг пикселей (Pixel Orbiter) для видео + защита плазмы для часов и антенны сигнала (±10px X, ±6px Y)
     private fun stepPixelOrbiter() {
         if (!pixelOrbiterEnabled) {
             playerView.translationX = 0f; playerView.translationY = 0f
@@ -643,11 +667,10 @@ class MainActivity : AppCompatActivity() {
         signalContainer.animate().translationX(-hx).translationY(hy).setDuration(900L).start()
     }
 
-    // Пункт 7 и Пункт 3: Выключение с эффектом кинескопа и полным закрытием процесса без дублей в памяти
     private fun powerOffAppWithCrtEffect() {
         closeAllMenus()
-        try { player?.pause() } catch (_: Exception) {}
-        try { dualPipPlayer?.pause() } catch (_: Exception) {}
+        try { player?.stop() } catch (_: Exception) {}
+        try { dualPipPlayer?.stop() } catch (_: Exception) {}
         crtTurnOffView.playCrtAnimation {
             try { player?.release(); player = null } catch (_: Exception) {}
             try { dualPipPlayer?.release(); dualPipPlayer = null } catch (_: Exception) {}
@@ -677,10 +700,12 @@ class MainActivity : AppCompatActivity() {
         val leftMargin = leftSafeMarginPx()
 
         sidePanel.layoutParams = FrameLayout.LayoutParams(
-            700.coerceAtMost((dm.widthPixels * 0.48f).toInt()),
+            680.coerceAtMost((dm.widthPixels * 0.46f).toInt()),
             FrameLayout.LayoutParams.MATCH_PARENT,
             Gravity.START
         ).apply { setMargins(leftMargin, 16, 0, 16) }
+
+        fitSideListsToWholeRows()
 
         clockTextView.layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -710,7 +735,7 @@ class MainActivity : AppCompatActivity() {
         osdEpgNextAndDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17.5f * scale)
 
         subModalTitle.setTextColor(t.accentColor); subModalTitle.typeface = t.boldFont
-        subModalTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f * scale)
+        subModalTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18.5f * scale)
         fullEpgTitle.setTextColor(t.accentColor); fullEpgTitle.typeface = t.boldFont
         fullEpgTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f * scale)
         clockTextView.typeface = t.boldFont
@@ -827,22 +852,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Пункт 8: Плавное затухание и уменьшение крайних иконок карусели у границ окна
+    // Пункт 5: Мягкая прозрачность крайних иконок карусели без артефактов шейдера FadingEdge
     private fun updateCarouselEdgeTransforms() {
         val svW = carouselScrollView.width
         if (svW <= 0) return
         val scrollX = carouselScrollView.scrollX
-        val viewCenter = scrollX + svW / 2f
-        val maxDist = svW * 0.48f
+        val leftVisibleEdge = scrollX.toFloat()
+        val rightVisibleEdge = (scrollX + svW).toFloat()
+        val fadeZone = 175f
 
         for (cell in carouselCells) {
             val cellCenter = (cell.left + cell.right) / 2f
-            val dist = abs(cellCenter - viewCenter)
-            val edgeFactor = (1f - (dist / maxDist).coerceIn(0f, 1f))
             if (cell.hasFocus()) {
                 cell.alpha = 1.0f
             } else {
-                cell.alpha = (0.28f + 0.62f * edgeFactor).coerceIn(0.28f, 0.90f)
+                val distFromLeft = cellCenter - leftVisibleEdge
+                val distFromRight = rightVisibleEdge - cellCenter
+                val minEdgeDist = minOf(distFromLeft, distFromRight)
+                val factor = (minEdgeDist / fadeZone).coerceIn(0f, 1f)
+                cell.alpha = (0.30f + 0.58f * factor).coerceIn(0.30f, 0.88f)
             }
         }
     }
@@ -949,10 +977,10 @@ class MainActivity : AppCompatActivity() {
         rootFrame.addView(signalContainer)
 
         sidePanel = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(700, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START).apply { setMargins(leftSafeMarginPx(), 16, 0, 16) }
-            setPadding(20, 20, 20, 20)
+            layoutParams = FrameLayout.LayoutParams(680, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START).apply { setMargins(leftSafeMarginPx(), 16, 0, 16) }
+            setPadding(18, 16, 18, 16)
         }
 
         allGridTiles.clear(); allGridCaptions.clear()
@@ -986,9 +1014,11 @@ class MainActivity : AppCompatActivity() {
         categoryListView = ListView(this).apply {
             choiceMode = ListView.CHOICE_MODE_NONE; divider = null; dividerHeight = 0
             overScrollMode = View.OVER_SCROLL_NEVER; isScrollingCacheEnabled = false
-            selector = ColorDrawable(Color.TRANSPARENT); isSmoothScrollbarEnabled = true
-            setBackgroundDrawable(makeThemedSubBg()); setPadding(10, 8, 10, 8); visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            isVerticalScrollBarEnabled = true
+            isScrollbarFadingEnabled = false
+            selector = ColorDrawable(Color.TRANSPARENT); isSmoothScrollbarEnabled = false
+            setBackgroundDrawable(makeThemedSubBg()); setPadding(8, 8, 8, 8); visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER_VERTICAL)
         }
 
         channelLayoutManager = LinearLayoutManager(this)
@@ -1025,12 +1055,14 @@ class MainActivity : AppCompatActivity() {
             layoutManager = channelLayoutManager
             adapter = channelRvAdapter
             itemAnimator = null
+            isVerticalScrollBarEnabled = true
+            isScrollbarFadingEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             setBackgroundDrawable(makeThemedSubBg())
-            setPadding(10, 8, 10, 8)
-            clipToPadding = false
+            setPadding(8, 8, 8, 8)
+            clipToPadding = true
             visibility = View.VISIBLE
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER_VERTICAL)
         }
 
         singleColumnFrame.addView(categoryListView)
@@ -1150,6 +1182,7 @@ class MainActivity : AppCompatActivity() {
 
         fullEpgListView = ListView(this).apply {
             choiceMode = ListView.CHOICE_MODE_NONE; divider = null; dividerHeight = 0; overScrollMode = View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = true; isScrollbarFadingEnabled = false
             selector = ColorDrawable(Color.TRANSPARENT); setBackgroundDrawable(makeThemedSubBg())
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
         }
@@ -1158,13 +1191,12 @@ class MainActivity : AppCompatActivity() {
 
         settingsTileOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE; setPadding(34, 30, 34, 30)
+            setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE; setPadding(28, 28, 28, 28)
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         }
 
         data class GridTileSpec(val iconType: String, val baseHex: String, val accentHex: String, val shortCaption: String, val action: () -> Unit)
 
-        // Пункт 6: Последняя плитка переименована из «Вид» в «Общие»
         val gridSpecs = listOf(
             GridTileSpec("PLAYLISTS", "#1B8A6B", "#FFB300", "Плейлисты") { navigateToMenu("PLAYLISTS") },
             GridTileSpec("EDITOR", "#2E5B9A", "#00E676", "Редактор") { navigateToMenu("CHANNEL_EDITOR_GROUPS") },
@@ -1236,15 +1268,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Пункт 8: Карусель с плотной посадкой, растворением по краям и половинками крайних иконок
+        // Пункт 5: Плавная Карусель без FadingEdge-артефактов, с широкими подписями и умной центровкой активной кнопки
         carouselScrollView = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false; visibility = View.GONE
-            isHorizontalFadingEdgeEnabled = true
-            setFadingEdgeLength(145)
+            isHorizontalFadingEdgeEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            clipChildren = false; clipToPadding = false
-            setPadding(110, 42, 110, 42)
-            layoutParams = LinearLayout.LayoutParams(1020, ViewGroup.LayoutParams.WRAP_CONTENT)
+            clipChildren = true; clipToPadding = false
+            setPadding(44, 46, 44, 46)
+            layoutParams = LinearLayout.LayoutParams(1040, ViewGroup.LayoutParams.WRAP_CONTENT)
             viewTreeObserver.addOnScrollChangedListener { updateCarouselEdgeTransforms() }
         }
         carouselRowLayout = LinearLayout(this).apply {
@@ -1257,22 +1288,23 @@ class MainActivity : AppCompatActivity() {
             val spec = gridSpecs[specIdx]
             val cTile = ThemedTileView(this, spec.iconType, spec.baseHex, spec.accentHex).apply {
                 themeStyleId = currentTheme().id
-                layoutParams = LinearLayout.LayoutParams(192, 192)
+                layoutParams = LinearLayout.LayoutParams(184, 184)
             }
             allGridTiles.add(cTile)
             val cCaption = TextView(this).apply {
-                text = spec.shortCaption; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                text = spec.shortCaption; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f)
                 typeface = themeBoldFont(); gravity = Gravity.CENTER; isSingleLine = true
-                setPadding(0, 8, 0, 0)
-                layoutParams = LinearLayout.LayoutParams(204, ViewGroup.LayoutParams.WRAP_CONTENT)
+                includeFontPadding = false
+                setPadding(4, 10, 4, 0)
+                layoutParams = LinearLayout.LayoutParams(224, ViewGroup.LayoutParams.WRAP_CONTENT)
             }
             allGridCaptions.add(cCaption)
             val cBox = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
                 isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-                id = 6000 + specIdx; scaleX = 0.88f; scaleY = 0.88f; alpha = 0.72f
-                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(10, 18, 10, 18)
+                id = 6000 + specIdx; scaleX = 0.88f; scaleY = 0.88f; alpha = 0.80f
+                layoutParams = LinearLayout.LayoutParams(224, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(6, 16, 6, 16)
                 }
                 addView(cTile); addView(cCaption)
                 setOnFocusChangeListener { v, hasFocus ->
@@ -1280,16 +1312,18 @@ class MainActivity : AppCompatActivity() {
                     if (hasFocus) {
                         resetMenuInactivityTimer()
                         cCaption.setTextColor(currentTheme().accentColor)
-                        v.animate().scaleX(1.24f).scaleY(1.24f).alpha(1.0f).translationY(-14f)
-                            .setDuration(240L).setInterpolator(DecelerateInterpolator(1.4f)).start()
-                        val targetScrollX = (v.left + v.right) / 2 - carouselScrollView.width / 2
-                        ObjectAnimator_smoothScrollCarousel(targetScrollX.coerceAtLeast(0))
+                        v.animate().scaleX(1.22f).scaleY(1.22f).alpha(1.0f).translationY(-10f)
+                            .setDuration(220L).setInterpolator(DecelerateInterpolator(1.3f)).start()
+                        val maxScroll = (carouselRowLayout.width + carouselScrollView.paddingLeft + carouselScrollView.paddingRight - carouselScrollView.width).coerceAtLeast(0)
+                        val desiredCenterScroll = ((v.left + v.right) / 2 + carouselScrollView.paddingLeft) - (carouselScrollView.width / 2)
+                        val clampedScroll = desiredCenterScroll.coerceIn(0, maxScroll)
+                        smoothScrollCarouselTo(clampedScroll)
                     } else {
                         cCaption.setTextColor(currentTheme().textPrimaryColor)
                         v.animate().scaleX(0.88f).scaleY(0.88f).translationY(0f)
-                            .setDuration(210L).setInterpolator(DecelerateInterpolator(1.2f)).start()
+                            .setDuration(190L).setInterpolator(DecelerateInterpolator(1.2f)).start()
                     }
-                    carouselScrollView.postDelayed({ updateCarouselEdgeTransforms() }, 60L)
+                    carouselScrollView.postDelayed({ updateCarouselEdgeTransforms() }, 40L)
                 }
                 setOnClickListener { resetMenuInactivityTimer(); spec.action() }
             }
@@ -1307,12 +1341,12 @@ class MainActivity : AppCompatActivity() {
 
         subModalOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
-            setPadding(28, 20, 28, 20)
-            layoutParams = FrameLayout.LayoutParams(920, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+            setPadding(26, 18, 26, 18)
+            layoutParams = FrameLayout.LayoutParams(940, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         }
         subModalTitle = TextView(this).apply {
-            setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
-            typeface = themeBoldFont(); setPadding(0, 0, 0, 10)
+            setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 18.5f)
+            typeface = themeBoldFont(); setPadding(4, 0, 4, 10)
         }
         subModalOverlay.addView(subModalTitle)
 
@@ -1325,16 +1359,22 @@ class MainActivity : AppCompatActivity() {
         subModalInputContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         subModalOverlay.addView(subModalInputContainer)
 
+        // Пункт 2: Включён постоянный видимый ползунок прокрутки справа и точная высота целых строк
         subModalList = ListView(this).apply {
             choiceMode = ListView.CHOICE_MODE_NONE; divider = null; dividerHeight = 0; overScrollMode = View.OVER_SCROLL_NEVER
-            selector = ColorDrawable(Color.TRANSPARENT); setBackgroundDrawable(makeThemedSubBg()); setPadding(8, 8, 8, 8)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 450)
+            isVerticalScrollBarEnabled = true
+            isScrollbarFadingEnabled = false
+            isSmoothScrollbarEnabled = false
+            selector = ColorDrawable(Color.TRANSPARENT); setBackgroundDrawable(makeThemedSubBg()); setPadding(8, 8, 12, 8)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 432)
         }
-        subModalAdapter = createRoundedSelectorAdapter(subModalItems, 16f, true) { pos -> subModalList.selectedItemPosition == pos }
+        subModalAdapter = createRoundedSelectorAdapter(subModalItems, 15.5f, true, fixedRowHeight = true) { pos -> subModalHighlightedPos == pos }
         subModalList.adapter = subModalAdapter
         subModalList.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                subModalHighlightedPos = position
                 resetMenuInactivityTimer()
+                updateSubModalTitleWithCounter()
                 refreshSimpleListHighlightInPlace(subModalList, position)
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -1386,7 +1426,7 @@ class MainActivity : AppCompatActivity() {
         applyScreenAspectMode()
         applyBrightnessLevel()
 
-        categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 17f, true) { pos -> !isSideShowingChannels && !isLeftRailVisible && pos == focusedCategoryPos }
+        categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 16f, true, fixedRowHeight = true) { pos -> !isSideShowingChannels && !isLeftRailVisible && pos == focusedCategoryPos }
         categoryListView.adapter = categoryAdapter
 
         categoryListView.setOnItemClickListener { _, _, position, _ ->
@@ -1431,9 +1471,24 @@ class MainActivity : AppCompatActivity() {
         loadEpgOncePerDayInBackground(forceRefresh = false)
     }
 
+    private fun setSubModalHeaderTitle(baseTitle: String) {
+        subModalBaseTitleText = baseTitle
+        updateSubModalTitleWithCounter()
+    }
+
+    private fun updateSubModalTitleWithCounter() {
+        val total = subModalItems.size
+        if (total > 1 && subModalList.visibility == View.VISIBLE) {
+            val cur = (subModalHighlightedPos + 1).coerceIn(1, total)
+            subModalTitle.text = colorizeStatusText("$subModalBaseTitleText   •   [$cur / $total]")
+        } else {
+            subModalTitle.text = colorizeStatusText(subModalBaseTitleText)
+        }
+    }
+
     private var carouselScrollAnimator: ValueAnimator? = null
 
-    private fun ObjectAnimator_smoothScrollCarousel(targetX: Int) {
+    private fun smoothScrollCarouselTo(targetX: Int) {
         carouselScrollAnimator?.cancel()
         val startX = carouselScrollView.scrollX
         if (startX == targetX) {
@@ -1441,8 +1496,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         carouselScrollAnimator = ValueAnimator.ofInt(startX, targetX).apply {
-            duration = 250L
-            interpolator = DecelerateInterpolator(1.3f)
+            duration = 210L
+            interpolator = DecelerateInterpolator(1.25f)
             addUpdateListener { anim ->
                 carouselScrollView.scrollTo(anim.animatedValue as Int, 0)
                 updateCarouselEdgeTransforms()
@@ -1455,7 +1510,7 @@ class MainActivity : AppCompatActivity() {
         isLeftRailVisible = true
         leftIconRail.visibility = View.VISIBLE
         leftIconRail.alpha = 0f; leftIconRail.translationX = -36f
-        leftIconRail.animate().alpha(1f).translationX(0f).setDuration(240L).start()
+        leftIconRail.animate().alpha(1f).translationX(0f).setDuration(220L).start()
         refreshSimpleListHighlightInPlace(categoryListView, -1)
         railTilePlaylists.requestFocus()
     }
@@ -1476,11 +1531,11 @@ class MainActivity : AppCompatActivity() {
             val itemPos = firstVis + i
             val isHighlighted = (itemPos == activeAdapterPos)
             child.typeface = if (isHighlighted) t.boldFont else t.normalFont
-            child.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f * scale)
+            child.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f * scale)
             child.forceMarqueeActive = isHighlighted
             if (isHighlighted) {
                 child.setTextColor(t.textOnAccent)
-                child.setBackgroundDrawable(GradientDrawable().apply { setColor(t.accentColor); cornerRadius = 20f; setStroke(2, Color.WHITE) })
+                child.setBackgroundDrawable(GradientDrawable().apply { setColor(t.accentColor); cornerRadius = 16f * scale; setStroke(2, Color.WHITE) })
             } else {
                 child.setTextColor(t.textPrimaryColor)
                 child.setBackgroundDrawable(null)
@@ -1490,24 +1545,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun createRoundedSelectorAdapter(items: MutableList<String>, spSize: Float, singleLineMarquee: Boolean = false, isRowHighlighted: (Int) -> Boolean): ArrayAdapter<String> {
+    private fun createRoundedSelectorAdapter(
+        items: MutableList<String>,
+        spSize: Float,
+        singleLineMarquee: Boolean = false,
+        fixedRowHeight: Boolean = false,
+        isRowHighlighted: (Int) -> Boolean
+    ): ArrayAdapter<String> {
         return object : ArrayAdapter<String>(this@MainActivity, 0, items) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val tv = (convertView as? MarqueeRowTextView) ?: MarqueeRowTextView(this@MainActivity).apply {
-                    layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                }
+                val tv = (convertView as? MarqueeRowTextView) ?: MarqueeRowTextView(this@MainActivity)
                 val t = currentTheme()
                 val scale = uiScaleFactor()
                 val highlighted = isRowHighlighted(position)
                 val rawTxt = getItem(position) ?: ""
+                if (fixedRowHeight) {
+                    val rowH = exactModalRowHeightPx()
+                    tv.layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, rowH)
+                    tv.gravity = Gravity.CENTER_VERTICAL
+                    tv.setPadding(20, 0, 20, 0)
+                } else {
+                    tv.layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    val padV = (10 * scale).toInt()
+                    tv.setPadding(20, padV, 20, padV)
+                }
                 tv.typeface = if (highlighted) t.boldFont else t.normalFont
                 tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, spSize * scale)
-                val padV = (12 * scale).toInt()
-                tv.setPadding(22, padV, 22, padV)
                 if (singleLineMarquee) tv.forceMarqueeActive = highlighted else tv.isSingleLine = false
                 if (highlighted) {
                     tv.setTextColor(t.textOnAccent)
-                    tv.setBackgroundDrawable(GradientDrawable().apply { setColor(t.accentColor); cornerRadius = 20f; setStroke(2, Color.WHITE) })
+                    tv.setBackgroundDrawable(GradientDrawable().apply { setColor(t.accentColor); cornerRadius = 16f * scale; setStroke(2, Color.WHITE) })
                 } else {
                     tv.setTextColor(t.textPrimaryColor)
                     tv.setBackgroundDrawable(null)
@@ -1547,18 +1614,46 @@ class MainActivity : AppCompatActivity() {
         centerCard?.requestFocus()
     }
 
-    private fun updateSubModalListItems(newItems: List<String>, smoothToggle: Boolean = false) {
+    // Пункт 2: Сохранение точной позиции курсора и скролла при изменении любого параметра кнопкой OK
+    private fun updateSubModalListItems(newItems: List<String>, smoothToggle: Boolean = false, preservePositionIndex: Int = -1) {
         val firstVis = subModalList.firstVisiblePosition
-        val topOffset = subModalList.getChildAt(0)?.top ?: 0
-        val selPos = subModalList.selectedItemPosition
+        val topOffset = subModalList.getChildAt(0)?.top ?: 8
+        val targetPos = when {
+            preservePositionIndex in newItems.indices -> preservePositionIndex
+            subModalHighlightedPos in newItems.indices -> subModalHighlightedPos
+            else -> 0
+        }
+        subModalHighlightedPos = targetPos
         animateNextSubModalChange = smoothToggle
         subModalItems.clear()
         subModalItems.addAll(newItems)
+        fitSubModalListToWholeRows(newItems.size)
         subModalAdapter.notifyDataSetChanged()
-        subModalList.post { animateNextSubModalChange = false }
-        if (selPos >= 0 && selPos < newItems.size) {
-            subModalList.setSelectionFromTop(firstVis, topOffset)
+        updateSubModalTitleWithCounter()
+        subModalList.post {
+            animateNextSubModalChange = false
+            if (newItems.isNotEmpty()) {
+                if (smoothToggle) {
+                    subModalList.setSelectionFromTop(firstVis, topOffset)
+                }
+                subModalList.setSelection(targetPos)
+                refreshSimpleListHighlightInPlace(subModalList, targetPos)
+            }
         }
+    }
+
+    // Пункт 2: Высота списка настроек всегда кратна целой строке (никаких разрезанных строк внизу!)
+    private fun fitSubModalListToWholeRows(itemCount: Int) {
+        val dm = resources.displayMetrics
+        val rowH = exactModalRowHeightPx()
+        val maxAvailH = (dm.heightPixels * 0.62f).toInt()
+        val maxWholeRows = (maxAvailH / rowH).coerceIn(5, 10)
+        val visibleRows = itemCount.coerceAtLeast(1).coerceAtMost(maxWholeRows)
+        val exactListH = visibleRows * rowH + 16
+        subModalList.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            exactListH
+        )
     }
 
     private fun buildFirstRunControlPickerView() {
@@ -1713,6 +1808,7 @@ class MainActivity : AppCompatActivity() {
         isLeftRailVisible = false
         leftIconRail.visibility = View.GONE
         categoryListView.visibility = View.GONE
+        fitSideListsToWholeRows()
         channelRecyclerView.visibility = View.VISIBLE
 
         if (displayedChannels.isNotEmpty()) {
@@ -1723,7 +1819,9 @@ class MainActivity : AppCompatActivity() {
 
             focusedChannelPos = targetPos
             channelRvAdapter.submitChannels(displayedChannels.toList(), targetPos)
-            channelLayoutManager.scrollToPositionWithOffset(targetPos, (channelRecyclerView.height / 3).coerceAtLeast(80))
+            val rowH = channelRvAdapter.getExactRowHeightPx()
+            val centerOffset = ((channelRecyclerView.layoutParams.height / 2) - (rowH / 2)).coerceAtLeast(0)
+            channelLayoutManager.scrollToPositionWithOffset(targetPos, centerOffset)
             channelRecyclerView.post {
                 val vh = channelRecyclerView.findViewHolderForAdapterPosition(targetPos)
                 if (vh != null) {
@@ -1744,6 +1842,7 @@ class MainActivity : AppCompatActivity() {
         leftIconRail.visibility = View.GONE
         focusedCategoryPos = currentCategoryIndex
         updateCategoriesList()
+        fitSideListsToWholeRows()
         channelRecyclerView.visibility = View.GONE
         categoryListView.visibility = View.VISIBLE
         categoryListView.setSelection(currentCategoryIndex)
@@ -1818,7 +1917,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun navigateToMenu(menuId: String) {
         lastMenuChangeMs = System.currentTimeMillis()
-        if (menuHistory.lastOrNull() != menuId) menuHistory.add(menuId)
+        if (menuHistory.lastOrNull() != menuId) {
+            menuHistory.add(menuId)
+            subModalHighlightedPos = 0
+        }
         renderMenuById(menuId)
         resetMenuInactivityTimer()
     }
@@ -1839,6 +1941,7 @@ class MainActivity : AppCompatActivity() {
             uiHandler.removeCallbacks(autoHideMenuRunnable)
             hideAllMenuViews()
         } else {
+            subModalHighlightedPos = 0
             renderMenuById(prev)
             resetMenuInactivityTimer()
         }
@@ -1862,20 +1965,16 @@ class MainActivity : AppCompatActivity() {
 
         val dm = resources.displayMetrics
         subModalOverlay.layoutParams = FrameLayout.LayoutParams(
-            (dm.widthPixels * 0.72f).toInt().coerceIn(780, 1280),
+            (dm.widthPixels * 0.76f).toInt().coerceIn(800, 1360),
             FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.CENTER
-        )
-        subModalList.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            (dm.heightPixels * 0.60f).toInt().coerceAtLeast(380)
         )
 
         when (menuId) {
             "SIDE" -> {
                 setPlayerMiniPreviewMode(true)
                 clockTextView.visibility = View.GONE
-                animateMenuAppear(sidePanel, -65f, 0f)
+                animateMenuAppear(sidePanel, -55f, 0f)
                 val cats = activeCategoryList()
                 if (openChannelsDirectlyWithCurrentFocus && currentChannel != null) {
                     openChannelsDirectlyWithCurrentFocus = false
@@ -1891,21 +1990,22 @@ class MainActivity : AppCompatActivity() {
             "INFO" -> {
                 adjustInfoPanelMarginForDualStream()
                 updateStreamInfoText()
-                animateMenuAppear(infoPanel, 50f, 0f)
+                animateMenuAppear(infoPanel, 45f, 0f)
             }
-            "OSD" -> { updateCenterOsdContent(); animateMenuAppear(centerOsdPanel, 0f, 40f); btnOsdTop.requestFocus() }
+            "OSD" -> { updateCenterOsdContent(); animateMenuAppear(centerOsdPanel, 0f, 35f); btnOsdTop.requestFocus() }
             "BRIGHTNESS_MENU" -> openBrightnessSubModal()
             "POWER_AND_SLEEP_MENU" -> openPowerAndSleepSubModal()
             "CHANNEL_ACTIONS" -> openChannelActionsSubModal()
             "MOVE_CHANNEL_CATEGORY" -> openMoveChannelCategorySubModal()
             "FULL_EPG" -> openFullScreenChannelEpg()
             "SETTINGS" -> {
-                animateMenuAppear(settingsTileOverlay, 0f, 28f)
+                animateMenuAppear(settingsTileOverlay, 0f, 24f)
                 if (currentTheme().isCarouselMenu) {
                     gridContainerLayout.visibility = View.GONE
                     carouselScrollView.visibility = View.VISIBLE
+                    carouselScrollView.scrollTo(0, 0)
                     carouselCells.firstOrNull()?.requestFocus()
-                    carouselScrollView.postDelayed({ updateCarouselEdgeTransforms() }, 50L)
+                    carouselScrollView.postDelayed({ updateCarouselEdgeTransforms() }, 40L)
                 } else {
                     carouselScrollView.visibility = View.GONE
                     gridContainerLayout.visibility = View.VISIBLE
@@ -1959,16 +2059,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Аудит Пункт 6: Полноценный HttpDataSource с заголовками Referer/Origin для второго экрана PiP
     private fun startDualStreamChannel(ch: Channel) {
-        try { dualPipPlayer?.release() } catch (_: Exception) {}
+        try { dualPipPlayer?.stop(); dualPipPlayer?.release() } catch (_: Exception) {}
         dualStreamChannel = ch
         isDualStreamActive = true
-        val dp = ExoPlayer.Builder(this).build().apply {
-            volume = 0f
-            setMediaItem(MediaItem.fromUri(ch.url.substringBefore("#")))
-            prepare()
-            play()
-        }
+        val cleanUrl = ch.url.substringBefore("#")
+        val pipDsFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
+            .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(cleanUrl))
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(8000)
+            .setReadTimeoutMs(8000)
+        val pipMediaSourceFactory = DefaultMediaSourceFactory(this).setDataSourceFactory(pipDsFactory)
+        val dp = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(pipMediaSourceFactory)
+            .build().apply {
+                volume = 0f
+                setMediaItem(MediaItem.fromUri(cleanUrl))
+                prepare()
+                play()
+            }
         dualPlayerView.player = dp
         dualPipPlayer = dp
         dualStreamLabel.text = "2-й: ${ch.name}"
@@ -1984,9 +2095,8 @@ class MainActivity : AppCompatActivity() {
         startDualStreamChannel(mainCh)
     }
 
-    // Пункт 7: При выборе закрытия приложения запускается анимация выключения кинескопного телевизора
     private fun openPowerAndSleepSubModal() {
-        subModalTitle.text = "Выключение и Таймер сна"
+        setSubModalHeaderTitle("Выключение и Таймер сна")
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.VISIBLE
 
@@ -2034,7 +2144,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openBrightnessSubModal() {
-        subModalTitle.text = "Уровень яркости экрана"
+        setSubModalHeaderTitle("Уровень яркости экрана")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val levels = listOf(100, 75, 50, 25)
         val descriptions = listOf(
@@ -2043,7 +2153,8 @@ class MainActivity : AppCompatActivity() {
             "Яркость экрана: 50%     •   Ночной режим",
             "Яркость экрана: 25%     •   Глубокая ночь (защита плазмы)"
         )
-        updateSubModalListItems(levels.mapIndexed { idx, lvl -> (if (brightnessPercent == lvl) "[+]   " else "[-]   ") + descriptions[idx] })
+        val curIdx = levels.indexOf(brightnessPercent).coerceAtLeast(0)
+        updateSubModalListItems(levels.mapIndexed { idx, lvl -> (if (brightnessPercent == lvl) "[+]   " else "[-]   ") + descriptions[idx] }, preservePositionIndex = curIdx)
         subModalList.setOnItemClickListener { _, _, which, _ ->
             if (which in levels.indices) {
                 brightnessPercent = levels[which]; applyBrightnessLevel(); saveState(); navigateBackInMenu()
@@ -2054,7 +2165,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun openChannelActionsSubModal() {
         val ch = currentChannel ?: return
-        subModalTitle.text = "Управление каналом: ${ch.name}"
+        setSubModalHeaderTitle("Управление каналом: ${ch.name}")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val items = listOf(
             "[-]   Исключить этот канал из списка   •   Возврат через Редактор",
@@ -2082,9 +2193,10 @@ class MainActivity : AppCompatActivity() {
         val ch = currentChannel ?: return
         val targetCats = activeCategoryList().drop(2)
         val curCat = effectiveCategory(ch)
-        subModalTitle.text = "Переместить «${ch.name}» в категорию:"
+        setSubModalHeaderTitle("Переместить «${ch.name}» в категорию")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        updateSubModalListItems(targetCats.map { c -> (if (c == curCat) "[+]   " else "[-]   ") + c })
+        val curIdx = targetCats.indexOf(curCat).coerceAtLeast(0)
+        updateSubModalListItems(targetCats.map { c -> (if (c == curCat) "[+]   " else "[-]   ") + c }, preservePositionIndex = curIdx)
         subModalList.setOnItemClickListener { _, _, which, _ ->
             if (which in targetCats.indices) {
                 val newCat = targetCats[which]
@@ -2101,7 +2213,7 @@ class MainActivity : AppCompatActivity() {
     private fun effectiveCategory(ch: Channel): String = customCategoryMap[ch.url] ?: ch.category
 
     private fun openThemesSubModal() {
-        subModalTitle.text = "Темы оформления"
+        setSubModalHeaderTitle("Темы оформления")
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.GONE
@@ -2111,8 +2223,7 @@ class MainActivity : AppCompatActivity() {
             if (idx == themeIndex) "[+]   ${t.name}   •   Активна"
             else "[-]   ${t.name}"
         }
-        updateSubModalListItems(items)
-        subModalList.setSelection(themeIndex)
+        updateSubModalListItems(items, preservePositionIndex = themeIndex)
 
         subModalList.setOnItemClickListener { _, _, which, _ ->
             themeIndex = which; saveState(); applyCurrentThemeToAllPanels(); navigateBackInMenu()
@@ -2121,23 +2232,28 @@ class MainActivity : AppCompatActivity() {
         subModalList.requestFocus()
     }
 
-    private fun openTopManagerSubModal(inPlace: Boolean = false) {
-        subModalTitle.text = "Каналы в ТОПе групп (${topUrls.size})"
+    private fun openTopManagerSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
+        setSubModalHeaderTitle("Каналы в ТОПе групп (${topUrls.size})")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
         if (topUrls.isNotEmpty()) {
             subModalTopButtons.addView(makeModernButton("Очистить весь ТОП") {
-                topUrls.clear(); saveState(); selectCategory(currentCategoryIndex); openTopManagerSubModal(inPlace = true)
+                topUrls.clear(); saveState(); selectCategory(currentCategoryIndex); openTopManagerSubModal(inPlace = true, keepIndex = 0)
             })
         }
         val topChans = allChannels.filter { topUrls.contains(it.url) }
         updateSubModalListItems(
             if (topChans.isEmpty()) listOf("[-]   В ТОПе пока нет закреплённых каналов")
             else topChans.map { "[+]   ${it.name}   •   ${effectiveCategory(it)}" },
-            smoothToggle = inPlace
+            smoothToggle = inPlace,
+            preservePositionIndex = keepIndex
         )
         subModalList.setOnItemClickListener { _, _, idx, _ ->
-            if (idx in topChans.indices) { topUrls.remove(topChans[idx].url); saveState(); selectCategory(currentCategoryIndex); openTopManagerSubModal(inPlace = true) }
+            if (idx in topChans.indices) {
+                topUrls.remove(topChans[idx].url)
+                saveState(); selectCategory(currentCategoryIndex)
+                openTopManagerSubModal(inPlace = true, keepIndex = idx.coerceAtMost((topChans.size - 2).coerceAtLeast(0)))
+            }
         }
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
     }
@@ -2169,7 +2285,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        fullEpgListView.adapter = createRoundedSelectorAdapter(items, 16f, true) { pos -> fullEpgListView.selectedItemPosition == pos }
+        fullEpgListView.adapter = createRoundedSelectorAdapter(items, 15.5f, true, fixedRowHeight = true) { pos -> fullEpgListView.selectedItemPosition == pos }
         animateMenuAppear(fullEpgOverlay)
         fullEpgListView.requestFocus()
         if (activeIndex > 0 && activeIndex < items.size) fullEpgListView.setSelection(activeIndex)
@@ -2182,22 +2298,9 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    // Пункт 6 и Пункт 4: Раздел «Общие» с единым выровненным стилем всех строк ([+], [ON]/[OFF], [>]) и отдельным включением баннера каналов
-    private fun openMoreSettingsSubModal(inPlace: Boolean = false) {
-        val dm = resources.displayMetrics
-        subModalOverlay.layoutParams = FrameLayout.LayoutParams(
-            (dm.widthPixels * 0.78f).toInt().coerceIn(820, 1440),
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            Gravity.CENTER
-        ).apply { setMargins(24, 16, 24, 16) }
-
-        subModalList.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            0,
-            1f
-        )
-
-        subModalTitle.text = "Общие настройки"
+    // Пункт 2: Раздел «Общие» с сохранением позиции курсора (keepIndex) при нажатии OK и целыми строками
+    private fun openMoreSettingsSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
+        setSubModalHeaderTitle("Общие настройки")
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.VISIBLE
 
@@ -2247,23 +2350,23 @@ class MainActivity : AppCompatActivity() {
             "[>]   Телепрограмма EPG   •   Обновить расписание сейчас",
             "[>]   Обновление TiViLook   •   Проверить и установить с GitHub"
         )
-        updateSubModalListItems(items, smoothToggle = inPlace)
+        updateSubModalListItems(items, smoothToggle = inPlace, preservePositionIndex = keepIndex)
 
         subModalList.setOnItemClickListener { _, _, which, _ ->
             when (which) {
-                0 -> { uiScaleStep = (uiScaleStep + 1) % 3; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true) }
-                1 -> { uiAlphaStep = (uiAlphaStep + 1) % 3; saveState(); animatePanelAlphaTransition(); openMoreSettingsSubModal(inPlace = true) }
-                2 -> { ambilightMode = (ambilightMode + 1) % 4; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true) }
-                3 -> { screenAspectMode = (screenAspectMode + 1) % 3; applyScreenAspectMode(); saveState(); openMoreSettingsSubModal(inPlace = true) }
-                4 -> { cameraCutoutSafeOffset = !cameraCutoutSafeOffset; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true) }
-                5 -> { showChannelBannerOnSwitch = !showChannelBannerOnSwitch; saveState(); openMoreSettingsSubModal(inPlace = true) }
+                0 -> { uiScaleStep = (uiScaleStep + 1) % 3; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
+                1 -> { uiAlphaStep = (uiAlphaStep + 1) % 3; saveState(); animatePanelAlphaTransition(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
+                2 -> { ambilightMode = (ambilightMode + 1) % 4; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
+                3 -> { screenAspectMode = (screenAspectMode + 1) % 3; applyScreenAspectMode(); saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
+                4 -> { cameraCutoutSafeOffset = !cameraCutoutSafeOffset; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
+                5 -> { showChannelBannerOnSwitch = !showChannelBannerOnSwitch; saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
                 6 -> {
                     menuHideDelaySec = when (menuHideDelaySec) { 4 -> 8; 8 -> 12; else -> 4 }
-                    saveState(); openMoreSettingsSubModal(inPlace = true)
+                    saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which)
                 }
-                7 -> { toggleDualStreamWithCurrentOrNeighbor(); openMoreSettingsSubModal(inPlace = true) }
-                8 -> { dohEnabled = !dohEnabled; saveState(); initPlayer(); openMoreSettingsSubModal(inPlace = true) }
-                9 -> { onDropBehavior = (onDropBehavior + 1) % 2; saveState(); openMoreSettingsSubModal(inPlace = true) }
+                7 -> { toggleDualStreamWithCurrentOrNeighbor(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
+                8 -> { dohEnabled = !dohEnabled; saveState(); initPlayer(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
+                9 -> { onDropBehavior = (onDropBehavior + 1) % 2; saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
                 10 -> navigateToMenu("BRIGHTNESS_MENU")
                 11 -> { rewindLiveBufferSeconds(30); closeAllMenus() }
                 12 -> navigateToMenu("POWER_AND_SLEEP_MENU")
@@ -2337,39 +2440,34 @@ class MainActivity : AppCompatActivity() {
             if (!isWatchdogTickerActive) return
             try {
                 watchdogTickCounter++
-                ambilightHue = (ambilightHue + 8f) % 360f
-                if (ambilightMode == 3 && watchdogTickCounter % 2 == 0) sampleVideoFrameColorIfPossible()
-                if (watchdogTickCounter % 20 == 0) stepPixelOrbiter()
+                if ( watchdogTickCounter % 20 == 0) stepPixelOrbiter()
 
                 clockTextView.text = timeFmtTicker.format(Date())
                 updateSignalIndicator()
 
                 if (menuHistory.isNotEmpty() && ambilightMode != 0 && alphaAnimator?.isRunning != true) {
-                    when (menuHistory.last()) {
-                        "SIDE" -> sidePanel.setBackgroundDrawable(makeThemedPanelBg())
-                        "OSD" -> centerOsdPanel.setBackgroundDrawable(makeThemedPanelBg())
-                        "SETTINGS" -> settingsTileOverlay.setBackgroundDrawable(makeThemedPanelBg())
-                        "FULL_EPG" -> fullEpgOverlay.setBackgroundDrawable(makeThemedPanelBg())
-                        "INFO" -> infoPanel.setBackgroundDrawable(makeThemedPanelBg())
-                        else -> subModalOverlay.setBackgroundDrawable(makeThemedPanelBg())
-                    }
+                    ambilightHue = (ambilightHue + 8f) % 360f
+                    if (ambilightMode == 3 && watchdogTickCounter % 2 == 0) sampleVideoFrameColorIfPossible()
+                    refreshPanelBackgroundsOnly()
                 }
 
-                // Пункт 2: Watchdog перезапускает поток ТОЛЬКО если видео реально зависло (STATE_BUFFERING/IDLE дольше 14 сек), не дергая живые потоки с коротким HLS-окном!
+                // Анти-бан Watchdog: если поток реально завис (STATE_BUFFERING с 0 мс буфера или кадр стоит 9 сек), делаем чистый stop() -> prepare()
                 val p = player
                 if (p != null && currentChannel != null) {
                     val state = p.playbackState
                     val curPos = p.currentPosition
-                    val isTrulyStalled = (state == Player.STATE_BUFFERING || state == Player.STATE_IDLE ||
-                        (state == Player.STATE_READY && p.isPlaying && curPos == lastRenderedFramePositionMs && p.totalBufferedDuration < 400L))
+                    val bufMs = p.totalBufferedDuration
+                    val isTrulyStalled = (state == Player.STATE_IDLE ||
+                        (state == Player.STATE_BUFFERING && bufMs < 150L) ||
+                        (state == Player.STATE_READY && p.isPlaying && curPos == lastRenderedFramePositionMs && bufMs < 200L))
                     lastRenderedFramePositionMs = curPos
 
                     if (isTrulyStalled) {
                         lowSignalStuckSeconds += 2
-                        if (lowSignalStuckSeconds >= 14) {
+                        if (lowSignalStuckSeconds >= 8) {
                             lowSignalStuckSeconds = 0
                             consecutiveDropFailures++
-                            if (onDropBehavior == 1 && consecutiveDropFailures >= 2) {
+                            if (onDropBehavior == 1 && consecutiveDropFailures >= 3) {
                                 consecutiveDropFailures = 0
                                 switchChannelByOffset(+1)
                             } else {
@@ -2413,35 +2511,30 @@ class MainActivity : AppCompatActivity() {
         httpDataSourceFactory?.setDefaultRequestProperties(hdrs)
     }
 
+    // Жёсткий сброс зависшего TCP-сокета через p.stop() перед переподключением
     private fun reconnectCurrentStreamSilently() {
         val ch = currentChannel ?: return
         val p = player ?: return
         try {
             val cleanUrl = ch.url.substringBefore("#")
-            val targetUrl = if (silentFallbackAttemptedForUrl != ch.url) {
+            val targetUrl = if (silentFallbackAttemptedForUrl != ch.url && !CoreEngines.isSingleSessionTokenUrl(cleanUrl)) {
                 silentFallbackAttemptedForUrl = ch.url
                 val normTarget = CoreEngines.normalizeName(ch.name)
                 val mirror = allChannels.firstOrNull {
                     it.url != ch.url && !autoDisabledUrls.contains(it.url) && CoreEngines.normalizeName(it.name) == normTarget
                 }
-                when {
-                    mirror != null -> mirror.url.substringBefore("#")
-                    effectiveCategory(ch) == "Детские" -> BuiltinCatalog.FALLBACK_KIDS_CDN_1
-                    effectiveCategory(ch) == "Музыка" -> BuiltinCatalog.FALLBACK_MUSIC_CDN_1
-                    effectiveCategory(ch) == "Кино и сериалы" -> BuiltinCatalog.FALLBACK_MOVIES_CDN_1
-                    else -> cleanUrl
-                }
+                mirror?.url?.substringBefore("#") ?: cleanUrl
             } else {
                 cleanUrl
             }
+            p.stop()
             applyHeadersToDataSourceForUrl(targetUrl)
-            p.setMediaItem(createLiveMediaItem(targetUrl), false)
+            p.setMediaItem(createLiveMediaItem(targetUrl), true)
             p.prepare()
             p.play()
         } catch (_: Exception) {}
     }
 
-    // Пункт 2: Быстрый старт со штатного края HLS без искусственной 28-секундной отмотки назад
     private fun createLiveMediaItem(url: String): MediaItem {
         val cleanUrl = url.substringBefore("#")
         return MediaItem.Builder()
@@ -2449,18 +2542,18 @@ class MainActivity : AppCompatActivity() {
             .build()
     }
 
-    // Пункт 2: Адекватная шкала сигнала для коротких HLS-плейлистов (зелёный уже от 2 сек буфера)
+    // Честная индикация: при пустом буфере (bufMs < 150) в STATE_BUFFERING горит 1 красная палочка, а не 2 жёлтые!
     private fun updateSignalIndicator(): Int {
         val p = player
         val state = p?.playbackState ?: Player.STATE_IDLE
         val bufMs = p?.totalBufferedDuration ?: 0L
         val (activeBars, activeColor) = when {
             state == Player.STATE_IDLE -> Pair(1, Color.parseColor("#FF5252"))
-            state == Player.STATE_BUFFERING && bufMs < 300L -> Pair(2, Color.parseColor("#FFD740"))
-            state == Player.STATE_BUFFERING -> Pair(3, Color.parseColor("#69F0AE"))
-            state == Player.STATE_READY && bufMs >= 2200L -> Pair(4, Color.parseColor("#00E676"))
-            state == Player.STATE_READY && bufMs >= 800L -> Pair(3, Color.parseColor("#69F0AE"))
-            state == Player.STATE_READY -> Pair(3, Color.parseColor("#00E676"))
+            state == Player.STATE_BUFFERING && bufMs < 150L -> Pair(1, Color.parseColor("#FF5252"))
+            state == Player.STATE_BUFFERING -> Pair(2, Color.parseColor("#FFD740"))
+            state == Player.STATE_READY && bufMs >= 2000L -> Pair(4, Color.parseColor("#00E676"))
+            state == Player.STATE_READY && bufMs >= 600L -> Pair(3, Color.parseColor("#69F0AE"))
+            state == Player.STATE_READY -> Pair(2, Color.parseColor("#FFD740"))
             else -> Pair(1, Color.parseColor("#FF5252"))
         }
         val inactiveColor = Color.parseColor("#35FFFFFF")
@@ -2476,21 +2569,20 @@ class MainActivity : AppCompatActivity() {
     private fun initPlayer() {
         val currentUrl = currentChannel?.url
         try { loudnessEnhancer?.release(); loudnessEnhancer = null } catch (_: Exception) {}
-        try { player?.release() } catch (_: Exception) {}
+        try { player?.stop(); player?.release() } catch (_: Exception) {}
 
-        // Пункт 2: Снижен стартовый порог буфера (650 мс) для мгновенного включения каналов
+        // Анти-бан конфигурация буфера: умеренный запас вперёд (6–16 сек), чтобы не вызывать Rate-Limit на сервере rostelekom.xyz!
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(10000, 28000, 500, 1200)
-            1 -> listOf(18000, 45000, 600, 1500)
-            2 -> listOf(28000, 75000, 650, 1800)
-            else -> listOf(45000, 110000, 800, 2200)
+            0 -> listOf(4500, 10000, 450, 900)
+            1 -> listOf(6500, 14000, 500, 1100)
+            2 -> listOf(9000, 18000, 600, 1300)
+            else -> listOf(12000, 24000, 700, 1500)
         }
-        val targetBytes = if (bufferLevel >= 3) 96 * 1024 * 1024 else 64 * 1024 * 1024
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
-            .setTargetBufferBytes(targetBytes)
+            .setTargetBufferBytes(24 * 1024 * 1024)
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setBackBuffer(60000, true)
+            .setBackBuffer(15000, false)
             .build()
 
         val extensionMode = when (decoderMode) {
@@ -2505,15 +2597,15 @@ class MainActivity : AppCompatActivity() {
         val activeAgent = CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
         val dsFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(activeAgent)
-            .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(currentUrl ?: "https://smotrim.ru"))
+            .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(currentUrl ?: "http://tsmxkuov.rostelekom.xyz"))
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(10000)
-            .setReadTimeoutMs(18000)
+            .setConnectTimeoutMs(5500)
+            .setReadTimeoutMs(5500)
         httpDataSourceFactory = dsFactory
 
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dsFactory)
-            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(6))
+            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
 
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -2536,6 +2628,8 @@ class MainActivity : AppCompatActivity() {
 
         newPlayer.addListener(object : Player.Listener {
             override fun onRenderedFirstFrame() {
+                lowSignalStuckSeconds = 0
+                consecutiveDropFailures = 0
                 applyAudioEnhancements()
                 updateSignalIndicator()
             }
@@ -2579,7 +2673,7 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onPlayerError(error: PlaybackException) {
                 userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
-                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 700)
+                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 550L)
             }
         })
 
@@ -2595,14 +2689,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Пункт 2: Умная избирательная предзагрузка соседей (не трогает односессионные ключи rostelekom.xyz / iptv, чтобы сервер не рвал соединение)
-    private fun isSingleConnectionTokenStream(urlStr: String): Boolean {
-        val low = urlStr.lowercase()
-        return low.contains("rostelekom.xyz") || low.contains("/iptv/")
-    }
-
     private fun preloadNeighboringChannels(activeChannel: Channel) {
-        if (isAnalyzerRunning || isSingleConnectionTokenStream(activeChannel.url)) return
+        if (isAnalyzerRunning || CoreEngines.isSingleSessionTokenUrl(activeChannel.url)) return
         val snapshot = displayedChannels.toList()
         if (snapshot.size < 2) return
         val idx = snapshot.indexOfFirst { it.url == activeChannel.url }
@@ -2610,7 +2698,7 @@ class MainActivity : AppCompatActivity() {
         val neighbors = listOf(snapshot[(idx - 1 + snapshot.size) % snapshot.size], snapshot[(idx + 1) % snapshot.size])
         synchronized(preloadedLock) { preloadedNeighbors.clear() }
         for (neighbor in neighbors) {
-            if (isSingleConnectionTokenStream(neighbor.url)) continue
+            if (CoreEngines.isSingleSessionTokenUrl(neighbor.url)) continue
             try {
                 preloaderExecutor.submit {
                     if (isAnalyzerRunning) return@submit
@@ -2623,7 +2711,7 @@ class MainActivity : AppCompatActivity() {
                             requestMethod = "HEAD"
                             setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
                             for ((k, v) in hdrs) setRequestProperty(k, v)
-                            connectTimeout = 2500; readTimeout = 2500
+                            connectTimeout = 2200; readTimeout = 2200
                         }
                         conn.responseCode
                         conn.disconnect()
@@ -2810,9 +2898,9 @@ class MainActivity : AppCompatActivity() {
         val vCodec = vFormat?.sampleMimeType?.substringAfter("/")?.uppercase() ?: "Анализ..."
         val vBitrate = if (vFormat != null && vFormat.bitrate > 0) String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f) else "Адаптивный HLS"
 
-        val bufSec = p.totalBufferedDuration / 1000L
-        val preloadNote = if (ch != null && isSingleConnectionTokenStream(ch.url)) {
-            "Отключена (защита 1-сессионного ключа)"
+        val bufSec = String.format(Locale.US, "%.1f", (p.totalBufferedDuration / 1000f))
+        val preloadNote = if (ch != null && CoreEngines.isSingleSessionTokenUrl(ch.url)) {
+            "Защита 1-сессионного ключа (активна)"
         } else {
             val preloadedCount = synchronized(preloadedLock) { preloadedNeighbors.size }
             "$preloadedCount из 2 ⚡"
@@ -2826,21 +2914,21 @@ class MainActivity : AppCompatActivity() {
             "Группа: " + (if (ch != null) effectiveCategory(ch) else "-") + "\n\n" +
             "Разрешение: " + width + "x" + height + " " + fps + " (" + vCodec + ")\n" +
             "Поток: " + vBitrate + "\n" +
-            "Буфер: " + bufSec + " сек (Машина времени: 60с)\n" +
-            "Предзагрузка соседних: " + preloadNote +
+            "Буфер: " + bufSec + " сек\n" +
+            "Режим линии: " + preloadNote +
             epgLine
     }
 
     private fun openPlaylistsSubModal() {
         ensureDefaultPlaylists()
-        subModalTitle.text = "Плейлисты (2 встроенных + ваши списки)"
+        setSubModalHeaderTitle("Плейлисты (2 встроенных + ваши списки)")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val snapshot = playlists.toList()
         val items = snapshot.mapIndexed { idx, p -> (if (idx == activePlaylistIndex) "[+]   " else "[-]   ") + p.title }.toMutableList()
         items.add("[>]   Добавить свой плейлист по ссылке   •   Сохранение групп")
         items.add("[>]   Проводник   •   Выбрать файл .m3u/.m3u8 с устройства или USB")
         if (snapshot.size > 2 && activePlaylistIndex >= 2) items.add("[-]   Удалить выбранный пользовательский плейлист")
-        updateSubModalListItems(items)
+        updateSubModalListItems(items, preservePositionIndex = activePlaylistIndex)
 
         subModalList.setOnItemClickListener { _, _, which, _ ->
             when {
@@ -2864,7 +2952,7 @@ class MainActivity : AppCompatActivity() {
     private fun openFolderExplorerModal(dir: File) {
         requestStoragePermissionsIfNeeded()
         currentBrowseDir = dir
-        subModalTitle.text = "Проводник: " + dir.absolutePath
+        setSubModalHeaderTitle("Проводник: " + dir.absolutePath)
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
 
@@ -2885,7 +2973,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (entries.isEmpty()) entries.add(Pair("[-]   Папка пуста или нет доступа", null))
 
-        updateSubModalListItems(entries.map { it.first })
+        updateSubModalListItems(entries.map { it.first }, preservePositionIndex = 0)
         subModalList.setOnItemClickListener { _, _, idx, _ ->
             val target = entries.getOrNull(idx)?.second ?: return@setOnItemClickListener
             if (target.isDirectory) openFolderExplorerModal(target) else if (target.isFile) addLocalPlaylistFile(target)
@@ -2899,13 +2987,13 @@ class MainActivity : AppCompatActivity() {
         activePlaylistIndex = playlists.size - 1; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
     }
 
-    private fun openChannelEditorGroupsModal(inPlace: Boolean = false) {
-        subModalTitle.text = "Редактор каналов: выберите группу"
+    private fun openChannelEditorGroupsModal(inPlace: Boolean = false, keepIndex: Int = -1) {
+        setSubModalHeaderTitle("Редактор каналов: выберите группу")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
         subModalTopButtons.addView(makeModernButton("Включить все группы и каналы") {
             disabledCategories.clear(); manualDisabledUrls.clear(); autoDisabledUrls.clear()
-            saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorGroupsModal(inPlace = true)
+            saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorGroupsModal(inPlace = true, keepIndex = subModalHighlightedPos)
         })
         val snapshot = allChannels.toList()
         val editableCats = activeCategoryList().drop(2)
@@ -2916,25 +3004,26 @@ class MainActivity : AppCompatActivity() {
                 val activeInCat = snapshot.count { effectiveCategory(it) == cat && isChannelActive(it) }
                 "${if (isCatEnabled) "[+]" else "[-]"}   $cat   •   Активно: $activeInCat из $totalInCat"
             },
-            smoothToggle = inPlace
+            smoothToggle = inPlace,
+            preservePositionIndex = keepIndex
         )
         subModalList.setOnItemClickListener { _, _, idx, _ -> selectedEditorCategory = editableCats[idx]; navigateToMenu("CHANNEL_EDITOR_ITEMS") }
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
     }
 
-    private fun openChannelEditorItemsModal(catName: String, inPlace: Boolean = false) {
+    private fun openChannelEditorItemsModal(catName: String, inPlace: Boolean = false, keepIndex: Int = -1) {
         val catChannels = allChannels.filter { effectiveCategory(it) == catName }.sortedWith(Comparator { a, b -> ruCollator.compare(a.name, b.name) })
         val isCatDisabled = disabledCategories.contains(catName)
-        subModalTitle.text = "Группа: $catName (${catChannels.size} кан.)"
+        setSubModalHeaderTitle("Группа: $catName (${catChannels.size} кан.)")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
         subModalTopButtons.addView(makeModernButton(if (isCatDisabled) "[+] Включить всю группу" else "[-] Отключить всю группу") {
             if (disabledCategories.contains(catName)) disabledCategories.remove(catName) else disabledCategories.add(catName)
-            saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true)
+            saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = subModalHighlightedPos)
         })
         subModalTopButtons.addView(makeModernButton("Включить все в группе") {
             catChannels.forEach { manualDisabledUrls.remove(it.url); autoDisabledUrls.remove(it.url) }
-            disabledCategories.remove(catName); saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true)
+            disabledCategories.remove(catName); saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = subModalHighlightedPos)
         })
         updateSubModalListItems(
             catChannels.map { ch ->
@@ -2944,7 +3033,8 @@ class MainActivity : AppCompatActivity() {
                 val note = if (isManualOff) "   •   Исключён вручную" else if (isAutoOff) "   •   Скрыт тестом" else ""
                 "${if (enabled) "[+]" else "[-]"}   ${ch.name}$note"
             },
-            smoothToggle = inPlace
+            smoothToggle = inPlace,
+            preservePositionIndex = keepIndex
         )
         subModalList.setOnItemClickListener { _, _, idx, _ ->
             if (idx in catChannels.indices) {
@@ -2952,7 +3042,7 @@ class MainActivity : AppCompatActivity() {
                 if (manualDisabledUrls.contains(ch.url) || autoDisabledUrls.contains(ch.url)) {
                     manualDisabledUrls.remove(ch.url); autoDisabledUrls.remove(ch.url)
                 } else manualDisabledUrls.add(ch.url)
-                saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true)
+                saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = idx)
             }
         }
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
@@ -2962,7 +3052,7 @@ class MainActivity : AppCompatActivity() {
         val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
         val aliveTotal = aliveChannelsAtomic.get()
         val deadTotal = deadChannelsAtomic.get()
-        subModalTitle.text = colorizeStatusText("Быстрый тест   •   [+] $aliveTotal   [-] $deadTotal (скрываются авто)")
+        setSubModalHeaderTitle("Быстрый тест   •   [+] $aliveTotal   [-] $deadTotal")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
             subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
@@ -2981,7 +3071,7 @@ class MainActivity : AppCompatActivity() {
         updateSubModalListItems(groupNames.map { gName ->
             val groupChans = if (gName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == gName }
             "[>]   $gName (${groupChans.size} кан.)   •   [+] ${groupChans.count { channelHealthMap[it.url] == true }}    [-] ${groupChans.count { channelHealthMap[it.url] == false }}"
-        })
+        }, preservePositionIndex = subModalHighlightedPos)
         subModalList.setOnItemClickListener { _, _, idx, _ ->
             if (idx in groupNames.indices) { selectedAnalyzerCategory = groupNames[idx]; navigateToMenu("ANALYZER_GROUP_VIEW") }
         }
@@ -2993,7 +3083,7 @@ class MainActivity : AppCompatActivity() {
         val groupChans = (if (catName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == catName }).sortedWith(Comparator { a, b -> ruCollator.compare(a.name, b.name) })
         val alive = groupChans.count { channelHealthMap[it.url] == true }
         val dead = groupChans.count { channelHealthMap[it.url] == false }
-        subModalTitle.text = colorizeStatusText("Группа: $catName (Всего: ${groupChans.size}  •  [+] $alive  •  [-] $dead)")
+        setSubModalHeaderTitle("Группа: $catName ([+] $alive  •  [-] $dead)")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
             subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
@@ -3006,11 +3096,12 @@ class MainActivity : AppCompatActivity() {
         updateSubModalListItems(groupChans.mapIndexed { i, ch ->
             val status = when (channelHealthMap[ch.url]) { true -> "[+]   Работает"; false -> "[-]   Скрыт"; null -> "[?]   Очередь" }
             "$status   •   ${i + 1}. ${ch.name}"
-        })
+        }, preservePositionIndex = subModalHighlightedPos)
         subModalList.setOnItemClickListener { _, _, idx, _ -> if (idx in groupChans.indices) { playChannelObj(groupChans[idx], immediate = true); closeAllMenus() } }
         if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
     }
 
+    // Аудит Пункт 1: Защита односессионного ключа при запуске «Теста каналов» (каналы rostelekom.xyz не долбятся в 8 потоков и не банят ключ!)
     private fun startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>) {
         val targetChannels = rawTargetChannels.filter { !manualDisabledUrls.contains(it.url) }
         if (isAnalyzerRunning || targetChannels.isEmpty()) return
@@ -3028,12 +3119,13 @@ class MainActivity : AppCompatActivity() {
         resetMenuInactivityTimer()
 
         thread(priority = Thread.NORM_PRIORITY) {
-            val pool = Executors.newFixedThreadPool(8)
+            val pool = Executors.newFixedThreadPool(6)
             var lastUiUpdateMs = 0L
             for (ch in snapshot) {
                 pool.submit {
                     if (!isAnalyzerRunning) return@submit
-                    val ok = checkStreamAliveDeep(ch.url)
+                    val isProtectedVipToken = CoreEngines.isSingleSessionTokenUrl(ch.url)
+                    val ok = if (isProtectedVipToken) true else checkStreamAliveDeep(ch.url)
                     channelHealthMap[ch.url] = ok
                     if (ok) {
                         aliveChannelsAtomic.incrementAndGet()
@@ -3089,8 +3181,8 @@ class MainActivity : AppCompatActivity() {
                 setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
                 for ((k, v) in hdrs) setRequestProperty(k, v)
                 instanceFollowRedirects = true
-                connectTimeout = 4200
-                readTimeout = 4200
+                connectTimeout = 4000
+                readTimeout = 4000
             }
             val code = conn.responseCode
             if (code !in 200..299) {
@@ -3120,21 +3212,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun openBufferSubModal(inPlace: Boolean = false) {
-        subModalTitle.text = "Буфер подкачки и Машина времени"
+    private fun openBufferSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
+        setSubModalHeaderTitle("Буфер подкачки и Машина времени")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val opts = listOf(
-            "Маленький буфер (10–28 сек)   •   Мгновенный старт",
-            "Средний буфер (18–45 сек)   •   Оптимальный баланс",
-            "Большой буфер (28–75 сек)   •   Стабильный поток",
-            "Максимальный буфер (45–110 сек)   •   Защита от помех"
+            "Маленький буфер (4–10 сек)   •   Мгновенный старт",
+            "Оптимальный буфер (6–14 сек)   •   Рекомендуется (без банов)",
+            "Средний буфер (9–18 сек)   •   Плавный поток",
+            "Большой буфер (12–24 сек)   •   Защита от помех Wi-Fi"
         ).mapIndexed { i, t -> (if (i == bufferLevel) "[+]   " else "[-]   ") + t }.toMutableList()
         opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -20 сек")
         opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -45 сек")
-        updateSubModalListItems(opts, smoothToggle = inPlace)
+        val targetIdx = if (keepIndex >= 0) keepIndex else bufferLevel
+        updateSubModalListItems(opts, smoothToggle = inPlace, preservePositionIndex = targetIdx)
         subModalList.setOnItemClickListener { _, _, which, _ ->
             when (which) {
-                in 0..3 -> { bufferLevel = which; saveState(); initPlayer(); openBufferSubModal(inPlace = true) }
+                in 0..3 -> { bufferLevel = which; saveState(); initPlayer(); openBufferSubModal(inPlace = true, keepIndex = which) }
                 4 -> { rewindLiveBufferSeconds(20); closeAllMenus() }
                 5 -> { rewindLiveBufferSeconds(45); closeAllMenus() }
             }
@@ -3142,8 +3235,8 @@ class MainActivity : AppCompatActivity() {
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
     }
 
-    private fun openDecoderSubModal(inPlace: Boolean = false) {
-        subModalTitle.text = "Декодер и Защита Плазмы"
+    private fun openDecoderSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
+        setSubModalHeaderTitle("Декодер и Защита Плазмы")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val opts = listOf(
             "Аппаратный декодер (MediaCodec HW)   •   Минимальная нагрузка",
@@ -3152,20 +3245,21 @@ class MainActivity : AppCompatActivity() {
         ).mapIndexed { i, t -> (if (i == decoderMode) "[+]   " else "[-]   ") + t }.toMutableList()
         opts.add(if (pixelOrbiterEnabled) "[ON]   Сдвиг пикселей часов, антенны и экрана (Pixel Orbiter)   •   Включён" else "[OFF]   Сдвиг пикселей часов, антенны и экрана (Pixel Orbiter)   •   Выключен")
         opts.add(if (afrEnabled) "[ON]   Авточастота кадров AFR (50/60 Гц)   •   Включена" else "[OFF]   Авточастота кадров AFR (50/60 Гц)   •   Выключена")
-        updateSubModalListItems(opts, smoothToggle = inPlace)
+        val targetIdx = if (keepIndex >= 0) keepIndex else decoderMode
+        updateSubModalListItems(opts, smoothToggle = inPlace, preservePositionIndex = targetIdx)
         subModalList.setOnItemClickListener { _, _, which, _ ->
             when (which) {
-                in 0..2 -> { decoderMode = which; saveState(); initPlayer(); openDecoderSubModal(inPlace = true) }
-                3 -> { pixelOrbiterEnabled = !pixelOrbiterEnabled; saveState(); stepPixelOrbiter(); openDecoderSubModal(inPlace = true) }
-                4 -> { afrEnabled = !afrEnabled; saveState(); openDecoderSubModal(inPlace = true) }
+                in 0..2 -> { decoderMode = which; saveState(); initPlayer(); openDecoderSubModal(inPlace = true, keepIndex = which) }
+                3 -> { pixelOrbiterEnabled = !pixelOrbiterEnabled; saveState(); stepPixelOrbiter(); openDecoderSubModal(inPlace = true, keepIndex = which) }
+                4 -> { afrEnabled = !afrEnabled; saveState(); openDecoderSubModal(inPlace = true, keepIndex = which) }
             }
         }
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
     }
 
-    private fun openAudioSubModal(inPlace: Boolean = false) {
+    private fun openAudioSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
         val p = player ?: return
-        subModalTitle.text = "Звук, Выравнивание (DRC) и Усиление"
+        setSubModalHeaderTitle("Звук, Выравнивание (DRC) и Усиление")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val labels = mutableListOf<String>()
         labels.add(if (drcNightAudioEnabled) "[ON]   Выравнивание громкости (Night Audio / DRC)   •   Включено" else "[OFF]   Выравнивание громкости (Night Audio / DRC)   •   Выключено")
@@ -3188,19 +3282,20 @@ class MainActivity : AppCompatActivity() {
                 overrides.add(TrackSelectionOverride(g.mediaTrackGroup, i))
             }
         }
-        updateSubModalListItems(labels, smoothToggle = inPlace)
+        val targetIdx = if (keepIndex >= 0) keepIndex else 0
+        updateSubModalListItems(labels, smoothToggle = inPlace, preservePositionIndex = targetIdx)
         subModalList.setOnItemClickListener { _, _, idx, _ ->
             when (idx) {
-                0 -> { drcNightAudioEnabled = !drcNightAudioEnabled; saveState(); applyAudioEnhancements(); openAudioSubModal(inPlace = true) }
+                0 -> { drcNightAudioEnabled = !drcNightAudioEnabled; saveState(); applyAudioEnhancements(); openAudioSubModal(inPlace = true, keepIndex = idx) }
                 1 -> {
                     audioBoostPercent = when (audioBoostPercent) { 100 -> 130; 130 -> 160; 160 -> 200; else -> 100 }
-                    saveState(); applyAudioEnhancements(); openAudioSubModal(inPlace = true)
+                    saveState(); applyAudioEnhancements(); openAudioSubModal(inPlace = true, keepIndex = idx)
                 }
                 else -> {
                     val ovIdx = idx - 2
                     if (ovIdx in overrides.indices) {
                         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setOverrideForType(overrides[ovIdx]).build()
-                        openAudioSubModal(inPlace = true)
+                        openAudioSubModal(inPlace = true, keepIndex = idx)
                     }
                 }
             }
@@ -3209,7 +3304,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openInputSubModal(title: String, initialValue: String, onSave: (String) -> Unit) {
-        subModalTitle.text = title; subModalList.visibility = View.GONE
+        setSubModalHeaderTitle(title); subModalList.visibility = View.GONE
         subModalInputContainer.removeAllViews(); subModalInputContainer.visibility = View.VISIBLE
         val input = EditText(this).apply { setText(initialValue); setTextColor(currentTheme().textPrimaryColor); setSingleLine() }
         subModalInputContainer.addView(input)
@@ -3221,7 +3316,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openAddUrlSubModal() {
-        subModalTitle.text = "Новый плейлист по ссылке"; subModalList.visibility = View.GONE
+        setSubModalHeaderTitle("Новый плейлист по ссылке"); subModalList.visibility = View.GONE
         subModalInputContainer.removeAllViews(); subModalInputContainer.visibility = View.VISIBLE
         val nameInput = EditText(this).apply { hint = "Название плейлиста"; setTextColor(currentTheme().textPrimaryColor); setSingleLine() }
         val urlInput = EditText(this).apply { hint = "http://... (.m3u8)"; setTextColor(currentTheme().textPrimaryColor); setSingleLine() }
@@ -3258,6 +3353,7 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
+    // Аудит Пункт 3: Мгновенный показ встроенного каталога за 0.05 сек + параллельная догрузка внешних баз в 4 потока
     private fun loadActivePlaylist(autoPlayLast: Boolean) {
         ensureDefaultPlaylists()
         val entry = playlists[activePlaylistIndex]
@@ -3265,82 +3361,104 @@ class MainActivity : AppCompatActivity() {
         val isBuiltin = entry.source == "BUILTIN_OPEN_RU" || entry.source == "BUILTIN_STRICT_RU_ONLY"
         val strictRuOnly = entry.source == "BUILTIN_STRICT_RU_ONLY"
 
-        thread {
-            try {
-                val finalChannels: List<Channel> = when {
-                    isBuiltin -> {
-                        val result = mutableListOf<Channel>()
-                        val existingKeys = HashSet<String>()
-                        for (extra in BuiltinCatalog.extraOpenStreams) {
-                            if (CoreEngines.isArabicOrIndianChannel(extra.name, extra.category, extra.url)) continue
-                            if (strictRuOnly && !CoreEngines.isStrictlyRussianChannel(extra.name, extra.url, extra.category)) continue
-                            val cleanTitle = CoreEngines.cleanChannelDisplayName(extra.name)
-                            if (existingKeys.add(CoreEngines.normalizeName(cleanTitle) + "_" + extra.category + "_" + extra.url.hashCode())) {
-                                result.add(Channel(cleanTitle, extra.url, customCategoryMap[extra.url] ?: extra.category, extra.tvgId))
-                            }
-                        }
-                        val targetMap = LinkedHashMap<String, Channel>()
-                        for (srcUrl in openRusSources) {
-                            if (myGen != playlistLoadGeneration) return@thread
-                            try {
-                                val reader = CoreEngines.openStreamWithBypass(srcUrl, userAgentIndex, dohEnabled, 6500).bufferedReader()
-                                CoreEngines.parseM3uReaderIntoMap(
-                                    reader = reader,
-                                    targetMap = targetMap,
-                                    customCategoryMap = customCategoryMap,
-                                    filterBuiltinRules = true,
-                                    onlyRussianAllCategories = strictRuOnly,
-                                    keepOriginalGroups = false
-                                )
-                            } catch (_: Exception) {}
-                        }
-                        for (ch in targetMap.values) {
-                            val key = CoreEngines.normalizeName(ch.name) + "_" + ch.category + "_" + ch.url.substringBefore("?").hashCode()
-                            if (existingKeys.add(key)) result.add(ch)
-                        }
-                        result
-                    }
-                    entry.isLocal -> {
-                        val targetMap = LinkedHashMap<String, Channel>()
-                        CoreEngines.parseM3uReaderIntoMap(
-                            reader = BufferedReader(FileReader(File(entry.source))),
-                            targetMap = targetMap,
-                            customCategoryMap = customCategoryMap,
-                            filterBuiltinRules = false,
-                            onlyRussianAllCategories = false,
-                            keepOriginalGroups = true
-                        )
-                        targetMap.values.toList()
-                    }
-                    else -> {
-                        val targetMap = LinkedHashMap<String, Channel>()
-                        val reader = CoreEngines.openStreamWithBypass(entry.source, userAgentIndex, dohEnabled, 10000).bufferedReader()
-                        CoreEngines.parseM3uReaderIntoMap(
-                            reader = reader,
-                            targetMap = targetMap,
-                            customCategoryMap = customCategoryMap,
-                            filterBuiltinRules = false,
-                            onlyRussianAllCategories = false,
-                            keepOriginalGroups = true
-                        )
-                        targetMap.values.toList()
+        if (isBuiltin) {
+            val initialBuiltin = mutableListOf<Channel>()
+            val initialKeys = HashSet<String>()
+            for (extra in BuiltinCatalog.extraOpenStreams) {
+                if (CoreEngines.isArabicOrIndianChannel(extra.name, extra.category, extra.url)) continue
+                if (strictRuOnly && !CoreEngines.isStrictlyRussianChannel(extra.name, extra.url, extra.category)) continue
+                val cleanTitle = CoreEngines.cleanChannelDisplayName(extra.name)
+                if (initialKeys.add(CoreEngines.normalizeName(cleanTitle) + "_" + extra.category + "_" + extra.url.hashCode())) {
+                    initialBuiltin.add(Channel(cleanTitle, extra.url, customCategoryMap[extra.url] ?: extra.category, extra.tvgId))
+                }
+            }
+            allChannels.clear()
+            allChannels.addAll(initialBuiltin)
+            dynamicCategories.clear()
+            updateCategoriesList()
+            val currentList = allChannels.filter { isChannelActive(it) }
+            val cats = activeCategoryList()
+            if (currentList.isNotEmpty()) {
+                val targetCh = (if (autoPlayLast && lastSavedChannelUrl.isNotEmpty()) currentList.firstOrNull { it.url == lastSavedChannelUrl } else null) ?: currentList[0]
+                selectCategory(cats.indexOf(effectiveCategory(targetCh)).takeIf { it >= 2 } ?: 1)
+                openChannelsDirectlyWithCurrentFocus = true
+                playChannelObj(targetCh, immediate = true)
+            } else {
+                selectCategory(1)
+            }
+
+            thread(priority = Thread.MIN_PRIORITY) {
+                val mergedMap = ConcurrentHashMap<String, Channel>()
+                val loaderPool = Executors.newFixedThreadPool(4)
+                for (srcUrl in openRusSources) {
+                    loaderPool.submit {
+                        if (myGen != playlistLoadGeneration) return@submit
+                        try {
+                            val localMap = LinkedHashMap<String, Channel>()
+                            val reader = CoreEngines.openStreamWithBypass(srcUrl, userAgentIndex, dohEnabled, 5500).bufferedReader()
+                            CoreEngines.parseM3uReaderIntoMap(
+                                reader = reader,
+                                targetMap = localMap,
+                                customCategoryMap = customCategoryMap,
+                                filterBuiltinRules = true,
+                                onlyRussianAllCategories = strictRuOnly,
+                                keepOriginalGroups = false
+                            )
+                            for ((k, v) in localMap) mergedMap.putIfAbsent(k, v)
+                        } catch (_: Exception) {}
                     }
                 }
+                loaderPool.shutdown()
+                try { loaderPool.awaitTermination(14, TimeUnit.SECONDS) } catch (_: Exception) {}
+                loaderPool.shutdownNow()
+                if (myGen != playlistLoadGeneration || mergedMap.isEmpty()) return@thread
+
+                val combined = ArrayList<Channel>(initialBuiltin)
+                for (ch in mergedMap.values) {
+                    val key = CoreEngines.normalizeName(ch.name) + "_" + ch.category + "_" + ch.url.substringBefore("?").hashCode()
+                    if (initialKeys.add(key)) combined.add(ch)
+                }
+                runOnUiThread {
+                    if (myGen != playlistLoadGeneration) return@runOnUiThread
+                    allChannels.clear()
+                    allChannels.addAll(combined)
+                    updateCategoriesList()
+                    if (sidePanel.visibility != View.VISIBLE) {
+                        selectCategory(currentCategoryIndex)
+                    }
+                }
+            }
+            return
+        }
+
+        thread {
+            try {
+                val targetMap = LinkedHashMap<String, Channel>()
+                val reader = if (entry.isLocal) {
+                    BufferedReader(FileReader(File(entry.source)))
+                } else {
+                    CoreEngines.openStreamWithBypass(entry.source, userAgentIndex, dohEnabled, 10000).bufferedReader()
+                }
+                CoreEngines.parseM3uReaderIntoMap(
+                    reader = reader,
+                    targetMap = targetMap,
+                    customCategoryMap = customCategoryMap,
+                    filterBuiltinRules = false,
+                    onlyRussianAllCategories = false,
+                    keepOriginalGroups = true
+                )
+                val finalChannels = targetMap.values.toList()
                 if (myGen != playlistLoadGeneration) return@thread
                 runOnUiThread {
                     allChannels.clear()
                     allChannels.addAll(finalChannels)
-
                     dynamicCategories.clear()
-                    if (!isBuiltin) {
-                        val customGroups = finalChannels.map { effectiveCategory(it) }.filter { it.isNotEmpty() }.distinct()
-                        if (customGroups.isNotEmpty()) {
-                            dynamicCategories.add("★ Избранное")
-                            dynamicCategories.add("Все каналы")
-                            dynamicCategories.addAll(customGroups)
-                        }
+                    val customGroups = finalChannels.map { effectiveCategory(it) }.filter { it.isNotEmpty() }.distinct()
+                    if (customGroups.isNotEmpty()) {
+                        dynamicCategories.add("★ Избранное")
+                        dynamicCategories.add("Все каналы")
+                        dynamicCategories.addAll(customGroups)
                     }
-
                     updateCategoriesList()
                     val currentList = allChannels.filter { isChannelActive(it) }
                     val cats = activeCategoryList()
@@ -3351,17 +3469,7 @@ class MainActivity : AppCompatActivity() {
                         playChannelObj(targetCh, immediate = true)
                     } else selectCategory(1)
                 }
-            } catch (_: Exception) {
-                if (myGen != playlistLoadGeneration) return@thread
-                runOnUiThread {
-                    if (allChannels.isEmpty()) {
-                        allChannels.addAll(BuiltinCatalog.extraOpenStreams)
-                        dynamicCategories.clear()
-                        updateCategoriesList(); selectCategory(1)
-                        displayedChannels.firstOrNull()?.let { playChannelObj(it, immediate = true) }
-                    }
-                }
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -3431,16 +3539,18 @@ class MainActivity : AppCompatActivity() {
         saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
     }
 
+    // Принудительный player?.stop() перед запуском нового канала мгновенно закрывает старую сессию на сервере rostelekom.xyz[cite: 1]!
     private val executeDebouncedPlayRunnable = Runnable {
         val target = pendingDebouncedChannel ?: return@Runnable
         try {
+            player?.stop()
             applyHeadersToDataSourceForUrl(target.url)
-            player?.setMediaItem(createLiveMediaItem(target.url), false)
+            player?.setMediaItem(createLiveMediaItem(target.url), true)
             player?.prepare()
             player?.play()
         } catch (_: Exception) {}
         uiHandler.removeCallbacks(preloadNeighborsRunnable)
-        if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 2000L)
+        if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 2200L)
     }
 
     private fun playChannelObj(channel: Channel, immediate: Boolean = false, silentSwap: Boolean = false) {
@@ -3454,7 +3564,7 @@ class MainActivity : AppCompatActivity() {
         silentFallbackAttemptedForUrl = ""
         lowSignalStuckSeconds = 0
         consecutiveDropFailures = 0
-        saveState()
+        saveLastChannelOnly()
 
         if (::channelRvAdapter.isInitialized) {
             val oldIdx = displayedChannels.indexOfFirst { it.url == prevPlayingUrl }
@@ -3467,7 +3577,7 @@ class MainActivity : AppCompatActivity() {
         if (immediate) {
             executeDebouncedPlayRunnable.run()
         } else {
-            uiHandler.postDelayed(executeDebouncedPlayRunnable, 90L)
+            uiHandler.postDelayed(executeDebouncedPlayRunnable, 80L)
         }
 
         val topBadge = if (topUrls.contains(channel.url)) "▲ " else ""
@@ -3489,7 +3599,6 @@ class MainActivity : AppCompatActivity() {
 
     private val preloadNeighborsRunnable = Runnable { currentChannel?.let { preloadNeighboringChannels(it) } }
 
-    // Пункт 4: Надёжный показ нижнего баннера канала со сбросом прозрачности и масштаба
     private fun showBanner(text: String) {
         if (menuHistory.isNotEmpty() || !showChannelBannerOnSwitch) {
             currentChannelBanner.visibility = View.GONE
@@ -3509,7 +3618,7 @@ class MainActivity : AppCompatActivity() {
         currentChannelBanner.bringToFront()
         currentChannelBanner.animate()
             .translationY(0f)
-            .setDuration(200L)
+            .setDuration(190L)
             .setInterpolator(DecelerateInterpolator())
             .start()
         currentChannelBanner.postDelayed(hideBannerRunnable, (menuHideDelaySec * 500L).coerceIn(2800L, 6000L))
@@ -3520,6 +3629,14 @@ class MainActivity : AppCompatActivity() {
             currentChannelBanner.visibility = View.GONE
             currentChannelBanner.alpha = 1f
         }.start()
+    }
+
+    // Аудит Пункт 2: Легковесное сохранение только последнего канала без сериализации JSON на каждом шаге
+    private fun saveLastChannelOnly() {
+        getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putString("last_channel_url", lastSavedChannelUrl)
+            .apply()
     }
 
     private fun saveState() {
@@ -3535,7 +3652,7 @@ class MainActivity : AppCompatActivity() {
             .putString("playlists_json", arr.toString())
             .putString("custom_cats_json", customCatJson.toString())
             .putInt("active_playlist", activePlaylistIndex)
-            .putInt("buffer_level", bufferLevel)
+            .putInt("buffer_level_v33", bufferLevel)
             .putInt("decoder_mode", decoderMode)
             .putInt("theme_index", themeIndex.coerceIn(0, themes.lastIndex))
             .putInt("ui_scale_step_v27", uiScaleStep)
@@ -3560,14 +3677,14 @@ class MainActivity : AppCompatActivity() {
             .putStringSet("favorites", favoriteUrls.toSet())
             .putStringSet("top_urls", topUrls.toSet())
             .putStringSet("manual_disabled_urls_v19", manualDisabledUrls.toSet())
-            .putStringSet("auto_disabled_urls_v30", autoDisabledUrls.toSet())
+            .putStringSet("auto_disabled_urls_v33", autoDisabledUrls.toSet())
             .putStringSet("disabled_cats", disabledCategories.toSet())
             .apply()
     }
 
     private fun loadSavedState() {
         val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
-        bufferLevel = prefs.getInt("buffer_level", 2)
+        bufferLevel = prefs.getInt("buffer_level_v33", 1)
         decoderMode = prefs.getInt("decoder_mode", 1)
         themeIndex = prefs.getInt("theme_index", 0).coerceIn(0, themes.lastIndex)
         controlMode = prefs.getInt("control_mode_v13", 0)
@@ -3598,7 +3715,7 @@ class MainActivity : AppCompatActivity() {
         favoriteUrls.clear(); favoriteUrls.addAll((prefs.getStringSet("favorites", emptySet()) ?: emptySet()).filter(cleanFilter))
         topUrls.clear(); topUrls.addAll((prefs.getStringSet("top_urls", emptySet()) ?: emptySet()).filter(cleanFilter))
         manualDisabledUrls.clear(); manualDisabledUrls.addAll(prefs.getStringSet("manual_disabled_urls_v19", emptySet()) ?: emptySet())
-        autoDisabledUrls.clear(); autoDisabledUrls.addAll(prefs.getStringSet("auto_disabled_urls_v30", emptySet()) ?: emptySet())
+        autoDisabledUrls.clear(); autoDisabledUrls.addAll(prefs.getStringSet("auto_disabled_urls_v33", emptySet()) ?: emptySet())
         disabledCategories.clear(); disabledCategories.addAll(prefs.getStringSet("disabled_cats", emptySet()) ?: emptySet())
 
         customCategoryMap.clear()
@@ -3744,7 +3861,7 @@ class MainActivity : AppCompatActivity() {
         preloaderExecutor.shutdownNow()
         uiHandler.removeCallbacksAndMessages(null)
         try { loudnessEnhancer?.release() } catch (_: Exception) {}
-        try { dualPipPlayer?.release() } catch (_: Exception) {}
-        try { player?.release() } catch (_: Exception) {}
+        try { dualPipPlayer?.stop(); dualPipPlayer?.release() } catch (_: Exception) {}
+        try { player?.stop(); player?.release() } catch (_: Exception) {}
     }
 }
