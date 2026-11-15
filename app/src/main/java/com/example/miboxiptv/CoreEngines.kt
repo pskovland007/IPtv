@@ -25,11 +25,11 @@ object CoreEngines {
     private val dohDnsCache = ConcurrentHashMap<String, String>()
 
     val russianSmartTvAgents = listOf(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "VLC/3.0.20 LibVLC/3.0.20",
+        "Wink/1.44.0 (AndroidTV; Android 11; Xiaomi Mi Box S)",
         "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Version/6.5 TV Safari/537.36",
         "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.5359.211 Safari/537.36 WebAppManager",
-        "Wink/1.44.0 (AndroidTV; Android 11; Xiaomi Mi Box S)",
-        "VLC/3.0.20 LibVLC/3.0.20"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     )
 
     fun installTrustAllSsl() {
@@ -46,9 +46,22 @@ object CoreEngines {
         } catch (_: Exception) {}
     }
 
+    fun isSingleSessionTokenUrl(urlStr: String): Boolean {
+        val l = urlStr.lowercase()
+        return l.contains("rostelekom.xyz") || l.contains("/iptv/")
+    }
+
     fun headersForStreamUrl(urlStr: String): Map<String, String> {
         val clean = urlStr.substringBefore("#")
         val lUrl = clean.lowercase()
+        if (isSingleSessionTokenUrl(lUrl)) {
+            return mapOf(
+                "Accept" to "*/*",
+                "Connection" to "close",
+                "Cache-Control" to "no-cache",
+                "Pragma" to "no-cache"
+            )
+        }
         val parsedOrigin = try {
             val u = URL(clean)
             "${u.protocol}://${u.host}"
@@ -56,8 +69,6 @@ object CoreEngines {
             "https://smotrim.ru"
         }
         val (origin, referer) = when {
-            lUrl.contains("rostelekom.xyz") ->
-                Pair(parsedOrigin, "$parsedOrigin/")
             lUrl.contains("vgtrk") || lUrl.contains("smotrim") || lUrl.contains("mediavitrina") ->
                 Pair("https://smotrim.ru", "https://smotrim.ru/")
             lUrl.contains("1tv") || lUrl.contains("1internet") ->
@@ -91,8 +102,8 @@ object CoreEngines {
             val dohUrl = "https://1.1.1.1/dns-query?name=$host&type=A"
             val conn = (URL(dohUrl).openConnection() as HttpURLConnection).apply {
                 setRequestProperty("Accept", "application/dns-json")
-                connectTimeout = 2800
-                readTimeout = 2800
+                connectTimeout = 2500
+                readTimeout = 2500
             }
             if (conn.responseCode == 200) {
                 val body = conn.inputStream.bufferedReader().readText()
@@ -117,7 +128,7 @@ object CoreEngines {
         return try { InetAddress.getByName(host).hostAddress } catch (_: Exception) { null }
     }
 
-    fun openStreamWithBypass(urlStr: String, userAgentIndex: Int, dohEnabled: Boolean, timeoutMs: Int = 10000): InputStream {
+    fun openStreamWithBypass(urlStr: String, userAgentIndex: Int, dohEnabled: Boolean, timeoutMs: Int = 8000): InputStream {
         var currentUrl = urlStr.substringBefore("#")
         var redirects = 0
         while (redirects < 6) {
@@ -158,6 +169,13 @@ object CoreEngines {
         return cleaned.ifEmpty { rawName.trim() }
     }
 
+    fun isRegionalTimeShiftDuplicate(name: String): Boolean {
+        val low = name.lowercase()
+        if (Regex("\\+[1-9]\\b").containsMatchIn(low) || Regex("\\(\\+[1-9]\\)").containsMatchIn(low)) return true
+        val regionalMarkers = listOf("(омск", "(томск", "(владивосток", "(уфа", "(алтай", "(канск", "(абакан", "(иркутск", "(братск", "(пермь", "(элиста", "(белгород", "(липецк", "(тамбов", "(нефтекамск", "(белорецк", "(невинномысск")
+        return regionalMarkers.any { low.contains(it) }
+    }
+
     fun parseXmltvDate(raw: String): Long {
         if (raw.length < 14) return 0L
         return try {
@@ -196,7 +214,6 @@ object CoreEngines {
         if (name.any { it in 'а'..'я' || it in 'А'..'Я' || it == 'ё' || it == 'Ё' }) return true
         val lName = name.lowercase().trim()
         val lUrl = url.lowercase()
-        val lGroup = rawGroup.lowercase()
         if (lUrl.contains(".ru/") || lUrl.contains(".su/") || lUrl.contains(".by/") ||
             lUrl.contains("vgtrk") || lUrl.contains("1tv") || lUrl.contains("ntv") || lUrl.contains("smotrim") ||
             lUrl.contains("tricolor") || lUrl.contains("wink") || lUrl.contains("peers") || lUrl.contains("catcast") ||
@@ -384,7 +401,7 @@ object CoreEngines {
                 if (currentName.isNotEmpty() && !isDeadHost && !isAdultGroup) {
                     var skip = false
                     if (filterBuiltinRules) {
-                        if (isArabicOrIndianChannel(currentName, currentGroup, l)) {
+                        if (isArabicOrIndianChannel(currentName, currentGroup, l) || isRegionalTimeShiftDuplicate(currentName)) {
                             skip = true
                         } else {
                             val mappedCat = mapCategory(currentGroup, currentName, currentRawInfLine, l)
@@ -393,11 +410,9 @@ object CoreEngines {
                                 if (!isStrictRu) skip = true
                             } else {
                                 when (mappedCat) {
-                                    // Детские, Кино и сериалы, Познавательные, Развлечения, Новости и Прочее — строго русскоязычные!
                                     "Детские", "Кино и сериалы", "Познавательные", "Развлечения", "Новости и общие", "Прочее" -> {
                                         if (!isStrictRu) skip = true
                                     }
-                                    // Музыка — русскоязычные + топовые европейские музыкальные каналы
                                     "Музыка" -> {
                                         if (!isAllowedMusicChannel(currentName, l, currentGroup)) skip = true
                                     }
