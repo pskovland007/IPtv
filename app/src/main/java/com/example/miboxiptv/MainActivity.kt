@@ -96,6 +96,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dualCloseBtn: TextView
     private lateinit var nightDimOverlay: View
     private lateinit var crtTurnOffView: CrtTurnOffView
+    private lateinit var singleColumnFrame: FrameLayout
     private lateinit var categoryListView: ListView
     private lateinit var channelRecyclerView: RecyclerView
     private lateinit var channelLayoutManager: LinearLayoutManager
@@ -424,7 +425,6 @@ class MainActivity : AppCompatActivity() {
             }.start()
     }
 
-    // Пункт 3: Плавное уменьшение экрана ТВ через GPU-матрицу (scaleX/scaleY/translationX) без ресайза SurfaceView и без рывков эфира!
     private var isPlayerCurrentlyMini = false
 
     private fun setPlayerMiniPreviewMode(mini: Boolean) {
@@ -466,28 +466,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Пункт 1: Подгонка высоты бокового списка каналов и групп строго под целое число строк
+    private var currentSideListHeightPx = 560
+
     private fun fitSideListsToWholeRows() {
         val dm = resources.displayMetrics
-        val availH = dm.heightPixels - 72
-        val chRowH = if (::channelRvAdapter.isInitialized) channelRvAdapter.getExactRowHeightPx() else (54f * uiScaleFactor()).toInt()
+        val availH = (dm.heightPixels - 72).coerceAtLeast(320)
+        val chRowH = if (::channelRvAdapter.isInitialized) channelRvAdapter.getExactRowHeightPx().coerceAtLeast(38) else (52f * uiScaleFactor()).toInt()
         val exactChRows = (availH / chRowH).coerceAtLeast(5)
         val exactChHeight = exactChRows * chRowH + 16
+        currentSideListHeightPx = exactChHeight
 
-        channelRecyclerView.layoutParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            exactChHeight,
-            Gravity.CENTER_VERTICAL
-        )
+        if (::channelRecyclerView.isInitialized) {
+            val lp = channelRecyclerView.layoutParams as? FrameLayout.LayoutParams
+                ?: FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, exactChHeight, Gravity.CENTER_VERTICAL)
+            lp.width = FrameLayout.LayoutParams.MATCH_PARENT
+            lp.height = exactChHeight
+            lp.gravity = Gravity.CENTER_VERTICAL
+            channelRecyclerView.layoutParams = lp
+        }
 
-        val catRowH = exactModalRowHeightPx()
+        val catRowH = exactModalRowHeightPx().coerceAtLeast(38)
         val exactCatRows = (availH / catRowH).coerceAtLeast(5)
         val exactCatHeight = exactCatRows * catRowH + 16
-        categoryListView.layoutParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            exactCatHeight,
-            Gravity.CENTER_VERTICAL
-        )
+        if (::categoryListView.isInitialized) {
+            val lp = categoryListView.layoutParams as? FrameLayout.LayoutParams
+                ?: FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, exactCatHeight, Gravity.CENTER_VERTICAL)
+            lp.width = FrameLayout.LayoutParams.MATCH_PARENT
+            lp.height = exactCatHeight
+            lp.gravity = Gravity.CENTER_VERTICAL
+            categoryListView.layoutParams = lp
+        }
     }
 
     private fun adjustInfoPanelMarginForDualStream() {
@@ -667,7 +675,10 @@ class MainActivity : AppCompatActivity() {
         signalContainer.animate().translationX(-hx).translationY(hy).setDuration(900L).start()
     }
 
+    // Синхронное сохранение последнего канала (.commit()) перед выключением кинескопа!
     private fun powerOffAppWithCrtEffect() {
+        saveLastChannelOnly(syncCommit = true)
+        saveState(syncCommit = true)
         closeAllMenus()
         try { player?.stop() } catch (_: Exception) {}
         try { dualPipPlayer?.stop() } catch (_: Exception) {}
@@ -852,7 +863,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Пункт 5: Мягкая прозрачность крайних иконок карусели без артефактов шейдера FadingEdge
     private fun updateCarouselEdgeTransforms() {
         val svW = carouselScrollView.width
         if (svW <= 0) return
@@ -1007,7 +1017,7 @@ class MainActivity : AppCompatActivity() {
         }
         sidePanel.addView(leftIconRail)
 
-        val singleColumnFrame = FrameLayout(this).apply {
+        singleColumnFrame = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
         }
 
@@ -1268,7 +1278,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Пункт 5: Плавная Карусель без FadingEdge-артефактов, с широкими подписями и умной центровкой активной кнопки
         carouselScrollView = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false; visibility = View.GONE
             isHorizontalFadingEdgeEnabled = false
@@ -1359,7 +1368,6 @@ class MainActivity : AppCompatActivity() {
         subModalInputContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         subModalOverlay.addView(subModalInputContainer)
 
-        // Пункт 2: Включён постоянный видимый ползунок прокрутки справа и точная высота целых строк
         subModalList = ListView(this).apply {
             choiceMode = ListView.CHOICE_MODE_NONE; divider = null; dividerHeight = 0; overScrollMode = View.OVER_SCROLL_NEVER
             isVerticalScrollBarEnabled = true
@@ -1614,15 +1622,21 @@ class MainActivity : AppCompatActivity() {
         centerCard?.requestFocus()
     }
 
-    // Пункт 2: Сохранение точной позиции курсора и скролла при изменении любого параметра кнопкой OK
+    // Пункт 4: При нажатии OK на 3-й строке (например, Прозрачность) сохраняем точное смещение selectedRowTopPx и НЕ вызываем setSelection(targetPos), чтобы строка не улетала наверх!
     private fun updateSubModalListItems(newItems: List<String>, smoothToggle: Boolean = false, preservePositionIndex: Int = -1) {
-        val firstVis = subModalList.firstVisiblePosition
-        val topOffset = subModalList.getChildAt(0)?.top ?: 8
         val targetPos = when {
             preservePositionIndex in newItems.indices -> preservePositionIndex
             subModalHighlightedPos in newItems.indices -> subModalHighlightedPos
             else -> 0
         }
+        val firstVis = subModalList.firstVisiblePosition
+        val selectedChildIdx = targetPos - firstVis
+        val selectedRowTopPx = if (smoothToggle && selectedChildIdx in 0 until subModalList.childCount) {
+            subModalList.getChildAt(selectedChildIdx)?.top ?: 8
+        } else {
+            subModalList.getChildAt(0)?.top ?: 8
+        }
+
         subModalHighlightedPos = targetPos
         animateNextSubModalChange = smoothToggle
         subModalItems.clear()
@@ -1630,19 +1644,20 @@ class MainActivity : AppCompatActivity() {
         fitSubModalListToWholeRows(newItems.size)
         subModalAdapter.notifyDataSetChanged()
         updateSubModalTitleWithCounter()
+
         subModalList.post {
             animateNextSubModalChange = false
             if (newItems.isNotEmpty()) {
                 if (smoothToggle) {
-                    subModalList.setSelectionFromTop(firstVis, topOffset)
+                    subModalList.setSelectionFromTop(targetPos, selectedRowTopPx)
+                } else {
+                    subModalList.setSelection(targetPos)
                 }
-                subModalList.setSelection(targetPos)
                 refreshSimpleListHighlightInPlace(subModalList, targetPos)
             }
         }
     }
 
-    // Пункт 2: Высота списка настроек всегда кратна целой строке (никаких разрезанных строк внизу!)
     private fun fitSubModalListToWholeRows(itemCount: Int) {
         val dm = resources.displayMetrics
         val rowH = exactModalRowHeightPx()
@@ -1819,8 +1834,8 @@ class MainActivity : AppCompatActivity() {
 
             focusedChannelPos = targetPos
             channelRvAdapter.submitChannels(displayedChannels.toList(), targetPos)
-            val rowH = channelRvAdapter.getExactRowHeightPx()
-            val centerOffset = ((channelRecyclerView.layoutParams.height / 2) - (rowH / 2)).coerceAtLeast(0)
+            val rowH = channelRvAdapter.getExactRowHeightPx().coerceAtLeast(38)
+            val centerOffset = ((currentSideListHeightPx / 2) - (rowH / 2)).coerceAtLeast(0)
             channelLayoutManager.scrollToPositionWithOffset(targetPos, centerOffset)
             channelRecyclerView.post {
                 val vh = channelRecyclerView.findViewHolderForAdapterPosition(targetPos)
@@ -1879,7 +1894,14 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     splashOverlay.animate().alpha(0f).setDuration(450L).withEndAction {
                         splashOverlay.visibility = View.GONE
-                        if (controlMode == 0) showFirstRunControlPicker(forceShow = true)
+                        if (controlMode == 0) {
+                            showFirstRunControlPicker(forceShow = true)
+                        } else if (currentChannel != null && showChannelBannerOnSwitch && menuHistory.isEmpty()) {
+                            val ch = currentChannel!!
+                            val topBadge = if (topUrls.contains(ch.url)) "▲ " else ""
+                            val star = if (favoriteUrls.contains(ch.url)) "★ " else ""
+                            showBanner(topBadge + star + ch.name + "  •  " + effectiveCategory(ch))
+                        }
                     }.start()
                 }
             }
@@ -2059,7 +2081,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Аудит Пункт 6: Полноценный HttpDataSource с заголовками Referer/Origin для второго экрана PiP
     private fun startDualStreamChannel(ch: Channel) {
         try { dualPipPlayer?.stop(); dualPipPlayer?.release() } catch (_: Exception) {}
         dualStreamChannel = ch
@@ -2298,7 +2319,6 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    // Пункт 2: Раздел «Общие» с сохранением позиции курсора (keepIndex) при нажатии OK и целыми строками
     private fun openMoreSettingsSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
         setSubModalHeaderTitle("Общие настройки")
         subModalInputContainer.visibility = View.GONE
@@ -2440,7 +2460,7 @@ class MainActivity : AppCompatActivity() {
             if (!isWatchdogTickerActive) return
             try {
                 watchdogTickCounter++
-                if ( watchdogTickCounter % 20 == 0) stepPixelOrbiter()
+                if (watchdogTickCounter % 20 == 0) stepPixelOrbiter()
 
                 clockTextView.text = timeFmtTicker.format(Date())
                 updateSignalIndicator()
@@ -2451,7 +2471,6 @@ class MainActivity : AppCompatActivity() {
                     refreshPanelBackgroundsOnly()
                 }
 
-                // Анти-бан Watchdog: если поток реально завис (STATE_BUFFERING с 0 мс буфера или кадр стоит 9 сек), делаем чистый stop() -> prepare()
                 val p = player
                 if (p != null && currentChannel != null) {
                     val state = p.playbackState
@@ -2511,7 +2530,6 @@ class MainActivity : AppCompatActivity() {
         httpDataSourceFactory?.setDefaultRequestProperties(hdrs)
     }
 
-    // Жёсткий сброс зависшего TCP-сокета через p.stop() перед переподключением
     private fun reconnectCurrentStreamSilently() {
         val ch = currentChannel ?: return
         val p = player ?: return
@@ -2542,7 +2560,6 @@ class MainActivity : AppCompatActivity() {
             .build()
     }
 
-    // Честная индикация: при пустом буфере (bufMs < 150) в STATE_BUFFERING горит 1 красная палочка, а не 2 жёлтые!
     private fun updateSignalIndicator(): Int {
         val p = player
         val state = p?.playbackState ?: Player.STATE_IDLE
@@ -2571,7 +2588,6 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release(); loudnessEnhancer = null } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
 
-        // Анти-бан конфигурация буфера: умеренный запас вперёд (6–16 сек), чтобы не вызывать Rate-Limit на сервере rostelekom.xyz!
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
             0 -> listOf(4500, 10000, 450, 900)
             1 -> listOf(6500, 14000, 500, 1100)
@@ -3101,7 +3117,6 @@ class MainActivity : AppCompatActivity() {
         if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
     }
 
-    // Аудит Пункт 1: Защита односессионного ключа при запуске «Теста каналов» (каналы rostelekom.xyz не долбятся в 8 потоков и не банят ключ!)
     private fun startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>) {
         val targetChannels = rawTargetChannels.filter { !manualDisabledUrls.contains(it.url) }
         if (isAnalyzerRunning || targetChannels.isEmpty()) return
@@ -3353,13 +3368,14 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
-    // Аудит Пункт 3: Мгновенный показ встроенного каталога за 0.05 сек + параллельная догрузка внешних баз в 4 потока
+    // Сохранение targetStartupUrl при старте, чтобы не перезатирать последний канал на «Первый канал» до догрузки внешних баз!
     private fun loadActivePlaylist(autoPlayLast: Boolean) {
         ensureDefaultPlaylists()
         val entry = playlists[activePlaylistIndex]
         val myGen = ++playlistLoadGeneration
         val isBuiltin = entry.source == "BUILTIN_OPEN_RU" || entry.source == "BUILTIN_STRICT_RU_ONLY"
         val strictRuOnly = entry.source == "BUILTIN_STRICT_RU_ONLY"
+        val requestedStartupUrl = if (autoPlayLast) lastSavedChannelUrl else ""
 
         if (isBuiltin) {
             val initialBuiltin = mutableListOf<Channel>()
@@ -3378,11 +3394,13 @@ class MainActivity : AppCompatActivity() {
             updateCategoriesList()
             val currentList = allChannels.filter { isChannelActive(it) }
             val cats = activeCategoryList()
+            val matchedInBuiltin = if (requestedStartupUrl.isNotEmpty()) currentList.firstOrNull { it.url == requestedStartupUrl } else null
+
             if (currentList.isNotEmpty()) {
-                val targetCh = (if (autoPlayLast && lastSavedChannelUrl.isNotEmpty()) currentList.firstOrNull { it.url == lastSavedChannelUrl } else null) ?: currentList[0]
+                val targetCh = matchedInBuiltin ?: currentList[0]
                 selectCategory(cats.indexOf(effectiveCategory(targetCh)).takeIf { it >= 2 } ?: 1)
                 openChannelsDirectlyWithCurrentFocus = true
-                playChannelObj(targetCh, immediate = true)
+                playChannelObj(targetCh, immediate = true, updateSavedUrl = (matchedInBuiltin != null || requestedStartupUrl.isEmpty()))
             } else {
                 selectCategory(1)
             }
@@ -3423,6 +3441,16 @@ class MainActivity : AppCompatActivity() {
                     allChannels.clear()
                     allChannels.addAll(combined)
                     updateCategoriesList()
+
+                    if (matchedInBuiltin == null && requestedStartupUrl.isNotEmpty()) {
+                        val lateMatch = allChannels.firstOrNull { isChannelActive(it) && it.url == requestedStartupUrl }
+                        if (lateMatch != null) {
+                            val lateCatIdx = activeCategoryList().indexOf(effectiveCategory(lateMatch)).takeIf { it >= 2 } ?: 1
+                            selectCategory(lateCatIdx)
+                            playChannelObj(lateMatch, immediate = true, updateSavedUrl = true)
+                            return@runOnUiThread
+                        }
+                    }
                     if (sidePanel.visibility != View.VISIBLE) {
                         selectCategory(currentCategoryIndex)
                     }
@@ -3463,10 +3491,10 @@ class MainActivity : AppCompatActivity() {
                     val currentList = allChannels.filter { isChannelActive(it) }
                     val cats = activeCategoryList()
                     if (currentList.isNotEmpty()) {
-                        val targetCh = (if (autoPlayLast && lastSavedChannelUrl.isNotEmpty()) currentList.firstOrNull { it.url == lastSavedChannelUrl } else null) ?: currentList[0]
+                        val targetCh = (if (requestedStartupUrl.isNotEmpty()) currentList.firstOrNull { it.url == requestedStartupUrl } else null) ?: currentList[0]
                         selectCategory(cats.indexOf(effectiveCategory(targetCh)).takeIf { it >= 2 } ?: 1)
                         openChannelsDirectlyWithCurrentFocus = true
-                        playChannelObj(targetCh, immediate = true)
+                        playChannelObj(targetCh, immediate = true, updateSavedUrl = true)
                     } else selectCategory(1)
                 }
             } catch (_: Exception) {}
@@ -3539,7 +3567,6 @@ class MainActivity : AppCompatActivity() {
         saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
     }
 
-    // Принудительный player?.stop() перед запуском нового канала мгновенно закрывает старую сессию на сервере rostelekom.xyz[cite: 1]!
     private val executeDebouncedPlayRunnable = Runnable {
         val target = pendingDebouncedChannel ?: return@Runnable
         try {
@@ -3553,18 +3580,20 @@ class MainActivity : AppCompatActivity() {
         if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 2200L)
     }
 
-    private fun playChannelObj(channel: Channel, immediate: Boolean = false, silentSwap: Boolean = false) {
+    private fun playChannelObj(channel: Channel, immediate: Boolean = false, silentSwap: Boolean = false, updateSavedUrl: Boolean = true) {
         val prevPlayingUrl = currentChannel?.url
         if (!silentSwap && currentChannel != null && prevPlayingUrl != channel.url) {
             previousChannel = currentChannel
         }
         currentChannel = channel
         pendingDebouncedChannel = channel
-        lastSavedChannelUrl = channel.url
+        if (updateSavedUrl) {
+            lastSavedChannelUrl = channel.url
+            saveLastChannelOnly(syncCommit = true)
+        }
         silentFallbackAttemptedForUrl = ""
         lowSignalStuckSeconds = 0
         consecutiveDropFailures = 0
-        saveLastChannelOnly()
 
         if (::channelRvAdapter.isInitialized) {
             val oldIdx = displayedChannels.indexOfFirst { it.url == prevPlayingUrl }
@@ -3585,7 +3614,7 @@ class MainActivity : AppCompatActivity() {
         val (epg, _) = getCurrentAndNextEpg(channel)
         val epgLine = if (epg != null) "\n🎬 " + epg.title else ""
 
-        if (!silentSwap && menuHistory.isEmpty() && showChannelBannerOnSwitch) {
+        if (!silentSwap && menuHistory.isEmpty() && showChannelBannerOnSwitch && splashOverlay.visibility != View.VISIBLE) {
             showBanner(topBadge + star + channel.name + "  •  " + effectiveCategory(channel) + epgLine)
         } else {
             currentChannelBanner.visibility = View.GONE
@@ -3599,8 +3628,9 @@ class MainActivity : AppCompatActivity() {
 
     private val preloadNeighborsRunnable = Runnable { currentChannel?.let { preloadNeighboringChannels(it) } }
 
+    // Пункт 2: Баннер никогда не показывается поверх заставки с глазом (splashOverlay)
     private fun showBanner(text: String) {
-        if (menuHistory.isNotEmpty() || !showChannelBannerOnSwitch) {
+        if (menuHistory.isNotEmpty() || !showChannelBannerOnSwitch || splashOverlay.visibility == View.VISIBLE) {
             currentChannelBanner.visibility = View.GONE
             return
         }
@@ -3615,7 +3645,6 @@ class MainActivity : AppCompatActivity() {
         currentChannelBanner.translationX = 0f
         currentChannelBanner.translationY = 14f
         currentChannelBanner.visibility = View.VISIBLE
-        currentChannelBanner.bringToFront()
         currentChannelBanner.animate()
             .translationY(0f)
             .setDuration(190L)
@@ -3631,15 +3660,16 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    // Аудит Пункт 2: Легковесное сохранение только последнего канала без сериализации JSON на каждом шаге
-    private fun saveLastChannelOnly() {
-        getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
+    // Пункт 3: Синхронная запись последнего канала (.commit()) гарантирует сохранение даже перед exitProcess(0)
+    private fun saveLastChannelOnly(syncCommit: Boolean = false) {
+        if (lastSavedChannelUrl.isEmpty()) return
+        val editor = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
             .edit()
             .putString("last_channel_url", lastSavedChannelUrl)
-            .apply()
+        if (syncCommit) editor.commit() else editor.apply()
     }
 
-    private fun saveState() {
+    private fun saveState(syncCommit: Boolean = false) {
         val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
         val arr = JSONArray()
         for (p in playlists) {
@@ -3648,7 +3678,7 @@ class MainActivity : AppCompatActivity() {
         }
         val customCatJson = JSONObject()
         for ((u, c) in customCategoryMap) customCatJson.put(u, c)
-        prefs.edit()
+        val editor = prefs.edit()
             .putString("playlists_json", arr.toString())
             .putString("custom_cats_json", customCatJson.toString())
             .putInt("active_playlist", activePlaylistIndex)
@@ -3679,7 +3709,7 @@ class MainActivity : AppCompatActivity() {
             .putStringSet("manual_disabled_urls_v19", manualDisabledUrls.toSet())
             .putStringSet("auto_disabled_urls_v33", autoDisabledUrls.toSet())
             .putStringSet("disabled_cats", disabledCategories.toSet())
-            .apply()
+        if (syncCommit) editor.commit() else editor.apply()
     }
 
     private fun loadSavedState() {
@@ -3847,6 +3877,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        saveLastChannelOnly(syncCommit = true)
         stopClockAndWatchdogUpdater()
         player?.pause()
         dualPipPlayer?.pause()
@@ -3854,6 +3885,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        saveLastChannelOnly(syncCommit = true)
         isAnalyzerRunning = false
         stopClockAndWatchdogUpdater()
         alphaAnimator?.cancel()
