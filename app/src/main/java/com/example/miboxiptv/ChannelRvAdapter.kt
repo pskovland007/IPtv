@@ -1,12 +1,10 @@
 package com.example.miboxiptv
 
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.recyclerview.widget.RecyclerView
@@ -42,7 +40,7 @@ class ChannelRvAdapter(
 
     fun getExactRowHeightPx(): Int {
         val scale = getUiScaleFactor()
-        return (54f * scale).toInt()
+        return (52f * scale).toInt()
     }
 
     fun submitChannels(newList: List<Channel>, initialFocusPos: Int) {
@@ -85,30 +83,37 @@ class ChannelRvAdapter(
             rowView.titleView.includeFontPadding = false
 
             rowView.setOnFocusChangeListener { _, hasFocus ->
-                val pos = bindingAdapterPosition
-                if (pos == RecyclerView.NO_POSITION) return@setOnFocusChangeListener
+                @Suppress("DEPRECATION")
+                val pos = adapterPosition
+                if (pos == RecyclerView.NO_POSITION || pos !in 0 until items.size) return@setOnFocusChangeListener
                 if (hasFocus) {
                     val prev = highlightedPos
                     highlightedPos = pos
                     onChannelFocused(pos)
-                    if (prev != pos && prev in 0 until items.size) {
-                        notifyItemChanged(prev)
-                    }
                     bindStyle(items[pos], isSelectedRow = true)
+                    if (prev != pos && prev in 0 until items.size) {
+                        rowView.post {
+                            if (prev in 0 until items.size && prev != highlightedPos) {
+                                try { notifyItemChanged(prev) } catch (_: Exception) {}
+                            }
+                        }
+                    }
                 } else {
                     bindStyle(items[pos], isSelectedRow = false)
                 }
             }
 
             rowView.setOnClickListener {
-                val pos = bindingAdapterPosition
+                @Suppress("DEPRECATION")
+                val pos = adapterPosition
                 if (pos in 0 until items.size) {
                     onChannelClicked(pos, items[pos])
                 }
             }
 
             rowView.setOnLongClickListener {
-                val pos = bindingAdapterPosition
+                @Suppress("DEPRECATION")
+                val pos = adapterPosition
                 if (pos in 0 until items.size) {
                     onChannelLongClicked(pos, items[pos])
                     true
@@ -117,7 +122,8 @@ class ChannelRvAdapter(
 
             rowView.setOnKeyListener { v, keyCode, event ->
                 if (event.action == KeyEvent.ACTION_DOWN) {
-                    val pos = bindingAdapterPosition
+                    @Suppress("DEPRECATION")
+                    val pos = adapterPosition
                     if (pos == RecyclerView.NO_POSITION) return@setOnKeyListener false
                     val rv = v.parent as? RecyclerView
                     when (keyCode) {
@@ -158,35 +164,38 @@ class ChannelRvAdapter(
             val isPlaying = (ch.url == getPlayingUrl())
 
             val rowH = getExactRowHeightPx()
-            rowView.layoutParams = RecyclerView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                rowH
-            )
+            val curLp = rowView.layoutParams
+            if (curLp == null || curLp.height != rowH) {
+                rowView.layoutParams = RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    rowH
+                )
+            }
 
             val badgeW = (44f * scale).toInt()
-            val badgeH = (34f * scale).toInt()
+            val badgeH = (32f * scale).toInt()
             rowView.badgeView.layoutParams = FrameLayout.LayoutParams(
                 badgeW,
                 badgeH,
                 Gravity.START or Gravity.CENTER_VERTICAL
-            ).apply { leftMargin = (12f * scale).toInt() }
+            ).apply { leftMargin = (10f * scale).toInt() }
 
             val monogram = extractMonogram(ch.name)
             rowView.badgeView.text = monogram
-            val fontSp = if (monogram.length >= 2) 9.4f else 10.5f
+            val fontSp = if (monogram.length >= 2) 9.0f else 10.2f
             rowView.badgeView.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSp * scale)
-            badgeBg.cornerRadius = 9f * scale
+            badgeBg.cornerRadius = 8f * scale
             badgeBg.setColor(badgeColorForName(ch.name))
             badgeBg.setStroke(if (isSelectedRow) 2 else 1, if (isSelectedRow) Color.WHITE else Color.parseColor("#55FFFFFF"))
-            rowView.badgeView.background = badgeBg
+            rowView.badgeView.setBackgroundDrawable(badgeBg)
 
             val prefix = (if (isTopUrl(ch.url)) "▲ " else "") + (if (isFavUrl(ch.url)) "★ " else "")
             rowView.titleView.text = prefix + ch.name
             rowView.titleView.typeface = if (isSelectedRow || isPlaying) t.boldFont else t.normalFont
-            rowView.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f * scale)
+            rowView.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.2f * scale)
             rowView.titleView.forceMarqueeActive = isSelectedRow
 
-            val leftTitleMargin = (12f * scale).toInt() + badgeW + (12f * scale).toInt()
+            val leftTitleMargin = (10f * scale).toInt() + badgeW + (12f * scale).toInt()
             val rightTitleMargin = if (isPlaying) (44f * scale).toInt() else (14f * scale).toInt()
             rowView.titleView.layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -199,20 +208,20 @@ class ChannelRvAdapter(
 
             if (isSelectedRow) {
                 rowView.titleView.setTextColor(t.textOnAccent)
-                selectorBg.cornerRadius = 16f * scale
+                selectorBg.cornerRadius = 15f * scale
                 selectorBg.setColor(t.accentColor)
                 selectorBg.setStroke(2, Color.WHITE)
-                rowView.background = selectorBg
+                rowView.setBackgroundDrawable(selectorBg)
             } else {
                 rowView.titleView.setTextColor(if (isPlaying) t.accentColor else t.textPrimaryColor)
-                rowView.background = null
+                rowView.setBackgroundDrawable(null)
             }
 
             if (isPlaying) {
                 rowView.eqView.barColor = if (isSelectedRow) t.textOnAccent else t.accentColor
-                rowView.eqView.visibility = View.VISIBLE
+                rowView.eqView.visibility = android.view.View.VISIBLE
             } else {
-                rowView.eqView.visibility = View.GONE
+                rowView.eqView.visibility = android.view.View.GONE
             }
         }
     }
