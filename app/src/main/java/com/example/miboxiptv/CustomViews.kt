@@ -7,7 +7,6 @@ import android.text.SpannableString
 import android.text.Spanned
 import android.text.TextUtils
 import android.text.style.ReplacementSpan
-import android.util.LruCache
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -46,6 +45,7 @@ class GraphicOrbSpan(private val orbType: Int) : ReplacementSpan() {
             val trackW = 66f; val trackH = 32f
             val left = x + 4f; val topY = cy - trackH / 2f
             rect.set(left, topY, left + trackW, topY + trackH)
+            paint.shader = null
             paint.style = Paint.Style.FILL
             paint.color = if (isOn) Color.parseColor("#00C853") else Color.parseColor("#455A64")
             canvas.drawRoundRect(rect, trackH / 2f, trackH / 2f, paint)
@@ -57,31 +57,56 @@ class GraphicOrbSpan(private val orbType: Int) : ReplacementSpan() {
             canvas.drawCircle(knobX, cy, trackH * 0.39f, paint)
             return
         }
-        val cx = x + 21f; val r = 14.5f
-        val mainColor = when (orbType) {
-            1 -> Color.parseColor("#00E676")
-            2 -> Color.parseColor("#FF5252")
-            4 -> Color.parseColor("#38BDF8")
-            else -> Color.parseColor("#FFD740")
-        }
-        paint.style = Paint.Style.FILL
-        paint.color = Color.argb(75, Color.red(mainColor), Color.green(mainColor), Color.blue(mainColor))
-        canvas.drawCircle(cx, cy, r * 1.34f, paint)
-        paint.color = mainColor
-        canvas.drawCircle(cx, cy, r, paint)
-        paint.color = Color.argb(140, 255, 255, 255)
-        canvas.drawCircle(cx - r * 0.3f, cy - r * 0.3f, r * 0.32f, paint)
 
-        paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.2f; paint.strokeCap = Paint.Cap.ROUND
-        paint.color = Color.parseColor("#101418")
+        val cx = x + 21f
+        val r = 14.5f
+        val (lightHex, mainHex, darkHex) = when (orbType) {
+            1 -> Triple("#80FFC8", "#00E676", "#007E3A")
+            2 -> Triple("#FF9E9E", "#FF5252", "#9E1212")
+            4 -> Triple("#9BE7FF", "#29B6F6", "#02578A")
+            else -> Triple("#FFF099", "#FFD740", "#9E7800")
+        }
+        val mainColor = Color.parseColor(mainHex)
+
+        // 1) Мягкое внешнее свечение (ореол)
+        paint.shader = null
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(65, Color.red(mainColor), Color.green(mainColor), Color.blue(mainColor))
+        canvas.drawCircle(cx, cy, r * 1.28f, paint)
+
+        // 2) Объёмная 3D-сфера через плавный RadialGradient (без грубого белого шарика!)
+        paint.shader = RadialGradient(
+            cx - r * 0.32f,
+            cy - r * 0.35f,
+            r * 1.38f,
+            intArrayOf(Color.parseColor(lightHex), mainColor, Color.parseColor(darkHex)),
+            floatArrayOf(0f, 0.58f, 1f),
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawCircle(cx, cy, r, paint)
+        paint.shader = null
+
+        // 3) Тонкий стеклянный блик-полумесяц по верхнему ободку сферы
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 1.6f
+        paint.color = Color.argb(135, 255, 255, 255)
+        rect.set(cx - r * 0.78f, cy - r * 0.78f, cx + r * 0.78f, cy + r * 0.78f)
+        canvas.drawArc(rect, 200f, 140f, false, paint)
+
+        // 4) Чёткий символ внутри сферы
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3.1f
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeJoin = Paint.Join.ROUND
+        paint.color = Color.parseColor("#0D131A")
         when (orbType) {
             1 -> {
-                canvas.drawLine(cx - 5.5f, cy + 0.5f, cx - 1.2f, cy + 5.0f, paint)
-                canvas.drawLine(cx - 1.2f, cy + 5.0f, cx + 6.2f, cy - 4.6f, paint)
+                canvas.drawLine(cx - 5.2f, cy + 0.4f, cx - 1.0f, cy + 4.8f, paint)
+                canvas.drawLine(cx - 1.0f, cy + 4.8f, cx + 6.0f, cy - 4.4f, paint)
             }
             2 -> {
-                canvas.drawLine(cx - 4.8f, cy - 4.8f, cx + 4.8f, cy + 4.8f, paint)
-                canvas.drawLine(cx + 4.8f, cy - 4.8f, cx - 4.8f, cy + 4.8f, paint)
+                canvas.drawLine(cx - 4.6f, cy - 4.6f, cx + 4.6f, cy + 4.6f, paint)
+                canvas.drawLine(cx + 4.6f, cy - 4.6f, cx - 4.6f, cy + 4.6f, paint)
             }
             4 -> {
                 paint.style = Paint.Style.FILL
@@ -96,11 +121,8 @@ class GraphicOrbSpan(private val orbType: Int) : ReplacementSpan() {
     }
 }
 
-private val statusTextCache = LruCache<String, CharSequence>(256)
-
 fun colorizeStatusText(raw: String): CharSequence {
     if (!raw.contains("[")) return raw
-    statusTextCache.get(raw)?.let { return it }
     val ss = SpannableString(raw)
     var i = 0
     while (i <= raw.length - 3) {
@@ -114,7 +136,6 @@ fun colorizeStatusText(raw: String): CharSequence {
             else -> i++
         }
     }
-    statusTextCache.put(raw, ss)
     return ss
 }
 
