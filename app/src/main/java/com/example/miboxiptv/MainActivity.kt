@@ -1861,7 +1861,7 @@ class MainActivity : AppCompatActivity() {
             .setConnectTimeoutMs(8000)
             .setReadTimeoutMs(8000)
         val pipMediaSourceFactory = DefaultMediaSourceFactory(this).setDataSourceFactory(pipDsFactory)
-        val dp = SimpleSimpleExoPlayer.Builder(this)
+        val dp = SimpleExoPlayer.Builder(this)
             .setMediaSourceFactory(pipMediaSourceFactory)
             .build().apply {
                 volume = 0f
