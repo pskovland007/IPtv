@@ -38,7 +38,7 @@ import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.DefaultLoadControl
 import com.google.android.exoplayer2.DefaultRenderersFactory
 import com.google.android.exoplayer2.SimpleExoPlayer
-import com.google.android.exoplayer2.ExoExoPlaybackException
+import com.google.android.exoplayer2.ExoPlaybackException
 import com.google.android.exoplayer2.source.TrackGroupArray
 import com.google.android.exoplayer2.trackselection.TrackSelectionArray
 import com.google.android.exoplayer2.MediaItem
@@ -2076,7 +2076,7 @@ class MainActivity : AppCompatActivity() {
                 updateSignalIndicator()
                 if (playbackState == Player.STATE_ENDED) reconnectCurrentStreamSilently()
             }
-            override fun onPlayerError(error: ExoExoPlaybackException) {
+            override fun onPlayerError(error: ExoPlaybackException) {
                 userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                 uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 650L)
             }
