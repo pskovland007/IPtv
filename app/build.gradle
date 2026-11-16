@@ -22,8 +22,8 @@ android {
         applicationId "com.example.miboxiptv"
         minSdk 21
         targetSdk 33
-        versionCode 17261
-        versionName "2.7.61"
+        versionCode 17262
+        versionName "2.7.62"
     }
 
     buildTypes {
@@ -58,3 +58,30 @@ dependencies {
     implementation 'androidx.media3:media3-ui:1.2.1'
     implementation 'androidx.media3:media3-datasource:1.2.1'
 }
+
+tasks.register("cleanDuplicateMainActivity") {
+    doLast {
+        def mainFile = file("src/main/java/com/example/miboxiptv/MainActivity.kt")
+        if (mainFile.exists()) {
+            def text = mainFile.getText("UTF-8")
+            int lastPkg = text.lastIndexOf("package com.example.miboxiptv")
+            if (lastPkg > 0) {
+                text = text.substring(lastPkg)
+            }
+            def endMarker = "try { player?.stop(); player?.release() } catch (_: Exception) {}"
+            int endIdx = text.indexOf(endMarker)
+            if (endIdx > 0) {
+                int closeMethod = text.indexOf("}", endIdx + endMarker.length())
+                if (closeMethod > 0) {
+                    int closeClass = text.indexOf("}", closeMethod + 1)
+                    if (closeClass > 0) {
+                        text = text.substring(0, closeClass + 1) + "\n"
+                    }
+                }
+            }
+            mainFile.write(text, "UTF-8")
+        }
+    }
+}
+
+preBuild.dependsOn("cleanDuplicateMainActivity")
