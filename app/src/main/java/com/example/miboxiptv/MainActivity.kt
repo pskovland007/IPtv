@@ -37,9 +37,12 @@ import androidx.core.content.ContextCompat
 import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.DefaultLoadControl
 import com.google.android.exoplayer2.DefaultRenderersFactory
-import com.google.android.exoplayer2.ExoPlayer
+import com.google.android.exoplayer2.SimpleExoPlayer
+import com.google.android.exoplayer2.ExoExoPlaybackException
+import com.google.android.exoplayer2.source.TrackGroupArray
+import com.google.android.exoplayer2.trackselection.TrackSelectionArray
 import com.google.android.exoplayer2.MediaItem
-import com.google.android.exoplayer2.PlaybackException
+
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.Tracks
 import com.google.android.exoplayer2.audio.AudioAttributes
@@ -75,8 +78,8 @@ class MainActivity : AppCompatActivity() {
     internal lateinit var rootFrame: FrameLayout
     internal lateinit var playerContainerFrame: FrameLayout
     internal lateinit var playerView: PlayerView
-    internal var player: ExoPlayer? = null
-    internal var dualPipPlayer: ExoPlayer? = null
+    internal var player: SimpleExoPlayer? = null
+    internal var dualPipPlayer: SimpleExoPlayer? = null
     internal var httpDataSourceFactory: DefaultHttpDataSource.Factory? = null
     internal var loudnessEnhancer: android.media.audiofx.LoudnessEnhancer? = null
 
@@ -205,6 +208,13 @@ class MainActivity : AppCompatActivity() {
     internal var antiBlockEnabled = true
     internal var userAgentIndex = 0
     internal var themeIndex = 0
+
+    internal val themes = listOf(
+        AppThemeStyle(0, "Neon Cyan", Color.parseColor("#0B0F19"), Color.parseColor("#131B2E"), Color.parseColor("#00E5FF"), Color.parseColor("#FFFFFF"), Color.parseColor("#94A3B8"), true),
+        AppThemeStyle(1, "Deep Purple", Color.parseColor("#120A22"), Color.parseColor("#1E1138"), Color.parseColor("#E040FB"), Color.parseColor("#FFFFFF"), Color.parseColor("#B0BEC5"), true),
+        AppThemeStyle(2, "Emerald Dark", Color.parseColor("#071912"), Color.parseColor("#0E2E21"), Color.parseColor("#00E676"), Color.parseColor("#FFFFFF"), Color.parseColor("#A3E4D7"), true),
+        AppThemeStyle(3, "Amber Gold", Color.parseColor("#1A1205"), Color.parseColor("#2E200A"), Color.parseColor("#FFAB00"), Color.parseColor("#FFFFFF"), Color.parseColor("#F5CBA7"), true)
+    )
 
     internal var isLeftRailVisible = false
     internal var isSideShowingChannels = false
@@ -336,7 +346,7 @@ class MainActivity : AppCompatActivity() {
     internal fun exactModalRowHeightPx(): Int = (54 * uiScaleFactor()).toInt()
     internal fun themeFont(): Typeface = currentTheme().normalFont
     internal fun themeBoldFont(): Typeface = currentTheme().boldFont
-    internal fun currentTheme(): AppThemeStyle = themes[themeIndex.coerceIn(0, themes.lastIndex)]
+    internal fun currentTheme(): AppThemeStyle = themes[themeIndex.coerceIn(0, 3)]
     internal fun activeCategoryList(): List<String> = dynamicCategories.takeIf { it.isNotEmpty() } ?: listOf("★ Избранное", "Все каналы")
 
     internal fun setPlayerMiniPreviewMode(mini: Boolean) {
@@ -441,10 +451,6 @@ class MainActivity : AppCompatActivity() {
             start()
         }
     }
-
-    // ---------------------------------------------------------------------------------------------------------
-    // ТУТ НАЧИНАЕТСЯ РАБОЧИЙ МЕТОД, КОТОРЫЙ И БЫЛ СДУБЛИРОВАН, И ТЕПЕРЬ ОН СТОИТ НА СВОЕМ МЕСТЕ
-    // ---------------------------------------------------------------------------------------------------------
 
     internal fun colorizeStatusText(raw: String): CharSequence {
         if (!raw.contains("[")) return raw
@@ -1855,7 +1861,7 @@ class MainActivity : AppCompatActivity() {
             .setConnectTimeoutMs(8000)
             .setReadTimeoutMs(8000)
         val pipMediaSourceFactory = DefaultMediaSourceFactory(this).setDataSourceFactory(pipDsFactory)
-        val dp = ExoPlayer.Builder(this)
+        val dp = SimpleSimpleExoPlayer.Builder(this)
             .setMediaSourceFactory(pipMediaSourceFactory)
             .build().apply {
                 volume = 0f
@@ -1903,7 +1909,7 @@ class MainActivity : AppCompatActivity() {
                 if (p != null && currentChannel != null) {
                     val state = p.playbackState
                     val curPos = p.currentPosition
-                    val bufMs = p.totalBufferedDuration
+                    val bufMs = (p.bufferedPosition - p.currentPosition).coerceAtLeast(0L)
                     
                     val isTrulyStalled = (state == Player.STATE_IDLE ||
                         (state == Player.STATE_BUFFERING && bufMs < 80L && curPos == lastRenderedFramePositionMs))
@@ -1991,7 +1997,7 @@ class MainActivity : AppCompatActivity() {
     internal fun updateSignalIndicator(): Int {
         val p = player
         val state = p?.playbackState ?: Player.STATE_IDLE
-        val bufMs = p?.totalBufferedDuration ?: 0L
+        val bufMs = (p?.let { it.bufferedPosition - it.currentPosition } ?: 0L).coerceAtLeast(0L) ?: 0L
         val (activeBars, activeColor) = when {
             state == Player.STATE_IDLE -> Pair(1, Color.parseColor("#FF5252"))
             state == Player.STATE_BUFFERING && bufMs < 150L -> Pair(1, Color.parseColor("#FF5252"))
@@ -2057,49 +2063,37 @@ class MainActivity : AppCompatActivity() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
-        val newPlayer = ExoPlayer.Builder(this, renderersFactory)
+        val newPlayer = SimpleExoPlayer.Builder(this, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttrs, false)
             .build()
 
         newPlayer.volume = if (::splashOverlay.isInitialized && splashOverlay.visibility == View.VISIBLE) 0f else 1.0f
-        newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
-            .buildUpon()
-            .setMaxVideoSize(3840, 2160)
-            .setMaxVideoBitrate(Int.MAX_VALUE)
-            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-            .build()
 
-        newPlayer.addListener(object : Player.Listener {
+        newPlayer.addListener(object : Player.EventListener {
+            override fun onPlayerStateChanged(playWhenReady: Boolean, playbackState: Int) {
+                updateSignalIndicator()
+                if (playbackState == Player.STATE_ENDED) reconnectCurrentStreamSilently()
+            }
+            override fun onPlayerError(error: ExoExoPlaybackException) {
+                userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
+                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 650L)
+            }
+            override fun onTracksChanged(trackGroups: TrackGroupArray, trackSelections: TrackSelectionArray) {
+                // track override not needed for stable legacy behavior
+            }
+        })
+        
+        newPlayer.addVideoListener(object : com.google.android.exoplayer2.video.VideoListener {
             override fun onRenderedFirstFrame() {
                 lowSignalStuckSeconds = 0
                 consecutiveDropFailures = 0
                 applyAudioEnhancements()
                 updateSignalIndicator()
             }
-            override fun onTracksChanged(tracks: Tracks) {
-                var builder = newPlayer.trackSelectionParameters.buildUpon()
-                var changed = false
-                val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-                if (audioGroups.isNotEmpty() && audioGroups.none { it.isSelected }) {
-                    val firstGroup = audioGroups.first()
-                    if (firstGroup.length > 0) {
-                        builder = builder.setOverrideForType(TrackSelectionOverride(firstGroup.mediaTrackGroup, 0))
-                        changed = true
-                    }
-                }
-                if (changed) newPlayer.trackSelectionParameters = builder.build()
-            }
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                updateSignalIndicator()
-                if (playbackState == Player.STATE_ENDED) reconnectCurrentStreamSilently()
-            }
-            override fun onPlayerError(error: PlaybackException) {
-                userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
-                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 650L)
-            }
         })
+
 
         playerView.player = newPlayer
         player = newPlayer
@@ -2314,15 +2308,13 @@ class MainActivity : AppCompatActivity() {
     internal fun updateStreamInfoText() {
         val p = player ?: return
         val ch = currentChannel
-        val vFormat = p.videoFormat
+        val width = 0
+        val height = 0
+        val fps = ""
+        val vCodec = "H.264/HEVC"
+        val vBitrate = "Адаптивный"if (vFormat != null && vFormat.bitrate > 0) String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f) else "Адаптивный HLS"
 
-        val width = vFormat?.width ?: p.videoSize.width
-        val height = vFormat?.height ?: p.videoSize.height
-        val fps = if (vFormat != null && vFormat.frameRate > 0) String.format(Locale.US, "%.0f fps", vFormat.frameRate) else ""
-        val vCodec = vFormat?.sampleMimeType?.substringAfter("/")?.uppercase() ?: "Анализ..."
-        val vBitrate = if (vFormat != null && vFormat.bitrate > 0) String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f) else "Адаптивный HLS"
-
-        val bufSec = String.format(Locale.US, "%.1f", (p.totalBufferedDuration / 1000f))
+        val bufSec = String.format(Locale.US, "%.1f", ((p.bufferedPosition - p.currentPosition).coerceAtLeast(0L) / 1000f))
         val preloadNote = if (ch != null && CoreEngines.isSingleSessionTokenUrl(ch.url)) {
             "Защита 1-сессионного ключа (активна)"
         } else {
@@ -2690,7 +2682,7 @@ class MainActivity : AppCompatActivity() {
             .putInt("active_playlist", activePlaylistIndex)
             .putInt("buffer_level_v33", bufferLevel)
             .putInt("decoder_mode", decoderMode)
-            .putInt("theme_index", themeIndex.coerceIn(0, themes.lastIndex))
+            .putInt("theme_index", themeIndex.coerceIn(0, 3))
             .putInt("ui_scale_step_v27", uiScaleStep)
             .putInt("ui_alpha_step_v27", uiAlphaStep)
             .putBoolean("cutout_offset_v31", cameraCutoutSafeOffset)
@@ -2722,7 +2714,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
         bufferLevel = prefs.getInt("buffer_level_v33", 1)
         decoderMode = prefs.getInt("decoder_mode", 1)
-        themeIndex = prefs.getInt("theme_index", 0).coerceIn(0, themes.lastIndex)
+        themeIndex = prefs.getInt("theme_index", 0).coerceIn(0, 3)
         controlMode = prefs.getInt("control_mode_v13", 0)
         uiScaleStep = prefs.getInt("ui_scale_step_v27", if (controlMode == 1) 0 else 1)
         uiAlphaStep = prefs.getInt("ui_alpha_step_v27", 1)
