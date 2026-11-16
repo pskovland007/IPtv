@@ -2312,7 +2312,7 @@ class MainActivity : AppCompatActivity() {
         val height = 0
         val fps = ""
         val vCodec = "H.264/HEVC"
-        val vBitrate = "Адаптивный"if (vFormat != null && vFormat.bitrate > 0) String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f) else "Адаптивный HLS"
+        val vBitrate = "Адаптивный HLS"
 
         val bufSec = String.format(Locale.US, "%.1f", ((p.bufferedPosition - p.currentPosition).coerceAtLeast(0L) / 1000f))
         val preloadNote = if (ch != null && CoreEngines.isSingleSessionTokenUrl(ch.url)) {
