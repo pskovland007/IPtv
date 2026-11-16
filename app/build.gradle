@@ -22,8 +22,8 @@ android {
         applicationId "com.example.miboxiptv"
         minSdk 21
         targetSdk 33
-        versionCode 17253
-        versionName "2.7.53"
+        versionCode 17260
+        versionName "2.7.60"
     }
 
     buildTypes {
@@ -59,14 +59,14 @@ dependencies {
     implementation 'androidx.media3:media3-datasource:1.2.1'
 }
 
-tasks.register("autoFixCategoryAndChannelClicks") {
+// Оставляем ТОЛЬКО генерацию иконки и ТВ-баннера, чтобы не создавать XML-файлы в папках res вручную.
+// Код .kt файлов этот скрипт больше НЕ трогает!
+tasks.register("ensureAppIcons") {
     doLast {
-        def pkgDir = file("src/main/java/com/example/miboxiptv")
         def resDir = file("src/main/res")
         def drawableDir = new File(resDir, "drawable")
         drawableDir.mkdirs()
 
-        // 1. Векторный баннер и адаптивная иконка
         new File(drawableDir, "tv_banner.png").delete()
         new File(drawableDir, "tv_banner.xml").write('''<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -78,123 +78,4 @@ tasks.register("autoFixCategoryAndChannelClicks") {
     <path android:fillColor="#00A896" android:pathData="M0,112 C120,88 220,108 320,82 L320,180 L0,180 Z" />
     <path android:fillColor="#4A148C" android:pathData="M0,148 C125,125 225,142 320,118 L320,180 L0,180 Z" />
     <path android:fillColor="#AD1457" android:pathData="M0,172 C130,155 230,166 320,148 L320,180 L0,180 Z" />
-    <path android:fillColor="#090C15" android:pathData="M48,90 C95,18 225,18 272,90 C225,162 95,162 48,90 Z" />
-    <path android:fillColor="#E8F1F5" android:pathData="M64,90 C105,30 215,30 256,90 C215,150 105,150 64,90 Z" />
-    <path android:fillColor="#00E5FF" android:pathData="M160,90m-46,0a46,46 0,1 1,92 0a46,46 0,1 1,-92 0" />
-    <path android:fillColor="#00BFA5" android:pathData="M160,90m-38,0a38,38 0,1 1,76 0a38,38 0,1 1,-76 0" />
-    <path android:fillColor="#FFD54F" android:pathData="M160,44 A46,46 0 0,1 206,90 L160,90 Z" />
-    <path android:fillColor="#7C4DFF" android:pathData="M160,136 A46,46 0 0,1 114,90 L160,90 Z" />
-    <path android:fillColor="#05070B" android:pathData="M160,90m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0" />
-    <path android:fillColor="#FFFFFF" android:pathData="M172,78m-6.5,0a6.5,6.5 0,1 1,13 0a6.5,6.5 0,1 1,-13 0" />
-</vector>''', "UTF-8")
-
-        // 2. Исправляем обработку кликов в MainActivity.kt для полноценного выбора категорий и каналов в ListView
-        def mainFile = new File(pkgDir, "MainActivity.kt")
-        if (mainFile.exists()) {
-            def kText = mainFile.getText("UTF-8")
-
-            kText = kText.replace(".coerceIn(0.38f, 0.52f)", ".coerceIn(0.45f, 0.65f)")
-            kText = kText.replace("if (isSideShowingChannels && sidePanel.visibility == View.VISIBLE) return", "")
-
-            int bs = kText.indexOf("categoryAdapter = createRoundedSelectorAdapter(")
-            int be = kText.indexOf("applyCurrentThemeToAllPanels()")
-            if (bs > 0 && be > bs) {
-                def perfectClickBlock = '''categoryAdapter = createRoundedSelectorAdapter(mutableListOf(), 15.5f, true, fixedRowHeight = true) { pos ->
-            !isLeftRailVisible && pos == (if (isSideShowingChannels) focusedChannelPos else focusedCategoryPos)
-        }
-        categoryListView.adapter = categoryAdapter
-
-        categoryListView.setOnItemClickListener { _, _, position, _ ->
-            resetMenuInactivityTimer()
-            if (isSideShowingChannels) {
-                val list = displayedChannels.toList()
-                if (position in list.indices) {
-                    focusedChannelPos = position
-                    playChannelObj(list[position], immediate = true)
-                    if (controlMode != 1) closeAllMenus() else showSideChannelsMode(focusCurrentChannelIfSameGroup = false)
-                }
-            } else {
-                focusedCategoryPos = position
-                currentCategoryIndex = position
-                selectCategory(position)
-                showSideChannelsMode(focusCurrentChannelIfSameGroup = false)
-            }
-        }
-        categoryListView.setOnItemLongClickListener { _, _, position, _ ->
-            resetMenuInactivityTimer()
-            if (isSideShowingChannels) {
-                val list = displayedChannels.toList()
-                if (position in list.indices) {
-                    focusedChannelPos = position
-                    toggleFavorite(list[position])
-                    showSideChannelsMode(focusCurrentChannelIfSameGroup = false)
-                }
-                true
-            } else false
-        }
-        categoryListView.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                resetMenuInactivityTimer()
-                if (isSideShowingChannels) {
-                    focusedChannelPos = position
-                } else {
-                    focusedCategoryPos = position
-                }
-                refreshSimpleListHighlightInPlace(categoryListView, position)
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-        categoryListView.setOnKeyListener { _, keyCode, event ->
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                resetMenuInactivityTimer()
-                val count = categoryAdapter.count
-                val curPos = if (isSideShowingChannels) focusedChannelPos else focusedCategoryPos
-                when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        if (isSideShowingChannels) {
-                            showSideGroupsMode()
-                        } else {
-                            showLeftIconRailFromGroups()
-                        }
-                        return@setOnKeyListener true
-                    }
-                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                        if (isLeftRailVisible) {
-                            hideLeftIconRailToGroups()
-                        } else if (!isSideShowingChannels) {
-                            currentCategoryIndex = focusedCategoryPos.coerceAtLeast(0)
-                            selectCategory(currentCategoryIndex)
-                            showSideChannelsMode(focusCurrentChannelIfSameGroup = false)
-                        } else {
-                            closeAllMenus()
-                        }
-                        return@setOnKeyListener true
-                    }
-                    KeyEvent.KEYCODE_DPAD_UP -> if (count > 0 && curPos <= 0) {
-                        val lastIdx = count - 1
-                        if (isSideShowingChannels) focusedChannelPos = lastIdx else { focusedCategoryPos = lastIdx; currentCategoryIndex = lastIdx; selectCategory(lastIdx) }
-                        categoryListView.setSelection(lastIdx)
-                        refreshSimpleListHighlightInPlace(categoryListView, lastIdx)
-                        return@setOnKeyListener true
-                    }
-                    KeyEvent.KEYCODE_DPAD_DOWN -> if (count > 0 && curPos >= count - 1) {
-                        if (isSideShowingChannels) focusedChannelPos = 0 else { focusedCategoryPos = 0; currentCategoryIndex = 0; selectCategory(0) }
-                        categoryListView.setSelection(0)
-                        refreshSimpleListHighlightInPlace(categoryListView, 0)
-                        return@setOnKeyListener true
-                    }
-                }
-            }
-            false
-        }
-
-        '''
-                kText = kText.substring(0, bs) + perfectClickBlock + kText.substring(be)
-            }
-
-            mainFile.write(kText, "UTF-8")
-        }
-    }
-}
-
-preBuild.dependsOn("autoFixCategoryAndChannelClicks")
+    <path android:fillColor="#090C15" android:pathData="M48,90 C95,18 225,18
