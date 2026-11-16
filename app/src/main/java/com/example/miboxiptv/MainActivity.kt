@@ -44,10 +44,10 @@ import com.google.android.exoplayer2.trackselection.TrackSelectionArray
 import com.google.android.exoplayer2.MediaItem
 
 import com.google.android.exoplayer2.Player
-import com.google.android.exoplayer2.Tracks
+
 import com.google.android.exoplayer2.audio.AudioAttributes
-import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
-import com.google.android.exoplayer2.trackselection.TrackSelectionOverride
+
+
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
 import com.google.android.exoplayer2.ui.PlayerView
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSource
@@ -1860,15 +1860,14 @@ class MainActivity : AppCompatActivity() {
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(8000)
             .setReadTimeoutMs(8000)
-        val pipMediaSourceFactory = DefaultMediaSourceFactory(this).setDataSourceFactory(pipDsFactory)
-        val dp = SimpleExoPlayer.Builder(this)
-            .setMediaSourceFactory(pipMediaSourceFactory)
-            .build().apply {
-                volume = 0f
-                setMediaItem(MediaItem.fromUri(cleanUrl))
-                prepare()
-                play()
-            }
+            
+        val dp = SimpleExoPlayer.Builder(this).build()
+        dp.volume = 0f
+        val mediaSource = com.google.android.exoplayer2.source.ProgressiveMediaSource.Factory(pipDsFactory).createMediaSource(com.google.android.exoplayer2.MediaItem.fromUri(cleanUrl))
+        dp.setMediaSource(mediaSource)
+        dp.prepare()
+        dp.play()
+            
         dualPlayerView.player = dp
         dualPipPlayer = dp
         dualStreamLabel.text = "2-й: ${ch.name}"
@@ -1981,7 +1980,8 @@ class MainActivity : AppCompatActivity() {
             }
             p.stop()
             applyHeadersToDataSourceForUrl(targetUrl)
-            p.setMediaItem(createLiveMediaItem(targetUrl), true)
+            val mediaSource = com.google.android.exoplayer2.source.ProgressiveMediaSource.Factory(httpDataSourceFactory!!).createMediaSource(com.google.android.exoplayer2.MediaItem.fromUri(targetUrl))
+            p.setMediaSource(mediaSource)
             p.prepare()
             p.play()
         } catch (_: Exception) {}
@@ -2033,7 +2033,7 @@ class MainActivity : AppCompatActivity() {
             .setTargetBufferBytes(32 * 1024 * 1024)
             .setPrioritizeTimeOverSizeThresholds(true)
             .setBackBuffer(15000, false)
-            .build()
+            .createDefaultLoadControl()
 
         val extensionMode = when (decoderMode) {
             0 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
@@ -2054,21 +2054,16 @@ class MainActivity : AppCompatActivity() {
             .setReadTimeoutMs(8000)
         httpDataSourceFactory = dsFactory
 
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(dsFactory)
-            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(6))
-
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
         val newPlayer = SimpleExoPlayer.Builder(this, renderersFactory)
-            .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
-            .setAudioAttributes(audioAttrs, false)
             .build()
-
+            
+        newPlayer.setAudioAttributes(audioAttrs, false)
         newPlayer.volume = if (::splashOverlay.isInitialized && splashOverlay.visibility == View.VISIBLE) 0f else 1.0f
 
         newPlayer.addListener(object : Player.EventListener {
@@ -2079,9 +2074,6 @@ class MainActivity : AppCompatActivity() {
             override fun onPlayerError(error: ExoPlaybackException) {
                 userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                 uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 650L)
-            }
-            override fun onTracksChanged(trackGroups: TrackGroupArray, trackSelections: TrackSelectionArray) {
-                // track override not needed for stable legacy behavior
             }
         })
         
@@ -2094,14 +2086,14 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-
         playerView.player = newPlayer
         player = newPlayer
         applyScreenAspectMode()
 
         if (currentUrl != null) {
             applyHeadersToDataSourceForUrl(currentUrl)
-            newPlayer.setMediaItem(createLiveMediaItem(currentUrl))
+            val mediaSource = com.google.android.exoplayer2.source.ProgressiveMediaSource.Factory(dsFactory).createMediaSource(com.google.android.exoplayer2.MediaItem.fromUri(currentUrl.substringBefore("#")))
+            newPlayer.setMediaSource(mediaSource)
             newPlayer.prepare()
             newPlayer.play()
         }
@@ -2314,7 +2306,10 @@ class MainActivity : AppCompatActivity() {
         val vCodec = "H.264/HEVC"
         val vBitrate = "Адаптивный HLS"
 
-        val bufSec = String.format(Locale.US, "%.1f", ((p.bufferedPosition - p.currentPosition).coerceAtLeast(0L) / 1000f))
+        val buffered = p.bufferedPosition
+        val current = p.currentPosition
+        val bufSec = String.format(Locale.US, "%.1f", ((buffered - current).coerceAtLeast(0L) / 1000f))
+        
         val preloadNote = if (ch != null && CoreEngines.isSingleSessionTokenUrl(ch.url)) {
             "Защита 1-сессионного ключа (активна)"
         } else {
@@ -2577,7 +2572,8 @@ class MainActivity : AppCompatActivity() {
         try {
             player?.stop()
             applyHeadersToDataSourceForUrl(target.url)
-            player?.setMediaItem(createLiveMediaItem(target.url), true)
+            val mediaSource = com.google.android.exoplayer2.source.ProgressiveMediaSource.Factory(httpDataSourceFactory!!).createMediaSource(com.google.android.exoplayer2.MediaItem.fromUri(target.url.substringBefore("#")))
+            player?.setMediaSource(mediaSource)
             player?.prepare()
             player?.play()
         } catch (_: Exception) {}
