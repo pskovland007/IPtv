@@ -22,8 +22,8 @@ android {
         applicationId "com.example.miboxiptv"
         minSdk 21
         targetSdk 33
-        versionCode 17260
-        versionName "2.7.60"
+        versionCode 17261
+        versionName "2.7.61"
     }
 
     buildTypes {
@@ -58,24 +58,3 @@ dependencies {
     implementation 'androidx.media3:media3-ui:1.2.1'
     implementation 'androidx.media3:media3-datasource:1.2.1'
 }
-
-// Оставляем ТОЛЬКО генерацию иконки и ТВ-баннера, чтобы не создавать XML-файлы в папках res вручную.
-// Код .kt файлов этот скрипт больше НЕ трогает!
-tasks.register("ensureAppIcons") {
-    doLast {
-        def resDir = file("src/main/res")
-        def drawableDir = new File(resDir, "drawable")
-        drawableDir.mkdirs()
-
-        new File(drawableDir, "tv_banner.png").delete()
-        new File(drawableDir, "tv_banner.xml").write('''<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="320dp" android:height="180dp"
-    android:viewportWidth="320" android:viewportHeight="180">
-    <path android:fillColor="#0B1026" android:pathData="M0,0h320v180h-320z" />
-    <path android:fillColor="#142850" android:pathData="M0,32 C110,10 210,35 320,8 L320,180 L0,180 Z" />
-    <path android:fillColor="#006978" android:pathData="M0,70 C115,48 215,72 320,42 L320,180 L0,180 Z" />
-    <path android:fillColor="#00A896" android:pathData="M0,112 C120,88 220,108 320,82 L320,180 L0,180 Z" />
-    <path android:fillColor="#4A148C" android:pathData="M0,148 C125,125 225,142 320,118 L320,180 L0,180 Z" />
-    <path android:fillColor="#AD1457" android:pathData="M0,172 C130,155 230,166 320,148 L320,180 L0,180 Z" />
-    <path android:fillColor="#090C15" android:pathData="M48,90 C95,18 225,18
