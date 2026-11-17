@@ -141,7 +141,7 @@ object CoreEngines {
             val parsed = URL(currentUrl)
             val originalHost = parsed.host
             val resolvedIp = if (dohEnabled) resolveHostViaCloudflareDoH(originalHost, true) else null
-            val activeAgent = russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size]
+            val activeAgent = if (isSingleSessionTokenUrl(currentUrl)) russianSmartTvAgents[0] else russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size]
             val hdrs = headersForStreamUrl(currentUrl)
             try {
                 val conn = (parsed.openConnection() as HttpURLConnection).apply {

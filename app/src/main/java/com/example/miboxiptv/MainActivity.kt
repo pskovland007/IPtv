@@ -51,6 +51,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -2870,12 +2871,18 @@ class MainActivity : AppCompatActivity() {
         dualStreamChannel = ch
         isDualStreamActive = true
         val cleanUrl = ch.url.substringBefore("#")
+        val pipAgent = if (CoreEngines.isSingleSessionTokenUrl(cleanUrl)) {
+            CoreEngines.russianSmartTvAgents[0]
+        } else {
+            CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
+        }
         val pipDsFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent(CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
+            .setUserAgent(pipAgent)
             .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(cleanUrl))
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(8000)
-            .setReadTimeoutMs(8000)
+            .setKeepPostFor302Redirects(true)
+            .setConnectTimeoutMs(12000)
+            .setReadTimeoutMs(12000)
         val pipMediaSourceFactory = DefaultMediaSourceFactory(this).setDataSourceFactory(pipDsFactory)
         val dp = ExoPlayer.Builder(this)
             .setMediaSourceFactory(pipMediaSourceFactory)
@@ -2926,10 +2933,13 @@ class MainActivity : AppCompatActivity() {
                     val state = p.playbackState
                     val curPos = p.currentPosition
                     val bufMs = p.totalBufferedDuration
-                    // Не рвём поток во время штатной буферизации HEVC без VPN: ждём реальной остановки (22 сек)
-                    val isTrulyStalled = (state == Player.STATE_IDLE ||
-                        (state == Player.STATE_BUFFERING && bufMs < 80L && curPos == lastRenderedFramePositionMs))
+                    val prevPos = lastRenderedFramePositionMs
                     lastRenderedFramePositionMs = curPos
+
+                    // Не рвём поток во время штатной буферизации HEVC без VPN: ждём реальной остановки или замёрзшего кадра
+                    val isTrulyStalled = (state == Player.STATE_IDLE ||
+                        (state == Player.STATE_BUFFERING && bufMs < 80L && curPos == prevPos) ||
+                        (state == Player.STATE_READY && p.isPlaying && curPos == prevPos && bufMs < 150L))
 
                     if (isTrulyStalled) {
                         lowSignalStuckSeconds += 2
@@ -2940,7 +2950,10 @@ class MainActivity : AppCompatActivity() {
                                 consecutiveDropFailures = 0
                                 switchChannelByOffset(+1)
                             } else {
-                                if (antiBlockEnabled) userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
+                                val curUrl = currentChannel?.url ?: ""
+                                if (antiBlockEnabled && !CoreEngines.isSingleSessionTokenUrl(curUrl)) {
+                                    userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
+                                }
                                 reloadIconIndicator.visibility = View.VISIBLE
                                 uiHandler.postDelayed({ reloadIconIndicator.visibility = View.GONE }, 2200L)
                                 reconnectCurrentStreamSilently()
@@ -2948,7 +2961,9 @@ class MainActivity : AppCompatActivity() {
                         }
                     } else {
                         lowSignalStuckSeconds = 0
-                        consecutiveDropFailures = 0
+                        if (state == Player.STATE_READY && p.isPlaying && curPos != prevPos) {
+                            consecutiveDropFailures = 0
+                        }
                     }
                 }
 
@@ -2989,7 +3004,8 @@ class MainActivity : AppCompatActivity() {
         val p = player ?: return
         try {
             val cleanUrl = ch.url.substringBefore("#")
-            val targetUrl = if (consecutiveDropFailures >= 3 && silentFallbackAttemptedForUrl != ch.url && !CoreEngines.isSingleSessionTokenUrl(cleanUrl)) {
+            val useMirror = (consecutiveDropFailures >= 3 && silentFallbackAttemptedForUrl != ch.url && !CoreEngines.isSingleSessionTokenUrl(cleanUrl))
+            val targetUrl = if (useMirror) {
                 silentFallbackAttemptedForUrl = ch.url
                 val normTarget = CoreEngines.normalizeName(ch.name)
                 val mirror = allChannels.firstOrNull {
@@ -2999,11 +3015,19 @@ class MainActivity : AppCompatActivity() {
             } else {
                 cleanUrl
             }
-            p.stop()
             applyHeadersToDataSourceForUrl(targetUrl)
-            p.setMediaItem(createLiveMediaItem(targetUrl), true)
-            p.prepare()
-            p.play()
+            if (!useMirror && consecutiveDropFailures <= 2 && p.mediaItemCount > 0) {
+                if (p.isCurrentMediaItemLive) {
+                    p.seekToDefaultPosition()
+                }
+                p.prepare()
+                p.play()
+            } else {
+                p.stop()
+                p.setMediaItem(createLiveMediaItem(targetUrl), true)
+                p.prepare()
+                p.play()
+            }
         } catch (_: Exception) {}
     }
 
@@ -3064,20 +3088,38 @@ class MainActivity : AppCompatActivity() {
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(extensionMode)
             .setEnableDecoderFallback(true)
+            .forceEnableMediaCodecAsynchronousQueueing()
 
-        val activeAgent = CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
+        val initUrl = currentUrl ?: "http://tsmxkuov.rostelekom.xyz"
+        val activeAgent = if (CoreEngines.isSingleSessionTokenUrl(initUrl)) {
+            CoreEngines.russianSmartTvAgents[0]
+        } else {
+            CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
+        }
         val dsFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(activeAgent)
-            .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(currentUrl ?: "http://tsmxkuov.rostelekom.xyz"))
+            .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(initUrl))
             .setAllowCrossProtocolRedirects(true)
             .setKeepPostFor302Redirects(true)
-            .setConnectTimeoutMs(8000)
-            .setReadTimeoutMs(8000)
+            .setConnectTimeoutMs(12000)
+            .setReadTimeoutMs(12000)
         httpDataSourceFactory = dsFactory
+
+        val fastRetryPolicy = object : DefaultLoadErrorHandlingPolicy(10) {
+            override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                return when (loadErrorInfo.errorCount) {
+                    1 -> 250L
+                    2 -> 400L
+                    3 -> 650L
+                    4 -> 1000L
+                    else -> 1500L
+                }
+            }
+        }
 
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dsFactory)
-            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(6))
+            .setLoadErrorHandlingPolicy(fastRetryPolicy)
 
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -3114,6 +3156,27 @@ class MainActivity : AppCompatActivity() {
                     if (firstGroup.length > 0) {
                         builder = builder.setOverrideForType(TrackSelectionOverride(firstGroup.mediaTrackGroup, 0))
                         changed = true
+                    }
+                }
+                val videoGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+                for (vg in videoGroups) {
+                    if (vg.length > 1) {
+                        var bestTrackIdx = -1; var bestScore = -1L; var currentlySelectedIdx = -1
+                        for (i in 0 until vg.length) {
+                            if (vg.isTrackSelected(i)) currentlySelectedIdx = i
+                            if (vg.isTrackSupported(i)) {
+                                val fmt = vg.getTrackFormat(i)
+                                val pixels = (fmt.width.coerceAtLeast(0)).toLong() * (fmt.height.coerceAtLeast(0)).toLong()
+                                val br = fmt.bitrate.coerceAtLeast(0).toLong()
+                                val fpsBonus = if (fmt.frameRate >= 48f) 5_000_000L else 0L
+                                val score = pixels * 10L + br + fpsBonus
+                                if (score > bestScore) { bestScore = score; bestTrackIdx = i }
+                            }
+                        }
+                        if (bestTrackIdx != -1 && bestTrackIdx != currentlySelectedIdx) {
+                            builder = builder.setOverrideForType(TrackSelectionOverride(vg.mediaTrackGroup, listOf(bestTrackIdx)))
+                            changed = true
+                        }
                     }
                 }
                 if (changed) newPlayer.trackSelectionParameters = builder.build()
@@ -3156,6 +3219,8 @@ class MainActivity : AppCompatActivity() {
 
     internal fun preloadNeighboringChannels(activeChannel: Channel) {
         if (isAnalyzerRunning || CoreEngines.isSingleSessionTokenUrl(activeChannel.url)) return
+        val p = player ?: return
+        if (p.playbackState != Player.STATE_READY || p.totalBufferedDuration < 8000L) return
         val snapshot = displayedChannels.toList()
         if (snapshot.size < 2) return
         val idx = snapshot.indexOfFirst { it.url == activeChannel.url }
@@ -3461,8 +3526,10 @@ class MainActivity : AppCompatActivity() {
             }
 
             thread(priority = Thread.MIN_PRIORITY) {
+                try { Thread.sleep(1500L) } catch (_: Exception) {}
+                if (myGen != playlistLoadGeneration) return@thread
                 val mergedMap = ConcurrentHashMap<String, Channel>()
-                val loaderPool = Executors.newFixedThreadPool(4)
+                val loaderPool = Executors.newFixedThreadPool(2)
                 for (srcUrl in openRusSources) {
                     loaderPool.submit {
                         if (myGen != playlistLoadGeneration) return@submit
@@ -3652,7 +3719,7 @@ class MainActivity : AppCompatActivity() {
             player?.play()
         } catch (_: Exception) {}
         uiHandler.removeCallbacks(preloadNeighborsRunnable)
-        if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 2200L)
+        if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 8000L)
     }
 
     internal fun playChannelObj(channel: Channel, immediate: Boolean = false, silentSwap: Boolean = false, updateSavedUrl: Boolean = true) {
