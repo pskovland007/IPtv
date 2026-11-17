@@ -1205,7 +1205,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openChannelEditorItemsModal(catName: String, inPlace: Boolean = false, keepIndex: Int = -1) {
-        val catChannels = allChannels.filter { effectiveCategory(it) == catName }.sortedWith(Comparator { a, b -> ruCollator.compare(a.name, b.name) })
+        val catChannels = allChannels.filter { effectiveCategory(it) == catName }.sortedWith(safeChannelComparator)
         val isCatDisabled = disabledCategories.contains(catName)
         setSubModalHeaderTitle("Группа: $catName (${catChannels.size} кан.)")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
@@ -1273,7 +1273,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun openAnalyzerGroupChannelsModal(catName: String, firstOpen: Boolean = false) {
         val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
-        val groupChans = (if (catName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == catName }).sortedWith(Comparator { a, b -> ruCollator.compare(a.name, b.name) })
+        val groupChans = (if (catName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == catName }).sortedWith(safeChannelComparator)
         val alive = groupChans.count { channelHealthMap[it.url] == true }
         val dead = groupChans.count { channelHealthMap[it.url] == false }
         setSubModalHeaderTitle("Группа: $catName ([+] $alive  •  [-] $dead)")
@@ -1635,7 +1635,15 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableTrueFullScreenImmersion()
-        Thread.setDefaultUncaughtExceptionHandler { _, _ -> }
+        Thread.setDefaultUncaughtExceptionHandler { t, _ ->
+            if (t == Looper.getMainLooper().thread) {
+                while (true) {
+                    try {
+                        Looper.loop()
+                    } catch (_: Throwable) {}
+                }
+            }
+        }
 
         CoreEngines.installTrustAllSsl()
         requestStoragePermissionsIfNeeded()
@@ -2304,26 +2312,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun refreshSimpleListHighlightInPlace(listView: ListView, activeAdapterPos: Int) {
-        val t = currentTheme()
-        val scale = uiScaleFactor()
-        val firstVis = listView.firstVisiblePosition
-        for (i in 0 until listView.childCount) {
-            val child = listView.getChildAt(i) as? MarqueeRowTextView ?: continue
-            val itemPos = firstVis + i
-            val isHighlighted = (itemPos == activeAdapterPos)
-            child.typeface = if (isHighlighted) t.boldFont else t.normalFont
-            child.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f * scale)
-            child.forceMarqueeActive = isHighlighted
-            if (isHighlighted) {
-                child.setTextColor(t.textOnAccent)
-                child.setBackgroundDrawable(GradientDrawable().apply { setColor(t.accentColor); cornerRadius = 16f * scale; setStroke(2, Color.WHITE) })
-            } else {
-                child.setTextColor(t.textPrimaryColor)
-                child.setBackgroundDrawable(null)
+        try {
+            val adapter = listView.adapter ?: return
+            val totalCount = adapter.count
+            val t = currentTheme()
+            val scale = uiScaleFactor()
+            val firstVis = listView.firstVisiblePosition
+            for (i in 0 until listView.childCount) {
+                val child = listView.getChildAt(i) as? MarqueeRowTextView ?: continue
+                val itemPos = firstVis + i
+                if (itemPos !in 0 until totalCount) continue
+                val isHighlighted = (itemPos == activeAdapterPos)
+                child.typeface = if (isHighlighted) t.boldFont else t.normalFont
+                child.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f * scale)
+                child.forceMarqueeActive = isHighlighted
+                if (isHighlighted) {
+                    child.setTextColor(t.textOnAccent)
+                    child.setBackgroundDrawable(GradientDrawable().apply { setColor(t.accentColor); cornerRadius = 16f * scale; setStroke(2, Color.WHITE) })
+                } else {
+                    child.setTextColor(t.textPrimaryColor)
+                    child.setBackgroundDrawable(null)
+                }
             }
-            val raw = (listView.adapter?.getItem(itemPos) as? String) ?: child.text.toString()
-            child.text = colorizeStatusText(raw)
-        }
+        } catch (_: Exception) {}
     }
 
     internal fun createRoundedSelectorAdapter(
@@ -2339,7 +2350,7 @@ class MainActivity : AppCompatActivity() {
                 val t = currentTheme()
                 val scale = uiScaleFactor()
                 val highlighted = isRowHighlighted(position)
-                val rawTxt = getItem(position) ?: ""
+                val rawTxt = if (position in 0 until count) (getItem(position) ?: "") else ""
                 if (fixedRowHeight) {
                     val rowH = exactModalRowHeightPx()
                     tv.layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, rowH)
@@ -2624,11 +2635,16 @@ class MainActivity : AppCompatActivity() {
         refreshChannelAdapter()
 
         channelListView.post {
-            if (channelDisplayItems.isNotEmpty()) {
-                channelListView.setSelectionFromTop(targetPos, (channelListView.height / 3).coerceAtLeast(70))
-                channelListView.requestFocus()
-                refreshSimpleListHighlightInPlace(channelListView, targetPos)
-            }
+            try {
+                val safeCount = channelListAdapter.count
+                if (safeCount > 0) {
+                    val clampedPos = targetPos.coerceIn(0, safeCount - 1)
+                    focusedChannelPos = clampedPos
+                    channelListView.setSelectionFromTop(clampedPos, (channelListView.height / 3).coerceAtLeast(70))
+                    channelListView.requestFocus()
+                    refreshSimpleListHighlightInPlace(channelListView, clampedPos)
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -2645,9 +2661,16 @@ class MainActivity : AppCompatActivity() {
         focusedCategoryPos = targetPos
 
         categoryListView.post {
-            categoryListView.setSelectionFromTop(targetPos, (categoryListView.height / 3).coerceAtLeast(60))
-            categoryListView.requestFocus()
-            refreshSimpleListHighlightInPlace(categoryListView, targetPos)
+            try {
+                val safeCount = categoryAdapter.count
+                if (safeCount > 0) {
+                    val clampedPos = targetPos.coerceIn(0, safeCount - 1)
+                    focusedCategoryPos = clampedPos
+                    categoryListView.setSelectionFromTop(clampedPos, (categoryListView.height / 3).coerceAtLeast(60))
+                    categoryListView.requestFocus()
+                    refreshSimpleListHighlightInPlace(categoryListView, clampedPos)
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -3651,52 +3674,63 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    internal fun selectCategory(index: Int) {
-        val cats = activeCategoryList()
-        if (index !in cats.indices) return
-        currentCategoryIndex = index; focusedCategoryPos = index
-        val catName = cats[index]
-        val activeAll = allChannels.filter { isChannelActive(it) }
-        val rawFiltered = when (catName) {
-            "★ Избранное" -> activeAll.filter { favoriteUrls.contains(it.url) }
-            "Все каналы" -> activeAll
-            else -> activeAll.filter { effectiveCategory(it) == catName }
-        }
-        val comparator = Comparator<Channel> { a, b ->
-            val gA = charAlphabetGroup(a.name)
-            val gB = charAlphabetGroup(b.name)
-            if (gA != gB) return@Comparator gA.compareTo(gB)
-            ruCollator.compare(a.name, b.name)
-        }
-        displayedChannels.clear()
-        displayedChannels.addAll(rawFiltered.filter { topUrls.contains(it.url) }.sortedWith(comparator))
-        displayedChannels.addAll(rawFiltered.filter { !topUrls.contains(it.url) }.sortedWith(comparator))
+    private val safeChannelComparator: Comparator<Channel> = compareBy<Channel>(
+        { charAlphabetGroup(it.name) },
+        { it.name.trim().lowercase(Locale.ROOT) },
+        { it.url }
+    )
 
-        val activePosInGroup = displayedChannels.indexOfFirst { it.url == currentChannel?.url }
-        focusedChannelPos = if (activePosInGroup >= 0) activePosInGroup else 0
-        refreshChannelAdapter()
+    internal fun selectCategory(index: Int) {
+        try {
+            val cats = activeCategoryList()
+            if (index !in cats.indices) return
+            currentCategoryIndex = index; focusedCategoryPos = index
+            val catName = cats[index]
+            val activeAll = allChannels.filter { isChannelActive(it) }
+            val rawFiltered = when (catName) {
+                "★ Избранное" -> activeAll.filter { favoriteUrls.contains(it.url) }
+                "Все каналы" -> activeAll
+                else -> activeAll.filter { effectiveCategory(it) == catName }
+            }
+            val topPart = rawFiltered.filter { topUrls.contains(it.url) }.sortedWith(safeChannelComparator)
+            val regularPart = rawFiltered.filter { !topUrls.contains(it.url) }.sortedWith(safeChannelComparator)
+
+            displayedChannels.clear()
+            displayedChannels.addAll(topPart)
+            displayedChannels.addAll(regularPart)
+
+            val activePosInGroup = displayedChannels.indexOfFirst { it.url == currentChannel?.url }
+            focusedChannelPos = if (activePosInGroup >= 0) activePosInGroup else 0
+            refreshChannelAdapter()
+        } catch (_: Exception) {}
     }
 
     internal fun refreshChannelAdapter() {
         if (!::channelListAdapter.isInitialized) return
-        val list = displayedChannels.toList()
-        channelDisplayItems.clear()
-        if (list.isEmpty()) {
-            channelDisplayItems.add("[-]   В этой категории пока нет каналов")
-        } else {
-            channelDisplayItems.addAll(list.map { ch ->
-                val mono = extractTwoLetters(ch.name)
-                val isPlaying = (ch.url == currentChannel?.url)
-                val playOrb = if (isPlaying) "[+] " else ""
-                val topBadge = if (topUrls.contains(ch.url)) "▲ " else ""
-                val favBadge = if (favoriteUrls.contains(ch.url)) "★ " else ""
-                "[B:$mono] $playOrb$topBadge$favBadge${ch.name}"
-            })
-        }
-        channelListAdapter.notifyDataSetChanged()
-        if (channelListView.visibility == View.VISIBLE) {
-            refreshSimpleListHighlightInPlace(channelListView, focusedChannelPos)
-        }
+        try {
+            val list = displayedChannels.toList()
+            val newItems = if (list.isEmpty()) {
+                listOf("[-]   В этой категории пока нет каналов")
+            } else {
+                list.map { ch ->
+                    val mono = extractTwoLetters(ch.name)
+                    val isPlaying = (ch.url == currentChannel?.url)
+                    val playOrb = if (isPlaying) "[+] " else ""
+                    val topBadge = if (topUrls.contains(ch.url)) "▲ " else ""
+                    val favBadge = if (favoriteUrls.contains(ch.url)) "★ " else ""
+                    "[B:$mono] $playOrb$topBadge$favBadge${ch.name}"
+                }
+            }
+            focusedChannelPos = focusedChannelPos.coerceIn(0, (newItems.size - 1).coerceAtLeast(0))
+            channelDisplayItems.clear()
+            channelDisplayItems.addAll(newItems)
+            channelListAdapter.notifyDataSetChanged()
+            if (channelListView.visibility == View.VISIBLE) {
+                channelListView.post {
+                    refreshSimpleListHighlightInPlace(channelListView, focusedChannelPos)
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     internal fun toggleTopChannel(ch: Channel) {
