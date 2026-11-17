@@ -129,8 +129,9 @@ class MonogramBadgeSpan(
     private val rect = RectF()
 
     override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
-        val size = (paint.textSize * 1.42f).toInt().coerceAtLeast(28)
-        return size + (paint.textSize * 0.42f).toInt()
+        val boxW = (paint.textSize * 1.18f).toInt().coerceIn(26, 44)
+        val rightGap = (paint.textSize * 0.44f).toInt().coerceAtLeast(10)
+        return boxW + rightGap
     }
 
     override fun draw(
@@ -144,12 +145,14 @@ class MonogramBadgeSpan(
         bottom: Int,
         textPaint: Paint
     ) {
-        val size = (textPaint.textSize * 1.42f).coerceAtLeast(28f)
-        val centerY = (top + bottom) / 2f
-        val boxTop = centerY - size / 2f
-        val boxBottom = centerY + size / 2f
-        rect.set(x, boxTop, x + size, boxBottom)
-        val corner = size * 0.28f
+        val lineH = (bottom - top).toFloat().coerceAtLeast(24f)
+        val boxH = (textPaint.textSize * 1.00f).coerceIn(22f, (lineH - 8f).coerceAtLeast(22f))
+        val boxW = (boxH * 1.16f).coerceIn(26f, 44f)
+        val centerY = top + lineH / 2f
+        val boxTop = centerY - boxH / 2f
+        val boxBottom = centerY + boxH / 2f
+        rect.set(x + 2f, boxTop, x + 2f + boxW, boxBottom)
+        val corner = boxH * 0.28f
 
         paint.shader = null
         paint.style = Paint.Style.FILL
@@ -157,18 +160,18 @@ class MonogramBadgeSpan(
         canvas.drawRoundRect(rect, corner, corner, paint)
 
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.5f
+        paint.strokeWidth = 1.4f
         paint.color = Color.argb(95, 255, 255, 255)
         canvas.drawRoundRect(rect, corner, corner, paint)
 
         paint.style = Paint.Style.FILL
         paint.color = Color.WHITE
         paint.textAlign = Paint.Align.CENTER
-        paint.textSize = textPaint.textSize * 0.72f
+        paint.textSize = boxH * 0.50f
         paint.typeface = Typeface.DEFAULT_BOLD
         val fm = paint.fontMetrics
         val textY = centerY - (fm.ascent + fm.descent) / 2f
-        canvas.drawText(letters.take(2), x + size / 2f, textY, paint)
+        canvas.drawText(letters.take(2), rect.centerX(), textY, paint)
     }
 }
 

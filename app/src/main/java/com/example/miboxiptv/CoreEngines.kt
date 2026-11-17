@@ -26,10 +26,10 @@ object CoreEngines {
 
     val russianSmartTvAgents = listOf(
         "VLC/3.0.20 LibVLC/3.0.20",
+        "Televizo/1.9.7.14 (Linux; Android 11; Xiaomi Mi Box S)",
+        "OTT Navigator/1.6.9.4 (Linux; Android 11; AndroidTV)",
         "Wink/1.44.0 (AndroidTV; Android 11; Xiaomi Mi Box S)",
-        "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) Version/6.5 TV Safari/537.36",
-        "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.5359.211 Safari/537.36 WebAppManager",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        "Lavf/60.16.100"
     )
 
     fun installTrustAllSsl() {
@@ -57,9 +57,7 @@ object CoreEngines {
         if (isSingleSessionTokenUrl(lUrl)) {
             return mapOf(
                 "Accept" to "*/*",
-                "Connection" to "close",
-                "Cache-Control" to "no-cache",
-                "Pragma" to "no-cache"
+                "Connection" to "keep-alive"
             )
         }
         val parsedOrigin = try {
@@ -204,7 +202,11 @@ object CoreEngines {
             "bangla", "pakistan", "geo news", "ary digital", "hum tv", "samaa", "kurd", "farsi", "persian",
             "latino", "viva latino", "3abn", "telemundo", "univision", "azteca", "caracol", "kral ",
             "trt ", "haberturk", "powerturk", "dream turk", "afrobeat", "nollywood", "iran", "afghan",
-            "[magenta]", " in ", " ae ", " qa ", " br ", " pl ", " de ", " fr ", " es ", " it ", " nl ", " se ", " dk ", " no ", " fi ", " ro ", " hr ", " cz ", " sk ", " lt ", " lv ", " ee "
+            "[magenta]", " in ", " ae ", " qa ", " br ", " pl ", " de ", " fr ", " es ", " it ", " nl ", " se ", " dk ", " no ", " fi ", " ro ", " hr ", " cz ", " sk ", " lt ", " lv ", " ee ",
+            "(czech", "(hungary)", "(italy)", "(poland)", "(germany)", "(france)", "(spain)", "(romania)",
+            "(bulgaria)", "(serbia)", "(croatia)", "(slovenia)", "(slovakia)", "(portugal)", "(netherlands)",
+            "(sweden)", "(norway)", "(denmark)", "(finland)", "(greece)", "(turkey)", "(israel)", "(brazil)",
+            "(mexico)", "(argentina)", "(colombia)", "(chile)", "(peru)", "(uk)", "(usa)", "(canada)", "international"
         )
         return bannedTokens.any { low.contains(it) }
     }
