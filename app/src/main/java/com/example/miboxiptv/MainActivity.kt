@@ -478,29 +478,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val ambilightSampleBitmap: Bitmap by lazy { Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888) }
+    @Volatile private var isPixelCopyInFlight: Boolean = false
+
     private fun sampleVideoFrameColorIfPossible() {
-        if (ambilightMode != 3 || isAnalyzerRunning || menuHistory.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        if (ambilightMode != 3 || isAnalyzerRunning || menuHistory.isEmpty() || isPixelCopyInFlight || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
         try {
             val sv = playerView.videoSurfaceView as? SurfaceView ?: return
             if (!sv.holder.surface.isValid) return
-            val bmp = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
+            val bmp = ambilightSampleBitmap
+            if (bmp.isRecycled) return
+            isPixelCopyInFlight = true
             PixelCopy.request(sv, bmp, { copyResult ->
-                if (copyResult == PixelCopy.SUCCESS) {
-                    var rSum = 0; var gSum = 0; var bSum = 0; var count = 0
-                    for (x in 2..13 step 3) {
-                        for (y in 2..13 step 3) {
-                            val px = bmp.getPixel(x, y)
-                            rSum += Color.red(px); gSum += Color.green(px); bSum += Color.blue(px)
-                            count++
+                try {
+                    if (copyResult == PixelCopy.SUCCESS && !bmp.isRecycled) {
+                        var rSum = 0; var gSum = 0; var bSum = 0; var count = 0
+                        for (x in 2..13 step 3) {
+                            for (y in 2..13 step 3) {
+                                val px = bmp.getPixel(x, y)
+                                rSum += Color.red(px); gSum += Color.green(px); bSum += Color.blue(px)
+                                count++
+                            }
+                        }
+                        if (count > 0) {
+                            capturedFrameColor = Color.rgb((rSum / count).coerceAtLeast(35), (gSum / count).coerceAtLeast(35), (bSum / count).coerceAtLeast(35))
                         }
                     }
-                    if (count > 0) {
-                        capturedFrameColor = Color.rgb((rSum / count).coerceAtLeast(35), (gSum / count).coerceAtLeast(35), (bSum / count).coerceAtLeast(35))
-                    }
+                } finally {
+                    isPixelCopyInFlight = false
                 }
-                bmp.recycle()
             }, uiHandler)
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+            isPixelCopyInFlight = false
+        }
     }
 
     private fun ambilightColor(maxAlpha: Int): Int {
@@ -754,6 +764,13 @@ class MainActivity : AppCompatActivity() {
             cap.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f * scale)
         }
 
+        fitSideListsExactRows()
+        if (::subModalAdapter.isInitialized) {
+            if (subModalList.visibility == View.VISIBLE && subModalItems.isNotEmpty()) {
+                fitSubModalListToWholeRows(subModalItems.size)
+            }
+            subModalAdapter.notifyDataSetChanged()
+        }
         updateCategoriesList()
         refreshChannelAdapter()
         updateCenterOsdContent()
@@ -1316,6 +1333,7 @@ class MainActivity : AppCompatActivity() {
                         val aliveCount = aliveChannelsAtomic.get()
                         val deadCount = deadChannelsAtomic.get()
                         runOnUiThread {
+                            if (isFinishing || isDestroyed) return@runOnUiThread
                             if (isAnalyzerRunning && done < total) {
                                 analyzerStatusBanner.text = colorizeStatusText("Тест: $done / $total   •   [+] $aliveCount   [-] Скрыто: $deadCount")
                                 val curMenu = menuHistory.lastOrNull()
@@ -1334,6 +1352,7 @@ class MainActivity : AppCompatActivity() {
                 val aliveCount = aliveChannelsAtomic.get()
                 val deadCount = deadChannelsAtomic.get()
                 runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
                     val curMenu = menuHistory.lastOrNull()
                     if (curMenu == "ANALYZER_GROUP_VIEW") openAnalyzerGroupChannelsModal(selectedAnalyzerCategory, firstOpen = false)
@@ -2570,9 +2589,12 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    private val regexCleanTwoLetters: Regex = Regex("[^a-zA-Zа-яА-Я0-9 ]")
+    private val regexSplitSpaces: Regex = Regex("\\s+")
+
     internal fun extractTwoLetters(name: String): String {
-        val clean = name.replace(Regex("[^a-zA-Zа-яА-Я0-9 ]"), " ").trim()
-        val parts = clean.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val clean = name.replace(regexCleanTwoLetters, " ").trim()
+        val parts = clean.split(regexSplitSpaces).filter { it.isNotEmpty() }
         val raw = if (parts.size >= 2) "${parts[0].first()}${parts[1].first()}" else (parts.firstOrNull() ?: "TV").take(2)
         return raw.uppercase().padEnd(2, 'T').take(2)
     }
@@ -3017,7 +3039,7 @@ class MainActivity : AppCompatActivity() {
 
     internal fun initPlayer() {
         val currentUrl = currentChannel?.url
-        try { loudnessEnhancer?.release(); loudnessEnhancer = null } catch (_: Exception) {}
+        try { loudnessEnhancer?.release(); loudnessEnhancer = null; lastAudioSessionId = C.AUDIO_SESSION_ID_UNSET } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
 
         // Увеличенный эластичный буфер для стабильной работы FHD / HEVC потоков без VPN
@@ -3065,7 +3087,7 @@ class MainActivity : AppCompatActivity() {
         val newPlayer = ExoPlayer.Builder(this, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
-            .setAudioAttributes(audioAttrs, false)
+            .setAudioAttributes(audioAttrs, true)
             .build()
 
         newPlayer.volume = if (::splashOverlay.isInitialized && splashOverlay.visibility == View.VISIBLE) 0f else 1.0f
@@ -3215,54 +3237,56 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val rawStream = CoreEngines.openStreamWithBypass(candidateUrl, userAgentIndex, dohEnabled, 25000)
                     val stream: InputStream = if (candidateUrl.endsWith(".gz", true)) GZIPInputStream(rawStream) else rawStream
-
-                    val parser = XmlPullParserFactory.newInstance().newPullParser()
-                    parser.setInput(stream, "UTF-8")
-
-                    val minTime = now - 2 * 3600_000L; val maxTime = now + 18 * 3600_000L
                     val tempById = HashMap<String, MutableList<EpgProgram>>()
                     val tempIdToNames = HashMap<String, MutableList<String>>()
 
-                    var eventType = parser.eventType
-                    var currentChanId = ""; var progChanId = ""
-                    var progStart = 0L; var progStop = 0L
-                    var progTitle = ""; var currentTag = ""
+                    stream.use { activeStream ->
+                        val parser = XmlPullParserFactory.newInstance().newPullParser()
+                        parser.setInput(activeStream, "UTF-8")
 
-                    while (eventType != XmlPullParser.END_DOCUMENT) {
-                        when (eventType) {
-                            XmlPullParser.START_TAG -> {
-                                currentTag = parser.name ?: ""
-                                if (currentTag == "channel") currentChanId = parser.getAttributeValue(null, "id") ?: ""
-                                else if (currentTag == "programme") {
-                                    progChanId = parser.getAttributeValue(null, "channel") ?: ""
-                                    progStart = CoreEngines.parseXmltvDate(parser.getAttributeValue(null, "start") ?: "")
-                                    progStop = CoreEngines.parseXmltvDate(parser.getAttributeValue(null, "stop") ?: "")
-                                    progTitle = ""
-                                }
-                            }
-                            XmlPullParser.TEXT -> {
-                                val txt = parser.text ?: ""
-                                if (txt.isNotBlank()) {
-                                    if (currentTag == "display-name" && currentChanId.isNotEmpty()) {
-                                        val nKey = CoreEngines.normalizeName(txt)
-                                        if (nKey.isNotEmpty()) tempIdToNames.getOrPut(currentChanId) { mutableListOf() }.add(nKey)
-                                    } else if (currentTag == "title" && progStop >= minTime && progStart <= maxTime) progTitle += txt
-                                }
-                            }
-                            XmlPullParser.END_TAG -> {
-                                val endName = parser.name ?: ""
-                                if (endName == "channel") currentChanId = ""
-                                else if (endName == "programme") {
-                                    if (progChanId.isNotEmpty() && progTitle.isNotEmpty() && progStop >= minTime && progStart <= maxTime) {
-                                        tempById.getOrPut(progChanId) { mutableListOf() }.add(EpgProgram(progTitle.trim(), "", progStart, progStop))
-                                        totalProgramsCount++
+                        val minTime = now - 2 * 3600_000L; val maxTime = now + 18 * 3600_000L
+
+                        var eventType = parser.eventType
+                        var currentChanId = ""; var progChanId = ""
+                        var progStart = 0L; var progStop = 0L
+                        var progTitle = ""; var currentTag = ""
+
+                        while (eventType != XmlPullParser.END_DOCUMENT) {
+                            when (eventType) {
+                                XmlPullParser.START_TAG -> {
+                                    currentTag = parser.name ?: ""
+                                    if (currentTag == "channel") currentChanId = parser.getAttributeValue(null, "id") ?: ""
+                                    else if (currentTag == "programme") {
+                                        progChanId = parser.getAttributeValue(null, "channel") ?: ""
+                                        progStart = CoreEngines.parseXmltvDate(parser.getAttributeValue(null, "start") ?: "")
+                                        progStop = CoreEngines.parseXmltvDate(parser.getAttributeValue(null, "stop") ?: "")
+                                        progTitle = ""
                                     }
-                                    progChanId = ""
                                 }
-                                currentTag = ""
+                                XmlPullParser.TEXT -> {
+                                    val txt = parser.text ?: ""
+                                    if (txt.isNotBlank()) {
+                                        if (currentTag == "display-name" && currentChanId.isNotEmpty()) {
+                                            val nKey = CoreEngines.normalizeName(txt)
+                                            if (nKey.isNotEmpty()) tempIdToNames.getOrPut(currentChanId) { mutableListOf() }.add(nKey)
+                                        } else if (currentTag == "title" && progStop >= minTime && progStart <= maxTime) progTitle += txt
+                                    }
+                                }
+                                XmlPullParser.END_TAG -> {
+                                    val endName = parser.name ?: ""
+                                    if (endName == "channel") currentChanId = ""
+                                    else if (endName == "programme") {
+                                        if (progChanId.isNotEmpty() && progTitle.isNotEmpty() && progStop >= minTime && progStart <= maxTime) {
+                                            tempById.getOrPut(progChanId) { mutableListOf() }.add(EpgProgram(progTitle.trim(), "", progStart, progStop))
+                                            totalProgramsCount++
+                                        }
+                                        progChanId = ""
+                                    }
+                                    currentTag = ""
+                                }
                             }
+                            eventType = parser.next()
                         }
-                        eventType = parser.next()
                     }
 
                     for ((id, progs) in tempById) {
@@ -3275,6 +3299,7 @@ class MainActivity : AppCompatActivity() {
 
                     if (mergedByName.isNotEmpty()) {
                         runOnUiThread {
+                            if (isFinishing || isDestroyed) return@runOnUiThread
                             epgById.putAll(mergedById); epgByName.putAll(mergedByName)
                             epgLoadedCount = totalProgramsCount
                             if (centerOsdPanel.visibility == View.VISIBLE) updateCenterOsdContent()
@@ -3469,7 +3494,7 @@ class MainActivity : AppCompatActivity() {
                     if (initialKeys.add(key)) combined.add(ch)
                 }
                 runOnUiThread {
-                    if (myGen != playlistLoadGeneration) return@runOnUiThread
+                    if (isFinishing || isDestroyed || myGen != playlistLoadGeneration) return@runOnUiThread
                     allChannels.clear()
                     allChannels.addAll(combined)
                     updateCategoriesList()
@@ -3945,6 +3970,7 @@ class MainActivity : AppCompatActivity() {
         carouselScrollAnimator?.cancel()
         preloaderExecutor.shutdownNow()
         uiHandler.removeCallbacksAndMessages(null)
+        try { if (!ambilightSampleBitmap.isRecycled) ambilightSampleBitmap.recycle() } catch (_: Exception) {}
         try { loudnessEnhancer?.release() } catch (_: Exception) {}
         try { dualPipPlayer?.stop(); dualPipPlayer?.release() } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}

@@ -23,14 +23,14 @@ import javax.net.ssl.X509TrustManager
 
 object CoreEngines {
     private val dohDnsCache = ConcurrentHashMap<String, String>()
-    private val REGEX_NON_ALNUM = REGEX_NON_ALNUM
-    private val REGEX_GEO_TAG = REGEX_GEO_TAG
-    private val REGEX_MULTI_SPACE = REGEX_MULTI_SPACE
-    private val REGEX_PLUS_TZ1 = REGEX_PLUS_TZ1
-    private val REGEX_PLUS_TZ2 = REGEX_PLUS_TZ2
-    private val REGEX_RESOLUTION = REGEX_RESOLUTION
-    private val REGEX_GROUP_TITLE = REGEX_GROUP_TITLE
-    private val REGEX_TVG_ID = REGEX_TVG_ID
+    private val REGEX_NON_ALNUM: Regex = Regex("[^a-zа-я0-9]")
+    private val REGEX_GEO_TAG: Regex = Regex("\\[[^\\]]*(Geo|Not 24)[^\\]]*\\]", RegexOption.IGNORE_CASE)
+    private val REGEX_MULTI_SPACE: Regex = Regex("\\s{2,}")
+    private val REGEX_PLUS_TZ1: Regex = Regex("\\+[1-9]\\b")
+    private val REGEX_PLUS_TZ2: Regex = Regex("\\(\\+[1-9]\\)")
+    private val REGEX_RESOLUTION: Regex = Regex("(\\d{3,4})x(\\d{3,4})")
+    private val REGEX_GROUP_TITLE: Regex = Regex("group-title=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
+    private val REGEX_TVG_ID: Regex = Regex("tvg-id=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
 
     val russianSmartTvAgents = listOf(
         "VLC/3.0.20 LibVLC/3.0.20",
@@ -139,27 +139,54 @@ object CoreEngines {
         var redirects = 0
         while (redirects < 6) {
             val parsed = URL(currentUrl)
-            if (dohEnabled) resolveHostViaCloudflareDoH(parsed.host, true)
+            val originalHost = parsed.host
+            val resolvedIp = if (dohEnabled) resolveHostViaCloudflareDoH(originalHost, true) else null
             val activeAgent = russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size]
             val hdrs = headersForStreamUrl(currentUrl)
-            val conn = (parsed.openConnection() as HttpURLConnection).apply {
-                setRequestProperty("User-Agent", activeAgent)
-                for ((k, v) in hdrs) setRequestProperty(k, v)
-                instanceFollowRedirects = true
-                connectTimeout = timeoutMs
-                readTimeout = timeoutMs
-            }
-            val code = conn.responseCode
-            if (code in 300..399) {
-                val loc = conn.getHeaderField("Location")
-                conn.disconnect()
-                if (!loc.isNullOrEmpty()) {
-                    currentUrl = if (loc.startsWith("http")) loc else URL(parsed, loc).toString()
-                    redirects++
-                    continue
+            try {
+                val conn = (parsed.openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("User-Agent", activeAgent)
+                    for ((k, v) in hdrs) setRequestProperty(k, v)
+                    instanceFollowRedirects = true
+                    connectTimeout = timeoutMs
+                    readTimeout = timeoutMs
                 }
+                val code = conn.responseCode
+                if (code in 300..399) {
+                    val loc = conn.getHeaderField("Location")
+                    conn.disconnect()
+                    if (!loc.isNullOrEmpty()) {
+                        currentUrl = if (loc.startsWith("http")) loc else URL(parsed, loc).toString()
+                        redirects++
+                        continue
+                    }
+                }
+                return conn.inputStream
+            } catch (e: Exception) {
+                if (dohEnabled && !resolvedIp.isNullOrEmpty() && resolvedIp != originalHost && parsed.protocol.equals("http", ignoreCase = true)) {
+                    val ipUrl = URL(parsed.protocol, resolvedIp, parsed.port, parsed.file)
+                    val ipConn = (ipUrl.openConnection() as HttpURLConnection).apply {
+                        setRequestProperty("Host", originalHost)
+                        setRequestProperty("User-Agent", activeAgent)
+                        for ((k, v) in hdrs) setRequestProperty(k, v)
+                        instanceFollowRedirects = true
+                        connectTimeout = timeoutMs
+                        readTimeout = timeoutMs
+                    }
+                    val code = ipConn.responseCode
+                    if (code in 300..399) {
+                        val loc = ipConn.getHeaderField("Location")
+                        ipConn.disconnect()
+                        if (!loc.isNullOrEmpty()) {
+                            currentUrl = if (loc.startsWith("http")) loc else URL(parsed, loc).toString()
+                            redirects++
+                            continue
+                        }
+                    }
+                    return ipConn.inputStream
+                }
+                throw e
             }
-            return conn.inputStream
         }
         return URL(currentUrl).openStream()
     }

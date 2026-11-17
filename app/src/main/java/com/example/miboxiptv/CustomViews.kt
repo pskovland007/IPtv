@@ -176,8 +176,11 @@ class MonogramBadgeSpan(
 
 typealias StatusOrbSpan = GraphicOrbSpan
 
+private val statusTextCache = android.util.LruCache<String, CharSequence>(320)
+
 fun colorizeStatusText(raw: String): CharSequence {
     if (!raw.contains("[")) return raw
+    statusTextCache.get(raw)?.let { return it }
     val ss = SpannableString(raw)
     var i = 0
     val palette = intArrayOf(
@@ -203,6 +206,7 @@ fun colorizeStatusText(raw: String): CharSequence {
             else -> i++
         }
     }
+    statusTextCache.put(raw, ss)
     return ss
 }
 
