@@ -1496,6 +1496,113 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+
+    private class MonogramBadgeSpan(
+        private val letters: String,
+        private val bgColor: Int
+    ) : android.text.style.ReplacementSpan() {
+        override fun getSize(
+            paint: Paint,
+            text: CharSequence,
+            start: Int,
+            end: Int,
+            fm: Paint.FontMetricsInt?
+        ): Int {
+            val size = (paint.textSize * 1.42f).toInt().coerceAtLeast(28)
+            return size + (paint.textSize * 0.42f).toInt()
+        }
+
+        override fun draw(
+            canvas: Canvas,
+            text: CharSequence,
+            start: Int,
+            end: Int,
+            x: Float,
+            top: Int,
+            y: Int,
+            bottom: Int,
+            paint: Paint
+        ) {
+            val size = (paint.textSize * 1.42f).coerceAtLeast(28f)
+            val centerY = (top + bottom) / 2f
+            val boxTop = centerY - size / 2f
+            val boxBottom = centerY + size / 2f
+            val rect = RectF(x, boxTop, x + size, boxBottom)
+            val corner = size * 0.28f
+
+            val oldColor = paint.color
+            val oldStyle = paint.style
+            val oldAlign = paint.textAlign
+            val oldSize = paint.textSize
+            val oldFakeBold = paint.isFakeBoldText
+
+            paint.isAntiAlias = true
+            paint.style = Paint.Style.FILL
+            paint.color = bgColor
+            canvas.drawRoundRect(rect, corner, corner, paint)
+
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.5f
+            paint.color = Color.argb(90, 255, 255, 255)
+            canvas.drawRoundRect(rect, corner, corner, paint)
+
+            paint.style = Paint.Style.FILL
+            paint.color = Color.WHITE
+            paint.textAlign = Paint.Align.CENTER
+            paint.textSize = oldSize * 0.72f
+            paint.isFakeBoldText = true
+            val fm = paint.fontMetrics
+            val textY = centerY - (fm.ascent + fm.descent) / 2f
+            canvas.drawText(letters.take(2), x + size / 2f, textY, paint)
+
+            paint.color = oldColor
+            paint.style = oldStyle
+            paint.textAlign = oldAlign
+            paint.textSize = oldSize
+            paint.isFakeBoldText = oldFakeBold
+        }
+    }
+
+    private class StatusOrbSpan(private val kind: Int) : android.text.style.ReplacementSpan() {
+        override fun getSize(
+            paint: Paint,
+            text: CharSequence,
+            start: Int,
+            end: Int,
+            fm: Paint.FontMetricsInt?
+        ): Int {
+            return (paint.textSize * 1.15f).toInt().coerceAtLeast(20)
+        }
+
+        override fun draw(
+            canvas: Canvas,
+            text: CharSequence,
+            start: Int,
+            end: Int,
+            x: Float,
+            top: Int,
+            y: Int,
+            bottom: Int,
+            paint: Paint
+        ) {
+            val r = (paint.textSize * 0.34f).coerceAtLeast(6f)
+            val cx = x + r + 4f
+            val cy = (top + bottom) / 2f
+            val oldColor = paint.color
+            val oldStyle = paint.style
+            paint.isAntiAlias = true
+            paint.style = Paint.Style.FILL
+            paint.color = when (kind) {
+                1, 3 -> Color.parseColor("#00E676")
+                0, 4 -> Color.parseColor("#FF5252")
+                else -> Color.parseColor("#00E5FF")
+            }
+            canvas.drawCircle(cx, cy, r, paint)
+            paint.color = oldColor
+            paint.style = oldStyle
+        }
+    }
+
     internal fun colorizeStatusText(raw: String): CharSequence {
         if (!raw.contains("[")) return raw
         val ss = android.text.SpannableString(raw)
