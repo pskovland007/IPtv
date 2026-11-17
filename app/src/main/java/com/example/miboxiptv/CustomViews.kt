@@ -1,975 +1,1490 @@
 package com.example.miboxiptv
 
-import android.content.Intent
-import android.graphics.Color
-import android.graphics.Typeface
-import android.net.Uri
-import android.os.Build
-import android.os.Environment
+import android.animation.ValueAnimator
+import android.content.Context
+import android.graphics.*
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.TextUtils
+import android.text.style.ReplacementSpan
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.Toast
-import androidx.annotation.OptIn
-import androidx.core.content.FileProvider
-import androidx.media3.common.C
-import androidx.media3.common.TrackSelectionOverride
-import androidx.media3.common.util.UnstableApi
-import androidx.recyclerview.widget.RecyclerView
-import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
-import kotlin.concurrent.thread
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.widget.FrameLayout
+import android.widget.TextView
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
 
-data class Channel(
-    val name: String,
-    val url: String,
-    val category: String,
-    val tvgId: String = ""
-)
-
-data class PlaylistEntry(
-    val title: String,
-    val source: String,
-    val isLocal: Boolean
-)
-
-data class EpgProgram(
-    val title: String,
-    val desc: String,
-    val startMs: Long,
-    val stopMs: Long
-)
+data class Channel(val name: String, val url: String, val category: String, val tvgId: String)
+data class PlaylistEntry(val title: String, val source: String, val isLocal: Boolean)
+data class EpgProgram(val title: String, val desc: String, val startMs: Long, val stopMs: Long)
 
 data class AppThemeStyle(
-    val id: Int,
-    val name: String,
-    val panelBgColor: Int,
-    val cardBgColor: Int,
-    val accentColor: Int,
-    val strokeColor: Int,
-    val textPrimaryColor: Int,
-    val textOnAccent: Int,
-    val cornerRadiusDp: Float,
-    val normalFont: Typeface,
-    val boldFont: Typeface,
+    val id: Int, val name: String,
+    val panelBgColor: Int, val cardBgColor: Int, val accentColor: Int, val strokeColor: Int,
+    val textPrimaryColor: Int, val textOnAccent: Int, val cornerRadiusDp: Float,
+    val normalFont: Typeface, val boldFont: Typeface,
     val isCarouselMenu: Boolean = false
 )
 
-class ChannelRvAdapter(
-    private val getTheme: () -> AppThemeStyle,
-    private val getUiScaleFactor: () -> Float,
-    private val isTopUrl: (String) -> Boolean,
-    private val isFavUrl: (String) -> Boolean,
-    private val getPlayingUrl: () -> String?,
-    private val onChannelFocused: (Int) -> Unit,
-    private val onChannelClicked: (Int, Channel) -> Unit,
-    private val onChannelLongClicked: (Int, Channel) -> Unit,
-    private val onLeftPressedToGroups: () -> Unit,
-    private val onRightPressedCloseMenu: () -> Unit
-) : RecyclerView.Adapter<ChannelRvAdapter.ChannelVH>() {
+class GraphicOrbSpan(private val orbType: Int) : ReplacementSpan() {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rect = RectF()
+    private val path = Path()
 
-    var highlightedPos: Int = 0
-    fun getExactRowHeightPx(): Int = (50f * getUiScaleFactor()).toInt()
-    fun submitChannels(newList: List<Channel>, initialFocusPos: Int) {
-        highlightedPos = initialFocusPos
+    override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+        return if (orbType >= 10) 80 else 48
     }
 
-    inner class ChannelVH(val rowView: ChannelRowView) : RecyclerView.ViewHolder(rowView)
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChannelVH =
-        ChannelVH(ChannelRowView(parent.context))
-    override fun onBindViewHolder(holder: ChannelVH, position: Int) {}
-    override fun getItemCount(): Int = 0
-}
-
-// === ВСЕ МОДАЛЬНЫЕ ОКНА НАСТРОЕК, РЕДАКТОР И ТЕСТ КАНАЛОВ ===
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openPowerAndSleepSubModal() {
-    setSubModalHeaderTitle("Выключение и Таймер сна")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-
-    val sleepOpts = listOf(0, 30, 60, 90, 120)
-    val items = mutableListOf("[-]   Выключить телевизор TiViLook прямо сейчас")
-    for (m in sleepOpts) {
-        val sel = if (sleepTimerMinutesLeft == m) "[+]   " else "[-]   "
-        if (m == 0) items.add("${sel}Таймер сна   •   Выключен")
-        else items.add("${sel}Таймер сна   •   Выключить через $m минут")
-    }
-    updateSubModalListItems(items)
-
-    subModalList.setOnItemClickListener { _, _, which, _ ->
-        if (which == 0) {
-            powerOffAppWithCrtEffect()
-        } else {
-            setSleepTimer(sleepOpts.getOrElse(which - 1) { 0 })
-            navigateBackInMenu()
+    override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, textPaint: Paint) {
+        val cy = (top + bottom) / 2f
+        if (orbType == 10 || orbType == 11) {
+            val isOn = (orbType == 10)
+            val trackW = 66f; val trackH = 32f
+            val left = x + 4f; val topY = cy - trackH / 2f
+            rect.set(left, topY, left + trackW, topY + trackH)
+            paint.shader = null
+            paint.style = Paint.Style.FILL
+            paint.color = if (isOn) Color.parseColor("#00C853") else Color.parseColor("#455A64")
+            canvas.drawRoundRect(rect, trackH / 2f, trackH / 2f, paint)
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.2f
+            paint.color = if (isOn) Color.parseColor("#B9F6CA") else Color.parseColor("#90A4AE")
+            canvas.drawRoundRect(rect, trackH / 2f, trackH / 2f, paint)
+            paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+            val knobX = if (isOn) (left + trackW - trackH / 2f) else (left + trackH / 2f)
+            canvas.drawCircle(knobX, cy, trackH * 0.39f, paint)
+            return
         }
-    }
-    animateMenuAppear(subModalOverlay)
-    subModalList.requestFocus()
-}
 
-@OptIn(UnstableApi::class)
-internal fun MainActivity.setSleepTimer(minutes: Int) {
-    sleepTimerRunnable?.let { uiHandler.removeCallbacks(it) }
-    sleepTimerMinutesLeft = minutes
-    applyCurrentThemeToAllPanels()
-    if (minutes <= 0) {
-        applyAudioEnhancements()
-        return
-    }
-    val tick = object : Runnable {
-        override fun run() {
-            sleepTimerMinutesLeft--
-            if (sleepTimerMinutesLeft <= 0) {
-                powerOffAppWithCrtEffect()
-            } else {
-                if (sleepTimerMinutesLeft == 1) player?.volume = 0.35f
-                uiHandler.postDelayed(this, 60_000L)
-            }
+        val cx = x + 21f
+        val r = 14.5f
+        val (lightHex, mainHex, darkHex) = when (orbType) {
+            1 -> Triple("#80FFC8", "#00E676", "#007E3A")
+            2 -> Triple("#FF9E9E", "#FF5252", "#9E1212")
+            4 -> Triple("#9BE7FF", "#29B6F6", "#02578A")
+            else -> Triple("#FFF099", "#FFD740", "#9E7800")
         }
-    }
-    sleepTimerRunnable = tick
-    uiHandler.postDelayed(tick, 60_000L)
-}
+        val mainColor = Color.parseColor(mainHex)
 
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openBrightnessSubModal() {
-    setSubModalHeaderTitle("Уровень яркости экрана")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    val levels = listOf(100, 75, 50, 25)
-    val descriptions = listOf(
-        "Яркость экрана: 100%   •   Дневной режим",
-        "Яркость экрана: 75%     •   Вечерний режим",
-        "Яркость экрана: 50%     •   Ночной режим",
-        "Яркость экрана: 25%     •   Глубокая ночь (защита плазмы)"
-    )
-    val curIdx = levels.indexOf(brightnessPercent).coerceAtLeast(0)
-    updateSubModalListItems(
-        levels.mapIndexed { idx, lvl -> (if (brightnessPercent == lvl) "[+]   " else "[-]   ") + descriptions[idx] },
-        preservePositionIndex = curIdx
-    )
-    subModalList.setOnItemClickListener { _, _, which, _ ->
-        if (which in levels.indices) {
-            brightnessPercent = levels[which]
-            applyBrightnessLevel()
-            saveState()
-            navigateBackInMenu()
-        }
-    }
-    animateMenuAppear(subModalOverlay)
-    subModalList.requestFocus()
-}
+        // 1) Мягкое внешнее свечение (ореол)
+        paint.shader = null
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(65, Color.red(mainColor), Color.green(mainColor), Color.blue(mainColor))
+        canvas.drawCircle(cx, cy, r * 1.28f, paint)
 
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openChannelActionsSubModal() {
-    val ch = currentChannel ?: return
-    setSubModalHeaderTitle("Управление каналом: ${ch.name}")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    val items = listOf(
-        "[-]   Исключить этот канал из списка   •   Возврат через Редактор",
-        "[>]   Переместить в другую категорию   •   Сейчас: ${effectiveCategory(ch)}",
-        if (isDualStreamActive) "[ON]   Двойной эфир (2-й экран)   •   Активен" else "[OFF]   Двойной эфир (2-й экран)   •   Выключен"
-    )
-    updateSubModalListItems(items)
-    subModalList.setOnItemClickListener { _, _, which, _ ->
-        when (which) {
-            0 -> {
-                manualDisabledUrls.add(ch.url)
-                saveState()
-                updateCategoriesList()
-                selectCategory(currentCategoryIndex)
-                closeAllMenus()
-                switchChannelByOffset(+1)
-            }
-            1 -> navigateToMenu("MOVE_CHANNEL_CATEGORY")
-            2 -> {
-                if (isDualStreamActive) {
-                    stopDualStreamMode()
-                    closeAllMenus()
-                } else {
-                    startDualStreamChannel(ch)
-                    closeAllMenus()
-                    switchChannelByOffset(+1)
-                }
-            }
-        }
-    }
-    animateMenuAppear(subModalOverlay)
-    subModalList.requestFocus()
-}
+        // 2) Объёмная 3D-сфера через плавный RadialGradient (без грубого белого шарика!)
+        paint.shader = RadialGradient(
+            cx - r * 0.32f,
+            cy - r * 0.35f,
+            r * 1.38f,
+            intArrayOf(Color.parseColor(lightHex), mainColor, Color.parseColor(darkHex)),
+            floatArrayOf(0f, 0.58f, 1f),
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawCircle(cx, cy, r, paint)
+        paint.shader = null
 
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openMoveChannelCategorySubModal() {
-    val ch = currentChannel ?: return
-    val targetCats = activeCategoryList().drop(2)
-    val curCat = effectiveCategory(ch)
-    setSubModalHeaderTitle("Переместить «${ch.name}» в категорию")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    val curIdx = targetCats.indexOf(curCat).coerceAtLeast(0)
-    updateSubModalListItems(
-        targetCats.map { c -> (if (c == curCat) "[+]   " else "[-]   ") + c },
-        preservePositionIndex = curIdx
-    )
-    subModalList.setOnItemClickListener { _, _, which, _ ->
-        if (which in targetCats.indices) {
-            val newCat = targetCats[which]
-            customCategoryMap[ch.url] = newCat
-            currentChannel = Channel(ch.name, ch.url, newCat, ch.tvgId)
-            saveState()
-            updateCategoriesList()
-            selectCategory(activeCategoryList().indexOf(newCat).takeIf { it >= 2 } ?: currentCategoryIndex)
-            closeAllMenus()
-        }
-    }
-    animateMenuAppear(subModalOverlay)
-    subModalList.requestFocus()
-}
+        // 3) Тонкий стеклянный блик-полумесяц по верхнему ободку сферы
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 1.6f
+        paint.color = Color.argb(135, 255, 255, 255)
+        rect.set(cx - r * 0.78f, cy - r * 0.78f, cx + r * 0.78f, cy + r * 0.78f)
+        canvas.drawArc(rect, 200f, 140f, false, paint)
 
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openThemesSubModal() {
-    setSubModalHeaderTitle("Темы оформления")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    subModalTopButtons.visibility = View.GONE
-    subModalTopButtons.removeAllViews()
-
-    val items = themes.mapIndexed { idx, t ->
-        if (idx == themeIndex) "[+]   ${t.name}   •   Активна"
-        else "[-]   ${t.name}"
-    }
-    updateSubModalListItems(items, preservePositionIndex = themeIndex)
-
-    subModalList.setOnItemClickListener { _, _, which, _ ->
-        themeIndex = which
-        saveState()
-        applyCurrentThemeToAllPanels()
-        navigateBackInMenu()
-    }
-    animateMenuAppear(subModalOverlay)
-    subModalList.requestFocus()
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openTopManagerSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-    setSubModalHeaderTitle("Каналы в ТОПе групп (${topUrls.size})")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    subModalTopButtons.visibility = View.VISIBLE
-    subModalTopButtons.removeAllViews()
-    if (topUrls.isNotEmpty()) {
-        subModalTopButtons.addView(makeModernButton("Очистить весь ТОП") {
-            topUrls.clear()
-            saveState()
-            selectCategory(currentCategoryIndex)
-            openTopManagerSubModal(inPlace = true, keepIndex = 0)
-        })
-    }
-    val topChans = allChannels.filter { topUrls.contains(it.url) }
-    updateSubModalListItems(
-        if (topChans.isEmpty()) listOf("[-]   В ТОПе пока нет закреплённых каналов")
-        else topChans.map { "[+]   ${it.name}   •   ${effectiveCategory(it)}" },
-        smoothToggle = inPlace,
-        preservePositionIndex = keepIndex
-    )
-    subModalList.setOnItemClickListener { _, _, idx, _ ->
-        if (idx in topChans.indices) {
-            topUrls.remove(topChans[idx].url)
-            saveState()
-            selectCategory(currentCategoryIndex)
-            openTopManagerSubModal(inPlace = true, keepIndex = idx.coerceAtMost((topChans.size - 2).coerceAtLeast(0)))
-        }
-    }
-    if (!inPlace) {
-        animateMenuAppear(subModalOverlay)
-        subModalList.requestFocus()
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openFullScreenChannelEpg() {
-    setPlayerMiniPreviewMode(true)
-    val ch = currentChannel
-    val progs = getChannelEpgList(ch)
-    val dateFmt = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault())
-    val now = System.currentTimeMillis()
-
-    fullEpgTitle.text = "Программа передач: " + (ch?.name ?: "Канал не выбран")
-    val items = mutableListOf<String>()
-    var activeIndex = 0
-
-    if (progs.isEmpty()) {
-        items.add("[?]   Расписание для канала «${ch?.name ?: ""}» обновляется в фоне...")
-    } else {
-        progs.forEachIndexed { idx, p ->
-            val isNow = now in p.startMs..p.stopMs
-            if (isNow) activeIndex = idx
-            val prefix = when {
-                isNow -> "[+]   Сейчас   •   "
-                p.stopMs < now -> "[-]   Прошло   •   "
-                else -> "[>]   Далее     •   "
-            }
-            val timeRange = dateFmt.format(Date(p.startMs)) + " – " + dateFmt.format(Date(p.stopMs))
-            items.add("$prefix$timeRange   •   ${p.title}")
-        }
-    }
-
-    fullEpgListView.adapter = createRoundedSelectorAdapter(items, 15.5f, true, fixedRowHeight = true) { pos ->
-        fullEpgListView.selectedItemPosition == pos
-    }
-    animateMenuAppear(fullEpgOverlay)
-    fullEpgListView.requestFocus()
-    if (activeIndex > 0 && activeIndex < items.size) fullEpgListView.setSelection(activeIndex)
-    fullEpgListView.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-        override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-            resetMenuInactivityTimer()
-            refreshSimpleListHighlightInPlace(fullEpgListView, position)
-        }
-        override fun onNothingSelected(parent: AdapterView<*>?) {}
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openMoreSettingsSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-    setSubModalHeaderTitle("Общие настройки")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-
-    val scaleText = when (uiScaleStep) {
-        0 -> "Обычный (Смартфон)"
-        1 -> "Крупный (Телевизор)"
-        else -> "Огромный (Большой ТВ)"
-    }
-    val alphaText = when (uiAlphaStep) {
-        0 -> "Плотный (96%)"
-        1 -> "Средний (84%)"
-        else -> "Стекло (65%)"
-    }
-    val ambiRow = when (ambilightMode) {
-        0 -> "[OFF]   Подсветка Ambilight   •   Выключена"
-        1 -> "[ON]   Подсветка Ambilight   •   Цвет группы"
-        2 -> "[ON]   Подсветка Ambilight   •   Спектр"
-        else -> "[ON]   Подсветка Ambilight   •   Кадр видео"
-    }
-    val aspectText = when (screenAspectMode) {
-        0 -> "По размеру экрана"
-        1 -> "Растянуть 16:9"
-        else -> "Кинозум"
-    }
-    val cutoutRow = if (cameraCutoutSafeOffset) "[ON]   Отступ под камеру слева (Смартфон)   •   Включён" else "[OFF]   Отступ под камеру слева (Смартфон)   •   Выключен"
-    val bannerRow = if (showChannelBannerOnSwitch) "[ON]   Баннер названия при переключении   •   Показывать" else "[OFF]   Баннер названия при переключении   •   Скрыт"
-    val delayRow = "[+]   Автоскрытие меню и баннера   •   Через $menuHideDelaySec сек"
-    val dualRow = if (isDualStreamActive) "[ON]   Двойной эфир (2-й экран PiP)   •   Активен" else "[OFF]   Двойной эфир (2-й экран PiP)   •   Выключен"
-    val dohRow = if (dohEnabled) "[ON]   Обход блокировок DoH (Cloudflare)   •   Включён" else "[OFF]   Обход блокировок DoH (Системный DNS)   •   Выключен"
-    val dropRow = if (onDropBehavior == 0) "[+]   При обрыве потока   •   Бесшовный перезапуск" else "[+]   При обрыве потока   •   Следующий канал"
-    val sleepRow = if (sleepTimerMinutesLeft > 0) "[ON]   Таймер сна и Выключение   •   Через $sleepTimerMinutesLeft мин" else "[>]   Таймер сна и Выключение   •   Открыть меню"
-
-    val items = listOf(
-        "[+]   Размер текста и меню   •   $scaleText",
-        "[+]   Прозрачность меню   •   $alphaText",
-        ambiRow,
-        "[+]   Формат изображения   •   $aspectText",
-        cutoutRow,
-        bannerRow,
-        delayRow,
-        dualRow,
-        dohRow,
-        dropRow,
-        "[>]   Яркость экрана   •   Сейчас: $brightnessPercent%",
-        "[>]   Машина времени   •   Отмотать эфир на -30 сек",
-        sleepRow,
-        "[>]   Телепрограмма EPG   •   Обновить расписание сейчас",
-        "[>]   Обновление TiViLook   •   Проверить и установить с GitHub"
-    )
-    updateSubModalListItems(items, smoothToggle = inPlace, preservePositionIndex = keepIndex)
-
-    subModalList.setOnItemClickListener { _, _, which, _ ->
-        when (which) {
-            0 -> { uiScaleStep = (uiScaleStep + 1) % 3; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-            1 -> { uiAlphaStep = (uiAlphaStep + 1) % 3; saveState(); animatePanelAlphaTransition(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-            2 -> { ambilightMode = (ambilightMode + 1) % 4; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-            3 -> { screenAspectMode = (screenAspectMode + 1) % 3; applyScreenAspectMode(); saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-            4 -> { cameraCutoutSafeOffset = !cameraCutoutSafeOffset; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-            5 -> { showChannelBannerOnSwitch = !showChannelBannerOnSwitch; saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-            6 -> {
-                menuHideDelaySec = when (menuHideDelaySec) { 4 -> 8; 8 -> 12; else -> 4 }
-                saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which)
-            }
-            7 -> { toggleDualStreamWithCurrentOrNeighbor(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-            8 -> { dohEnabled = !dohEnabled; saveState(); initPlayer(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-            9 -> { onDropBehavior = (onDropBehavior + 1) % 2; saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-            10 -> navigateToMenu("BRIGHTNESS_MENU")
-            11 -> { rewindLiveBufferSeconds(30); closeAllMenus() }
-            12 -> navigateToMenu("POWER_AND_SLEEP_MENU")
-            13 -> { loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu() }
-            14 -> checkAndInstallAppUpdateFromGithub()
-        }
-    }
-    if (!inPlace) {
-        animateMenuAppear(subModalOverlay)
-        subModalList.requestFocus()
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.checkAndInstallAppUpdateFromGithub() {
-    Toast.makeText(this, "Проверка обновлений TiViLook на GitHub...", Toast.LENGTH_SHORT).show()
-    thread {
-        try {
-            val apiConn = URL("https://api.github.com/repos/pskovland007/IPtv/releases/latest").openConnection() as HttpURLConnection
-            apiConn.setRequestProperty("Accept", "application/vnd.github+json")
-            apiConn.connectTimeout = 8000; apiConn.readTimeout = 8000
-            if (apiConn.responseCode == 200) {
-                val json = JSONObject(apiConn.inputStream.bufferedReader().readText())
-                val tagName = json.optString("tag_name", "")
-                val assets = json.optJSONArray("assets")
-                var apkUrl = ""
-                if (assets != null) {
-                    for (i in 0 until assets.length()) {
-                        val asset = assets.getJSONObject(i)
-                        val url = asset.optString("browser_download_url", "")
-                        if (url.endsWith(".apk", true)) { apkUrl = url; break }
-                    }
-                }
-                if (apkUrl.isNotEmpty()) {
-                    runOnUiThread {
-                        Toast.makeText(this, "Скачивание новой версии $tagName...", Toast.LENGTH_LONG).show()
-                    }
-                    val apkFile = File(externalCacheDir ?: cacheDir, "TiViLook-update.apk")
-                    if (apkFile.exists()) apkFile.delete()
-                    val dlConn = URL(apkUrl).openConnection() as HttpURLConnection
-                    dlConn.instanceFollowRedirects = true
-                    dlConn.inputStream.use { input ->
-                        FileOutputStream(apkFile).use { output -> input.copyTo(output) }
-                    }
-                    runOnUiThread {
-                        val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                            FileProvider.getUriForFile(this, "com.example.miboxiptv.fileprovider", apkFile)
-                        } else Uri.fromFile(apkFile)
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "application/vnd.android.package-archive")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        startActivity(intent)
-                    }
-                } else {
-                    runOnUiThread { Toast.makeText(this, "У вас установлена актуальная версия!", Toast.LENGTH_SHORT).show() }
-                }
-            } else {
-                runOnUiThread { Toast.makeText(this, "У вас установлена последняя сборка v2.7!", Toast.LENGTH_SHORT).show() }
-            }
-        } catch (_: Exception) {
-            runOnUiThread { Toast.makeText(this, "Проверка завершена: установлена актуальная версия", Toast.LENGTH_SHORT).show() }
-        }
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openPlaylistsSubModal() {
-    ensureDefaultPlaylists()
-    setSubModalHeaderTitle("Плейлисты (2 встроенных + ваши списки)")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    val snapshot = playlists.toList()
-    val items = snapshot.mapIndexed { idx, p -> (if (idx == activePlaylistIndex) "[+]   " else "[-]   ") + p.title }.toMutableList()
-    items.add("[>]   Добавить свой плейлист по ссылке   •   Сохранение групп")
-    items.add("[>]   Проводник   •   Выбрать файл .m3u/.m3u8 с устройства или USB")
-    if (snapshot.size > 2 && activePlaylistIndex >= 2) items.add("[-]   Удалить выбранный пользовательский плейлист")
-    updateSubModalListItems(items, preservePositionIndex = activePlaylistIndex)
-
-    subModalList.setOnItemClickListener { _, _, which, _ ->
-        when {
-            which < snapshot.size -> { activePlaylistIndex = which; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false) }
-            which == snapshot.size -> navigateToMenu("ADD_URL")
-            which == snapshot.size + 1 -> {
-                currentBrowseDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                if (!currentBrowseDir.exists()) currentBrowseDir = Environment.getExternalStorageDirectory()
-                navigateToMenu("FILE_BROWSER")
-            }
-            else -> {
-                if (activePlaylistIndex >= 2 && activePlaylistIndex < playlists.size) {
-                    playlists.removeAt(activePlaylistIndex); activePlaylistIndex = 0; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
-                }
-            }
-        }
-    }
-    animateMenuAppear(subModalOverlay)
-    subModalList.requestFocus()
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openFolderExplorerModal(dir: File) {
-    requestStoragePermissionsIfNeeded()
-    currentBrowseDir = dir
-    setSubModalHeaderTitle("Проводник: " + dir.absolutePath)
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    subModalTopButtons.visibility = View.VISIBLE
-    subModalTopButtons.removeAllViews()
-
-    subModalTopButtons.addView(makeModernButton("📥 Download") { openFolderExplorerModal(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)) })
-    subModalTopButtons.addView(makeModernButton("🏠 Память") { openFolderExplorerModal(Environment.getExternalStorageDirectory()) })
-    subModalTopButtons.addView(makeModernButton("🔌 USB") { openFolderExplorerModal(File("/storage")) })
-    subModalTopButtons.addView(makeModernButton("⌨ Путь вручную") {
-        openInputSubModal("Путь к файлу .m3u / .m3u8", "/sdcard/Download/playlist.m3u8") { path -> addLocalPlaylistFile(File(path)) }
-    })
-
-    val entries = mutableListOf<Pair<String, File?>>()
-    val parent = dir.parentFile
-    if (parent != null && parent.canRead()) entries.add(Pair("[>]   .. [На уровень вверх]", parent))
-    val rawChildren = try { dir.listFiles()?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
-    for (d in rawChildren.filter { it.isDirectory && !it.name.startsWith(".") }.sortedBy { it.name.lowercase() }) entries.add(Pair("[>]   Папка: " + d.name, d))
-    for (f in rawChildren.filter { it.isFile && (it.name.endsWith(".m3u", true) || it.name.endsWith(".m3u8", true) || it.name.endsWith(".txt", true)) }.sortedBy { it.name.lowercase() }) {
-        entries.add(Pair("[+]   Файл: " + f.name + "   •   " + (f.length() / 1024) + " КБ", f))
-    }
-    if (entries.isEmpty()) entries.add(Pair("[-]   Папка пуста или нет доступа", null))
-
-    updateSubModalListItems(entries.map { it.first }, preservePositionIndex = 0)
-    subModalList.setOnItemClickListener { _, _, idx, _ ->
-        val target = entries.getOrNull(idx)?.second ?: return@setOnItemClickListener
-        if (target.isDirectory) openFolderExplorerModal(target) else if (target.isFile) addLocalPlaylistFile(target)
-    }
-    animateMenuAppear(subModalOverlay)
-    subModalList.requestFocus()
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.addLocalPlaylistFile(file: File) {
-    if (!file.exists() || !file.canRead()) return
-    playlists.add(PlaylistEntry(file.name, file.absolutePath, true))
-    activePlaylistIndex = playlists.size - 1
-    saveState()
-    closeAllMenus()
-    loadActivePlaylist(autoPlayLast = false)
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openChannelEditorGroupsModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-    setSubModalHeaderTitle("Редактор каналов: выберите группу")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    subModalTopButtons.visibility = View.VISIBLE
-    subModalTopButtons.removeAllViews()
-    subModalTopButtons.addView(makeModernButton("Включить все группы и каналы") {
-        disabledCategories.clear(); manualDisabledUrls.clear(); autoDisabledUrls.clear()
-        saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorGroupsModal(inPlace = true, keepIndex = subModalHighlightedPos)
-    })
-    val snapshot = allChannels.toList()
-    val editableCats = activeCategoryList().drop(2)
-    updateSubModalListItems(
-        editableCats.map { cat ->
-            val isCatEnabled = !disabledCategories.contains(cat)
-            val totalInCat = snapshot.count { effectiveCategory(it) == cat }
-            val activeInCat = snapshot.count { effectiveCategory(it) == cat && isChannelActive(it) }
-            "${if (isCatEnabled) "[+]" else "[-]"}   $cat   •   Активно: $activeInCat из $totalInCat"
-        },
-        smoothToggle = inPlace,
-        preservePositionIndex = keepIndex
-    )
-    subModalList.setOnItemClickListener { _, _, idx, _ -> selectedEditorCategory = editableCats[idx]; navigateToMenu("CHANNEL_EDITOR_ITEMS") }
-    if (!inPlace) {
-        animateMenuAppear(subModalOverlay)
-        subModalList.requestFocus()
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openChannelEditorItemsModal(catName: String, inPlace: Boolean = false, keepIndex: Int = -1) {
-    val catChannels = allChannels.filter { effectiveCategory(it) == catName }.sortedWith(Comparator<Channel> { a, b -> ruCollator.compare(a.name, b.name) })
-    val isCatDisabled = disabledCategories.contains(catName)
-    setSubModalHeaderTitle("Группа: $catName (${catChannels.size} кан.)")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    subModalTopButtons.visibility = View.VISIBLE
-    subModalTopButtons.removeAllViews()
-    subModalTopButtons.addView(makeModernButton(if (isCatDisabled) "[+] Включить всю группу" else "[-] Отключить всю группу") {
-        if (disabledCategories.contains(catName)) disabledCategories.remove(catName) else disabledCategories.add(catName)
-        saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = subModalHighlightedPos)
-    })
-    subModalTopButtons.addView(makeModernButton("Включить все в группе") {
-        catChannels.forEach { manualDisabledUrls.remove(it.url); autoDisabledUrls.remove(it.url) }
-        disabledCategories.remove(catName); saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = subModalHighlightedPos)
-    })
-    updateSubModalListItems(
-        catChannels.map { ch ->
-            val isManualOff = manualDisabledUrls.contains(ch.url)
-            val isAutoOff = autoDisabledUrls.contains(ch.url)
-            val enabled = !isManualOff && !isAutoOff && !isCatDisabled
-            val note = if (isManualOff) "   •   Исключён вручную" else if (isAutoOff) "   •   Скрыт тестом" else ""
-            "${if (enabled) "[+]" else "[-]"}   ${ch.name}$note"
-        },
-        smoothToggle = inPlace,
-        preservePositionIndex = keepIndex
-    )
-    subModalList.setOnItemClickListener { _, _, idx, _ ->
-        if (idx in catChannels.indices) {
-            val ch = catChannels[idx]
-            if (manualDisabledUrls.contains(ch.url) || autoDisabledUrls.contains(ch.url)) {
-                manualDisabledUrls.remove(ch.url); autoDisabledUrls.remove(ch.url)
-            } else manualDisabledUrls.add(ch.url)
-            saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = idx)
-        }
-    }
-    if (!inPlace) {
-        animateMenuAppear(subModalOverlay)
-        subModalList.requestFocus()
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openAnalyzerGroupsModal(firstOpen: Boolean = false) {
-    val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
-    val aliveTotal = aliveChannelsAtomic.get()
-    val deadTotal = deadChannelsAtomic.get()
-    setSubModalHeaderTitle("Быстрый тест   •   [+] $aliveTotal   [-] $deadTotal")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
-        subModalTopButtons.visibility = View.VISIBLE
-        subModalTopButtons.removeAllViews()
-        subModalTopButtons.addView(makeModernButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Быстрый тест всех групп") {
-            if (isAnalyzerRunning) {
-                isAnalyzerRunning = false; analyzerStatusBanner.visibility = View.GONE; openAnalyzerGroupsModal(firstOpen = true)
-            } else {
-                selectedAnalyzerCategory = "Все каналы"; startBackgroundChannelAnalyzer(snapshot); openAnalyzerGroupsModal(firstOpen = true)
-            }
-        })
-        if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ Свернуть в фон") { collapseAnalyzerToTopBar() })
-        if (autoDisabledUrls.isNotEmpty()) {
-            subModalTopButtons.addView(makeModernButton("↺ Вернуть скрытые (${autoDisabledUrls.size})") {
-                autoDisabledUrls.clear(); saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openAnalyzerGroupsModal(firstOpen = false)
-            })
-        }
-    }
-    val groupNames = listOf("Все каналы") + activeCategoryList().drop(2)
-    updateSubModalListItems(groupNames.map { gName ->
-        val groupChans = if (gName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == gName }
-        "[>]   $gName (${groupChans.size} кан.)   •   [+] ${groupChans.count { channelHealthMap[it.url] == true }}    [-] ${groupChans.count { channelHealthMap[it.url] == false }}"
-    }, preservePositionIndex = subModalHighlightedPos)
-    subModalList.setOnItemClickListener { _, _, idx, _ ->
-        if (idx in groupNames.indices) {
-            selectedAnalyzerCategory = groupNames[idx]; navigateToMenu("ANALYZER_GROUP_VIEW")
-        }
-    }
-    if (firstOpen) {
-        animateMenuAppear(subModalOverlay)
-        subModalList.requestFocus()
-        resetMenuInactivityTimer()
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openAnalyzerGroupChannelsModal(catName: String, firstOpen: Boolean = false) {
-    val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
-    val groupChans = (if (catName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == catName })
-        .sortedWith(Comparator<Channel> { a, b -> ruCollator.compare(a.name, b.name) })
-    val alive = groupChans.count { channelHealthMap[it.url] == true }
-    val dead = groupChans.count { channelHealthMap[it.url] == false }
-    setSubModalHeaderTitle("Группа: $catName ([+] $alive  •  [-] $dead)")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
-        subModalTopButtons.visibility = View.VISIBLE
-        subModalTopButtons.removeAllViews()
-        subModalTopButtons.addView(makeModernButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Быстрый тест группы") {
-            if (isAnalyzerRunning) {
-                isAnalyzerRunning = false; analyzerStatusBanner.visibility = View.GONE; openAnalyzerGroupChannelsModal(catName, firstOpen = true)
-            } else {
-                startBackgroundChannelAnalyzer(groupChans); openAnalyzerGroupChannelsModal(catName, firstOpen = true)
-            }
-        })
-        if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ Свернуть в фон") { collapseAnalyzerToTopBar() })
-    }
-    updateSubModalListItems(groupChans.mapIndexed { i, ch ->
-        val status = when (channelHealthMap[ch.url]) { true -> "[+]   Работает"; false -> "[-]   Скрыт"; null -> "[?]   Очередь" }
-        "$status   •   ${i + 1}. ${ch.name}"
-    }, preservePositionIndex = subModalHighlightedPos)
-    subModalList.setOnItemClickListener { _, _, idx, _ ->
-        if (idx in groupChans.indices) {
-            playChannelObj(groupChans[idx], immediate = true); closeAllMenus()
-        }
-    }
-    if (firstOpen) {
-        animateMenuAppear(subModalOverlay)
-        subModalList.requestFocus()
-        resetMenuInactivityTimer()
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>) {
-    val targetChannels = rawTargetChannels.filter { !manualDisabledUrls.contains(it.url) }
-    if (isAnalyzerRunning || targetChannels.isEmpty()) return
-    isAnalyzerRunning = true
-    targetChannels.forEach { channelHealthMap.remove(it.url) }
-    aliveChannelsAtomic.set(0)
-    deadChannelsAtomic.set(0)
-
-    val snapshot = targetChannels.toList()
-    val total = snapshot.size
-    val counter = AtomicInteger(0)
-
-    analyzerStatusBanner.text = colorizeStatusText("Быстрый тест: 0 / $total")
-    analyzerStatusBanner.visibility = View.VISIBLE
-    resetMenuInactivityTimer()
-
-    thread(priority = Thread.NORM_PRIORITY) {
-        val pool = Executors.newFixedThreadPool(6)
-        var lastUiUpdateMs = 0L
-        for (ch in snapshot) {
-            pool.submit {
-                if (!isAnalyzerRunning) return@submit
-                val isProtectedVipToken = CoreEngines.isSingleSessionTokenUrl(ch.url)
-                val ok = if (isProtectedVipToken) true else checkStreamAliveDeep(ch.url)
-                channelHealthMap[ch.url] = ok
-                if (ok) {
-                    aliveChannelsAtomic.incrementAndGet()
-                    autoDisabledUrls.remove(ch.url)
-                } else {
-                    deadChannelsAtomic.incrementAndGet()
-                    if (!manualDisabledUrls.contains(ch.url)) autoDisabledUrls.add(ch.url)
-                }
-
-                val done = counter.incrementAndGet()
-                val now = System.currentTimeMillis()
-                if (now - lastUiUpdateMs >= 850L || done >= total) {
-                    lastUiUpdateMs = now
-                    val aliveCount = aliveChannelsAtomic.get()
-                    val deadCount = deadChannelsAtomic.get()
-                    runOnUiThread {
-                        if (isAnalyzerRunning && done < total) {
-                            analyzerStatusBanner.text = colorizeStatusText("Тест: $done / $total   •   [+] $aliveCount   [-] Скрыто: $deadCount")
-                            val curMenu = menuHistory.lastOrNull()
-                            if (curMenu == "ANALYZER_GROUP_VIEW") openAnalyzerGroupChannelsModal(selectedAnalyzerCategory, firstOpen = false)
-                            else if (curMenu == "ANALYZER_GROUPS") openAnalyzerGroupsModal(firstOpen = false)
-                        }
-                    }
-                }
-            }
-        }
-        pool.shutdown()
-        try { pool.awaitTermination(15, TimeUnit.MINUTES) } catch (_: Exception) {}
-        pool.shutdownNow()
-        if (isAnalyzerRunning) {
-            isAnalyzerRunning = false
-            val aliveCount = aliveChannelsAtomic.get()
-            val deadCount = deadChannelsAtomic.get()
-            runOnUiThread {
-                saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
-                val curMenu = menuHistory.lastOrNull()
-                if (curMenu == "ANALYZER_GROUP_VIEW") openAnalyzerGroupChannelsModal(selectedAnalyzerCategory, firstOpen = false)
-                else if (curMenu == "ANALYZER_GROUPS") openAnalyzerGroupsModal(firstOpen = false)
-                analyzerStatusBanner.text = colorizeStatusText("Готово! Рабочих: [+] $aliveCount  |  Скрыто нерабочих: [-] $deadCount")
-                uiHandler.postDelayed({ analyzerStatusBanner.visibility = View.GONE }, 5000L)
-            }
-        }
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.checkStreamAliveDeep(urlStr: String): Boolean {
-    var conn: HttpURLConnection? = null
-    return try {
-        val cleanUrl = urlStr.substringBefore("#")
-        val parsed = URL(cleanUrl)
-        val hdrs = CoreEngines.headersForStreamUrl(cleanUrl)
-        conn = (parsed.openConnection() as HttpURLConnection).apply {
-            setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
-            for ((k, v) in hdrs) setRequestProperty(k, v)
-            instanceFollowRedirects = true
-            connectTimeout = 4000
-            readTimeout = 4000
-        }
-        val code = conn.responseCode
-        if (code !in 200..299) {
-            conn.disconnect()
-            return false
-        }
-        val cType = (conn.contentType ?: "").lowercase()
-        if (cType.contains("text/html")) {
-            conn.disconnect()
-            return false
-        }
-        val buf = ByteArray(256)
-        val readBytes = conn.inputStream.read(buf)
-        conn.disconnect()
-        if (readBytes <= 0) return false
-        val headStr = String(buf, 0, readBytes)
-        if (headStr.contains("<html", true) || headStr.contains("<!doctype html", true) || headStr.contains("404 not found", true) || headStr.contains("access denied", true)) {
-            return false
-        }
-        if (cleanUrl.contains(".m3u", true) && !headStr.contains("#EXTM3U", true) && buf[0] != 0x47.toByte()) {
-            return false
-        }
-        true
-    } catch (_: Exception) {
-        try { conn?.disconnect() } catch (_: Exception) {}
-        false
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openBufferSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-    setSubModalHeaderTitle("Буфер подкачки и Машина времени")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    val opts = listOf(
-        "Маленький буфер (6–12 сек)   •   Мгновенный старт",
-        "Оптимальный буфер (14–28 сек)   •   Рекомендуется (без VPN)",
-        "Средний буфер (18–36 сек)   •   Плавный HEVC поток",
-        "Большой буфер (24–45 сек)   •   Максимум защиты от ТСПУ"
-    ).mapIndexed { i, t -> (if (i == bufferLevel) "[+]   " else "[-]   ") + t }.toMutableList()
-    opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -20 сек")
-    opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -45 сек")
-    val targetIdx = if (keepIndex >= 0) keepIndex else bufferLevel
-    updateSubModalListItems(opts, smoothToggle = inPlace, preservePositionIndex = targetIdx)
-    subModalList.setOnItemClickListener { _, _, which, _ ->
-        when (which) {
-            in 0..3 -> { bufferLevel = which; saveState(); initPlayer(); openBufferSubModal(inPlace = true, keepIndex = which) }
-            4 -> { rewindLiveBufferSeconds(20); closeAllMenus() }
-            5 -> { rewindLiveBufferSeconds(45); closeAllMenus() }
-        }
-    }
-    if (!inPlace) {
-        animateMenuAppear(subModalOverlay)
-        subModalList.requestFocus()
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openDecoderSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-    setSubModalHeaderTitle("Декодер и Защита Плазмы")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    val opts = listOf(
-        "Аппаратный декодер (MediaCodec HW)   •   Минимальная нагрузка",
-        "Автоматический декодер (HW + FFmpeg)   •   Рекомендуется",
-        "Программный декодер (Приоритет SW)   •   Совместимость"
-    ).mapIndexed { i, t -> (if (i == decoderMode) "[+]   " else "[-]   ") + t }.toMutableList()
-    opts.add(if (pixelOrbiterEnabled) "[ON]   Сдвиг пикселей часов, антенны и экрана (Pixel Orbiter)   •   Включён" else "[OFF]   Сдвиг пикселей часов, антенны и экрана (Pixel Orbiter)   •   Выключен")
-    opts.add(if (afrEnabled) "[ON]   Авточастота кадров AFR (50/60 Гц)   •   Включена" else "[OFF]   Авточастота кадров AFR (50/60 Гц)   •   Выключена")
-    val targetIdx = if (keepIndex >= 0) keepIndex else decoderMode
-    updateSubModalListItems(opts, smoothToggle = inPlace, preservePositionIndex = targetIdx)
-    subModalList.setOnItemClickListener { _, _, which, _ ->
-        when (which) {
-            in 0..2 -> { decoderMode = which; saveState(); initPlayer(); openDecoderSubModal(inPlace = true, keepIndex = which) }
-            3 -> { pixelOrbiterEnabled = !pixelOrbiterEnabled; saveState(); stepPixelOrbiter(); openDecoderSubModal(inPlace = true, keepIndex = which) }
-            4 -> { afrEnabled = !afrEnabled; saveState(); openDecoderSubModal(inPlace = true, keepIndex = which) }
-        }
-    }
-    if (!inPlace) {
-        animateMenuAppear(subModalOverlay)
-        subModalList.requestFocus()
-    }
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openAudioSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-    val p = player ?: return
-    setSubModalHeaderTitle("Звук, Выравнивание (DRC) и Усиление")
-    subModalInputContainer.visibility = View.GONE
-    subModalList.visibility = View.VISIBLE
-    val labels = mutableListOf<String>()
-    labels.add(if (drcNightAudioEnabled) "[ON]   Выравнивание громкости (Night Audio / DRC)   •   Включено" else "[OFF]   Выравнивание громкости (Night Audio / DRC)   •   Выключено")
-    val boostText = when (audioBoostPercent) {
-        100 -> "100% (Штатный уровень)"
-        130 -> "130% (+3.5 дБ)"
-        160 -> "160% (+7.0 дБ)"
-        else -> "200% (+11 дБ Максимум)"
-    }
-    labels.add("[+]   Усиление громкости (Audio Boost)   •   $boostText")
-
-    val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-    val overrides = mutableListOf<TrackSelectionOverride>()
-    for (g in groups) {
-        for (i in 0 until g.length) {
-            val fmt = g.getTrackFormat(i)
-            val codec = fmt.sampleMimeType?.substringAfter("/")?.uppercase() ?: "AUDIO"
-            val lang = fmt.language?.uppercase() ?: ("Дорожка " + (overrides.size + 1))
-            labels.add((if (g.isTrackSelected(i)) "[+]   " else "[-]   ") + "Аудиодорожка: $lang   •   $codec")
-            overrides.add(TrackSelectionOverride(g.mediaTrackGroup, i))
-        }
-    }
-    val targetIdx = if (keepIndex >= 0) keepIndex else 0
-    updateSubModalListItems(labels, smoothToggle = inPlace, preservePositionIndex = targetIdx)
-    subModalList.setOnItemClickListener { _, _, idx, _ ->
-        when (idx) {
-            0 -> { drcNightAudioEnabled = !drcNightAudioEnabled; saveState(); applyAudioEnhancements(); openAudioSubModal(inPlace = true, keepIndex = idx) }
+        // 4) Чёткий символ внутри сферы
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 3.1f
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeJoin = Paint.Join.ROUND
+        paint.color = Color.parseColor("#0D131A")
+        when (orbType) {
             1 -> {
-                audioBoostPercent = when (audioBoostPercent) { 100 -> 130; 130 -> 160; 160 -> 200; else -> 100 }
-                saveState(); applyAudioEnhancements(); openAudioSubModal(inPlace = true, keepIndex = idx)
+                canvas.drawLine(cx - 5.2f, cy + 0.4f, cx - 1.0f, cy + 4.8f, paint)
+                canvas.drawLine(cx - 1.0f, cy + 4.8f, cx + 6.0f, cy - 4.4f, paint)
             }
-            else -> {
-                val ovIdx = idx - 2
-                if (ovIdx in overrides.indices) {
-                    p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setOverrideForType(overrides[ovIdx]).build()
-                    openAudioSubModal(inPlace = true, keepIndex = idx)
+            2 -> {
+                canvas.drawLine(cx - 4.6f, cy - 4.6f, cx + 4.6f, cy + 4.6f, paint)
+                canvas.drawLine(cx + 4.6f, cy - 4.6f, cx - 4.6f, cy + 4.6f, paint)
+            }
+            4 -> {
+                paint.style = Paint.Style.FILL
+                path.reset()
+                path.moveTo(cx - 3.5f, cy - 5.5f)
+                path.lineTo(cx + 5.5f, cy)
+                path.lineTo(cx - 3.5f, cy + 5.5f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+        }
+    }
+}
+
+class MonogramBadgeSpan(
+    private val letters: String,
+    private val bgColor: Int
+) : ReplacementSpan() {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rect = RectF()
+
+    override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
+        val size = (paint.textSize * 1.42f).toInt().coerceAtLeast(28)
+        return size + (paint.textSize * 0.42f).toInt()
+    }
+
+    override fun draw(
+        canvas: Canvas,
+        text: CharSequence?,
+        start: Int,
+        end: Int,
+        x: Float,
+        top: Int,
+        y: Int,
+        bottom: Int,
+        textPaint: Paint
+    ) {
+        val size = (textPaint.textSize * 1.42f).coerceAtLeast(28f)
+        val centerY = (top + bottom) / 2f
+        val boxTop = centerY - size / 2f
+        val boxBottom = centerY + size / 2f
+        rect.set(x, boxTop, x + size, boxBottom)
+        val corner = size * 0.28f
+
+        paint.shader = null
+        paint.style = Paint.Style.FILL
+        paint.color = bgColor
+        canvas.drawRoundRect(rect, corner, corner, paint)
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 1.5f
+        paint.color = Color.argb(95, 255, 255, 255)
+        canvas.drawRoundRect(rect, corner, corner, paint)
+
+        paint.style = Paint.Style.FILL
+        paint.color = Color.WHITE
+        paint.textAlign = Paint.Align.CENTER
+        paint.textSize = textPaint.textSize * 0.72f
+        paint.typeface = Typeface.DEFAULT_BOLD
+        val fm = paint.fontMetrics
+        val textY = centerY - (fm.ascent + fm.descent) / 2f
+        canvas.drawText(letters.take(2), x + size / 2f, textY, paint)
+    }
+}
+
+typealias StatusOrbSpan = GraphicOrbSpan
+
+fun colorizeStatusText(raw: String): CharSequence {
+    if (!raw.contains("[")) return raw
+    val ss = SpannableString(raw)
+    var i = 0
+    val palette = intArrayOf(
+        Color.parseColor("#E53935"), Color.parseColor("#8E24AA"), Color.parseColor("#3949AB"),
+        Color.parseColor("#039BE5"), Color.parseColor("#00897B"), Color.parseColor("#43A047"),
+        Color.parseColor("#FB8C00"), Color.parseColor("#D81B60"), Color.parseColor("#5E35B1"),
+        Color.parseColor("#00ACC1")
+    )
+    while (i <= raw.length - 3) {
+        when {
+            i <= raw.length - 6 && raw.startsWith("[B:", i) && raw[i + 5] == ']' -> {
+                val mono = raw.substring(i + 3, i + 5)
+                val cIdx = (raw.hashCode() and 0x7FFFFFFF) % palette.size
+                ss.setSpan(MonogramBadgeSpan(mono, palette[cIdx]), i, i + 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                i += 6
+            }
+            i <= raw.length - 4 && raw.startsWith("[ON]", i) -> { ss.setSpan(GraphicOrbSpan(10), i, i + 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 4 }
+            i <= raw.length - 5 && raw.startsWith("[OFF]", i) -> { ss.setSpan(GraphicOrbSpan(11), i, i + 5, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 5 }
+            raw.startsWith("[+]", i) -> { ss.setSpan(GraphicOrbSpan(1), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 3 }
+            raw.startsWith("[-]", i) -> { ss.setSpan(GraphicOrbSpan(2), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 3 }
+            raw.startsWith("[?]", i) -> { ss.setSpan(GraphicOrbSpan(3), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 3 }
+            raw.startsWith("[>]", i) -> { ss.setSpan(GraphicOrbSpan(4), i, i + 3, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE); i += 3 }
+            else -> i++
+        }
+    }
+    return ss
+}
+
+class CrtTurnOffView(context: Context) : View(context) {
+    private var progress: Float = 0f
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val beamRect = RectF()
+
+    init {
+        visibility = GONE
+        isClickable = true
+        isFocusable = true
+    }
+
+    fun playCrtAnimation(onFinished: () -> Unit) {
+        visibility = VISIBLE
+        bringToFront()
+        ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 460L
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { anim ->
+                progress = anim.animatedValue as Float
+                invalidate()
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    onFinished()
+                }
+            })
+            start()
+        }
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        val cx = w / 2f
+        val cy = h / 2f
+
+        paint.style = Paint.Style.FILL
+        paint.color = Color.BLACK
+        if (progress < 0.48f) {
+            val p1 = (progress / 0.48f).coerceIn(0f, 1f)
+            val openHalfH = (h * 0.5f * (1f - p1)).coerceAtLeast(3.5f)
+            val openHalfW = w * (0.5f - 0.08f * p1)
+            canvas.drawRect(0f, 0f, w, cy - openHalfH, paint)
+            canvas.drawRect(0f, cy + openHalfH, w, h, paint)
+            canvas.drawRect(0f, cy - openHalfH, cx - openHalfW, cy + openHalfH, paint)
+            canvas.drawRect(cx + openHalfW, cy - openHalfH, w, cy + openHalfH, paint)
+
+            paint.color = Color.argb((180 * p1).toInt(), 210, 240, 255)
+            beamRect.set(cx - openHalfW, cy - openHalfH, cx + openHalfW, cy + openHalfH)
+            canvas.drawRoundRect(beamRect, 8f, 8f, paint)
+        } else if (progress < 0.82f) {
+            canvas.drawRect(0f, 0f, w, h, paint)
+            val p2 = ((progress - 0.48f) / 0.34f).coerceIn(0f, 1f)
+            val halfW = (w * 0.42f * (1f - p2)).coerceAtLeast(6f)
+            val halfH = (4.5f * (1f - 0.4f * p2)).coerceAtLeast(2.5f)
+
+            paint.color = Color.argb(110, 100, 220, 255)
+            beamRect.set(cx - halfW * 1.15f, cy - halfH * 2.6f, cx + halfW * 1.15f, cy + halfH * 2.6f)
+            canvas.drawRoundRect(beamRect, 12f, 12f, paint)
+
+            paint.color = Color.WHITE
+            beamRect.set(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
+            canvas.drawRoundRect(beamRect, 6f, 6f, paint)
+        } else {
+            canvas.drawRect(0f, 0f, w, h, paint)
+            val p3 = ((progress - 0.82f) / 0.18f).coerceIn(0f, 1f)
+            val dotR = 14f * (1f - p3)
+            val alpha = (255 * (1f - p3)).toInt().coerceIn(0, 255)
+            paint.color = Color.argb((alpha * 0.5f).toInt(), 120, 225, 255)
+            canvas.drawCircle(cx, cy, dotR * 2.1f, paint)
+            paint.color = Color.argb(alpha, 255, 255, 255)
+            canvas.drawCircle(cx, cy, dotR, paint)
+        }
+    }
+}
+
+class RedPowerIconButton(context: Context, onClickAction: () -> Unit) : View(context) {
+    private var isBtnFocused = false
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val arcRect = RectF()
+
+    init {
+        isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+        setOnFocusChangeListener { v, hasFocus ->
+            isBtnFocused = hasFocus
+            v.animate().scaleX(if (hasFocus) 1.15f else 1.0f).scaleY(if (hasFocus) 1.15f else 1.0f).setDuration(180L).start()
+            invalidate()
+        }
+        setOnClickListener { onClickAction() }
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val cx = width / 2f; val cy = height / 2f; val r = min(cx, cy) - 4f
+        paint.style = Paint.Style.FILL
+        paint.color = if (isBtnFocused) Color.parseColor("#FF1744") else Color.parseColor("#C62828")
+        canvas.drawCircle(cx, cy, r, paint)
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = if (isBtnFocused) 3.5f else 1.8f
+        paint.color = if (isBtnFocused) Color.WHITE else Color.parseColor("#FF8A80")
+        canvas.drawCircle(cx, cy, r, paint)
+
+        val ir = r * 0.48f
+        paint.strokeWidth = 3.5f; paint.strokeCap = Paint.Cap.ROUND; paint.color = Color.WHITE
+        arcRect.set(cx - ir, cy - ir + 1.5f, cx + ir, cy + ir + 1.5f)
+        canvas.drawArc(arcRect, -55f, 290f, false, paint)
+        canvas.drawLine(cx, cy - ir - 2.5f, cx, cy - 1f, paint)
+    }
+}
+
+class LiveEqualizerView(context: Context) : View(context) {
+    var barColor: Int = Color.parseColor("#00E676")
+        set(value) {
+            if (field != value) {
+                field = value
+                if (isShown) invalidate()
+            }
+        }
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val rect = RectF()
+    private val phases = floatArrayOf(0.0f, 1.3f, 2.7f, 4.1f)
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        if (!isShown) return
+        val w = width.toFloat(); val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        val t = System.currentTimeMillis() / 130.0
+        val barW = ((w - 10.5f) / 4f).coerceAtLeast(3f)
+        paint.color = barColor
+        for (i in 0 until 4) {
+            val wave = (sin(t + phases[i]).toFloat() + 1f) / 2f
+            val barH = (h * (0.22f + 0.75f * wave)).coerceIn(4f, h)
+            val left = i * (barW + 3.5f)
+            rect.set(left, h - barH, left + barW, h)
+            canvas.drawRoundRect(rect, 3f, 3f, paint)
+        }
+        if (isShown) postInvalidateDelayed(120L)
+    }
+}
+
+class MarqueeRowTextView(context: Context) : TextView(context) {
+    var forceMarqueeActive: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            isSelected = value
+            setSingleLine(true)
+            maxLines = 1
+            if (value) {
+                ellipsize = TextUtils.TruncateAt.MARQUEE
+                marqueeRepeatLimit = -1
+                setHorizontallyScrolling(true)
+            } else {
+                ellipsize = TextUtils.TruncateAt.END
+            }
+        }
+
+    init {
+        setSingleLine(true)
+        maxLines = 1
+        includeFontPadding = false
+        ellipsize = TextUtils.TruncateAt.END
+    }
+
+    fun setTextWithSmoothToggle(newText: CharSequence, animateToggle: Boolean) {
+        val oldStr = text?.toString() ?: ""
+        val newStr = newText.toString()
+        text = newText
+        if (animateToggle && oldStr.isNotEmpty() && oldStr != newStr) {
+            alpha = 0.65f
+            animate().alpha(1f).setDuration(150L).start()
+        }
+    }
+
+    override fun isFocused(): Boolean = forceMarqueeActive || super.isFocused()
+}
+
+class ChannelRowView(context: Context) : FrameLayout(context) {
+    val badgeView = TextView(context).apply {
+        gravity = Gravity.CENTER
+        includeFontPadding = false
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
+        setTextColor(Color.WHITE)
+        typeface = Typeface.DEFAULT_BOLD
+        setSingleLine(true)
+        layoutParams = LayoutParams(44, 34, Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = 12 }
+    }
+    val titleView = MarqueeRowTextView(context).apply {
+        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL).apply {
+            leftMargin = 68; rightMargin = 48
+        }
+    }
+    val eqView = LiveEqualizerView(context).apply {
+        visibility = View.GONE
+        layoutParams = LayoutParams(28, 18, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = 12 }
+    }
+    init {
+        addView(badgeView)
+        addView(titleView)
+        addView(eqView)
+    }
+}
+
+class RealisticEyeSplashView(context: Context) : View(context) {
+    var eyeOpenFraction: Float = 0.02f
+        set(value) { field = value.coerceIn(0.02f, 1.0f); invalidate() }
+    var lookOffsetX: Float = 0f
+        set(value) { field = value.coerceIn(-1f, 1f); invalidate() }
+    var pupilScale: Float = 1f
+        set(value) { field = value.coerceIn(0.75f, 1.25f); invalidate() }
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val wavePath = Path(); private val outerEyePath = Path(); private val innerEyePath = Path()
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat(); val h = height.toFloat()
+        val cx = w / 2f; val cy = h / 2f
+        canvas.drawColor(Color.parseColor("#0B1026"))
+        val waveStripes = listOf(
+            Triple(0.16f, -0.04f, "#142850"),
+            Triple(0.38f, 0.12f, "#006978"),
+            Triple(0.64f, 0.30f, "#00A896"),
+            Triple(0.86f, 0.50f, "#4A148C"),
+            Triple(1.08f, 0.70f, "#AD1457")
+        )
+        paint.style = Paint.Style.FILL
+        for ((lY, rY, hex) in waveStripes) {
+            wavePath.reset(); wavePath.moveTo(0f, h * lY)
+            wavePath.cubicTo(w * 0.35f, h * (lY - 0.12f), w * 0.68f, h * (rY + 0.08f), w, h * rY)
+            wavePath.lineTo(w, h); wavePath.lineTo(0f, h); wavePath.close()
+            paint.color = Color.parseColor(hex); canvas.drawPath(wavePath, paint)
+        }
+        val unit = min(w, h); val rx = unit * 0.36f; val maxRy = unit * 0.21f; val ry = maxRy * eyeOpenFraction
+        outerEyePath.reset(); outerEyePath.moveTo(cx - rx * 1.06f, cy)
+        outerEyePath.cubicTo(cx - rx * 0.55f, cy - ry * 1.82f, cx + rx * 0.55f, cy - ry * 1.82f, cx + rx * 1.06f, cy)
+        outerEyePath.cubicTo(cx + rx * 0.55f, cy + ry * 1.82f, cx - rx * 0.55f, cy + ry * 1.82f, cx - rx * 1.06f, cy)
+        outerEyePath.close(); paint.color = Color.parseColor("#090C15"); canvas.drawPath(outerEyePath, paint)
+
+        innerEyePath.reset(); innerEyePath.moveTo(cx - rx * 0.92f, cy)
+        innerEyePath.cubicTo(cx - rx * 0.48f, cy - ry * 1.54f, cx + rx * 0.48f, cy - ry * 1.54f, cx + rx * 0.92f, cy)
+        innerEyePath.cubicTo(cx + rx * 0.48f, cy + ry * 1.54f, cx - rx * 0.48f, cy + ry * 1.54f, cx - rx * 0.92f, cy)
+        innerEyePath.close()
+        canvas.save(); canvas.clipPath(innerEyePath)
+        paint.color = Color.parseColor("#E8F1F5"); canvas.drawPath(innerEyePath, paint)
+        val eyeCenterX = cx + lookOffsetX * (rx * 0.18f); val irisRadius = maxRy * 0.96f
+        val irisColors = intArrayOf(
+            Color.parseColor("#00E5FF"),
+            Color.parseColor("#00BFA5"),
+            Color.parseColor("#FFD54F"),
+            Color.parseColor("#7C4DFF"),
+            Color.parseColor("#00E5FF")
+        )
+        paint.shader = SweepGradient(eyeCenterX, cy, irisColors, null)
+        canvas.drawCircle(eyeCenterX, cy, irisRadius, paint); paint.shader = null
+        val pupilR = irisRadius * 0.50f * pupilScale
+        paint.color = Color.BLACK; canvas.drawCircle(eyeCenterX, cy, pupilR, paint)
+        paint.color = Color.WHITE; canvas.drawCircle(eyeCenterX + pupilR * 0.5f, cy - pupilR * 0.4f, pupilR * 0.25f, paint)
+        canvas.restore()
+    }
+}
+
+class ThemedTileView(
+    context: Context, private val iconType: String,
+    private val baseColorHex: String, private val accentColorHex: String
+) : View(context) {
+    var isTileFocused: Boolean = false
+        set(value) { field = value; invalidate() }
+    var themeStyleId: Int = 0
+        set(value) { field = value; invalidate() }
+
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rect = RectF()
+    private val path = Path()
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val minDim = min(w, h)
+        val cx = w / 2f
+        val cy = h / 2f
+        paint.shader = null
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeJoin = Paint.Join.ROUND
+
+        when (themeStyleId) {
+            0 -> drawMaterialIptvIcon(canvas, cx, cy, minDim)
+            1 -> drawNeonIptvIcon(canvas, cx, cy, minDim)
+            2 -> drawAmoledIptvIcon(canvas, cx, cy, minDim)
+            3 -> drawMonochromeIptvIcon(canvas, cx, cy, minDim)
+            4 -> drawRetroIptvIcon(canvas, cx, cy, minDim)
+            else -> drawCarousel3DIptvIcon(canvas, cx, cy, minDim)
+        }
+        paint.shader = null
+    }
+
+    private fun drawMaterialIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+        val r = minDim * 0.36f
+        if (isTileFocused) {
+            paint.style = Paint.Style.FILL
+            paint.color = Color.parseColor("#3360A5FA")
+            canvas.drawCircle(cx, cy, minDim * 0.45f, paint)
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
+            paint.color = Color.parseColor("#60A5FA")
+            canvas.drawCircle(cx, cy, minDim * 0.45f, paint)
+        }
+        paint.style = Paint.Style.FILL
+        when (iconType) {
+            "PLAYLISTS" -> {
+                paint.color = Color.parseColor("#D97706")
+                path.reset()
+                path.moveTo(cx - r * 0.85f, cy - r * 0.58f)
+                path.lineTo(cx - r * 0.22f, cy - r * 0.58f)
+                path.lineTo(cx - r * 0.02f, cy - r * 0.34f)
+                path.lineTo(cx + r * 0.85f, cy - r * 0.34f)
+                path.lineTo(cx + r * 0.85f, cy + r * 0.62f)
+                path.lineTo(cx - r * 0.85f, cy + r * 0.62f)
+                path.close()
+                canvas.drawPath(path, paint)
+                paint.color = Color.parseColor("#FBBF24")
+                rect.set(cx - r * 0.85f, cy - r * 0.26f, cx + r * 0.85f, cy + r * 0.62f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                paint.color = Color.parseColor("#FEF3C7")
+                for (i in 0..1) {
+                    val ly = cy + i * r * 0.28f
+                    rect.set(cx - r * 0.58f, ly - 4f, cx + r * 0.05f, ly + 4f)
+                    canvas.drawRoundRect(rect, 4f, 4f, paint)
+                }
+                paint.color = Color.parseColor("#10B981")
+                canvas.drawCircle(cx + r * 0.46f, cy + r * 0.24f, r * 0.34f, paint)
+                paint.color = Color.WHITE
+                path.reset()
+                path.moveTo(cx + r * 0.38f, cy + r * 0.09f)
+                path.lineTo(cx + r * 0.60f, cy + r * 0.24f)
+                path.lineTo(cx + r * 0.38f, cy + r * 0.39f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "EDITOR" -> {
+                paint.color = Color.parseColor("#3B82F6")
+                rect.set(cx - r * 0.72f, cy - r * 0.72f, cx + r * 0.42f, cy + r * 0.72f)
+                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                paint.color = Color.parseColor("#DBEAFE")
+                for (i in -1..1) {
+                    val ly = cy + i * r * 0.36f
+                    rect.set(cx - r * 0.48f, ly - 4f, cx + r * 0.14f, ly + 4f)
+                    canvas.drawRoundRect(rect, 4f, 4f, paint)
+                }
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 12f
+                paint.color = Color.parseColor("#F59E0B")
+                canvas.drawLine(cx + r * 0.06f, cy + r * 0.48f, cx + r * 0.72f, cy - r * 0.34f, paint)
+                paint.color = Color.parseColor("#EF4444")
+                canvas.drawLine(cx + r * 0.60f, cy - r * 0.20f, cx + r * 0.76f, cy - r * 0.40f, paint)
+            }
+            "ANALYZER" -> {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#0284C7")
+                canvas.drawCircle(cx, cy, r * 0.80f, paint)
+                paint.color = Color.parseColor("#38BDF8")
+                rect.set(cx - r * 0.80f, cy - r * 0.80f, cx + r * 0.80f, cy + r * 0.80f)
+                canvas.drawArc(rect, -90f, 180f, true, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5.5f; paint.color = Color.WHITE
+                path.reset()
+                path.moveTo(cx - r * 0.56f, cy + r * 0.06f)
+                path.lineTo(cx - r * 0.24f, cy + r * 0.06f)
+                path.lineTo(cx - r * 0.08f, cy - r * 0.36f)
+                path.lineTo(cx + r * 0.12f, cy + r * 0.36f)
+                path.lineTo(cx + r * 0.28f, cy - r * 0.08f)
+                path.lineTo(cx + r * 0.56f, cy - r * 0.08f)
+                canvas.drawPath(path, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#10B981")
+                canvas.drawCircle(cx + r * 0.48f, cy + r * 0.48f, r * 0.28f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.5f; paint.color = Color.WHITE
+                canvas.drawLine(cx + r * 0.36f, cy + r * 0.48f, cx + r * 0.45f, cy + r * 0.58f, paint)
+                canvas.drawLine(cx + r * 0.45f, cy + r * 0.58f, cx + r * 0.62f, cy + r * 0.38f, paint)
+            }
+            "THEMES" -> {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#F59E0B")
+                canvas.drawCircle(cx, cy, r * 0.82f, paint)
+                paint.color = Color.parseColor("#242C3D")
+                canvas.drawCircle(cx + r * 0.34f, cy + r * 0.34f, r * 0.22f, paint)
+                paint.color = Color.parseColor("#EF4444"); canvas.drawCircle(cx - r * 0.36f, cy - r * 0.18f, r * 0.15f, paint)
+                paint.color = Color.parseColor("#8B5CF6"); canvas.drawCircle(cx - r * 0.08f, cy - r * 0.44f, r * 0.15f, paint)
+                paint.color = Color.parseColor("#3B82F6"); canvas.drawCircle(cx + r * 0.32f, cy - r * 0.24f, r * 0.15f, paint)
+                paint.color = Color.parseColor("#10B981"); canvas.drawCircle(cx - r * 0.32f, cy + r * 0.28f, r * 0.15f, paint)
+            }
+            "BUFFER" -> {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#0D9488")
+                canvas.drawCircle(cx, cy, r * 0.80f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 7f
+                paint.color = Color.parseColor("#5EEAD4")
+                rect.set(cx - r * 0.58f, cy - r * 0.58f, cx + r * 0.58f, cy + r * 0.58f)
+                canvas.drawArc(rect, 140f, 260f, false, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                path.reset()
+                path.moveTo(cx + r * 0.08f, cy - r * 0.42f)
+                path.lineTo(cx - r * 0.26f, cy + r * 0.04f)
+                path.lineTo(cx + r * 0.02f, cy + r * 0.04f)
+                path.lineTo(cx - r * 0.08f, cy + r * 0.44f)
+                path.lineTo(cx + r * 0.28f, cy - r * 0.04f)
+                path.lineTo(cx + r * 0.02f, cy - r * 0.04f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "DECODER" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f
+                paint.color = Color.parseColor("#94A3B8")
+                for (k in -1..1) {
+                    val off = k * r * 0.32f
+                    canvas.drawLine(cx + off, cy - r * 0.84f, cx + off, cy + r * 0.84f, paint)
+                    canvas.drawLine(cx - r * 0.84f, cy + off, cx + r * 0.84f, cy + off, paint)
+                }
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#475569")
+                rect.set(cx - r * 0.62f, cy - r * 0.62f, cx + r * 0.62f, cy + r * 0.62f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                paint.color = Color.parseColor("#0EA5E9")
+                rect.set(cx - r * 0.36f, cy - r * 0.36f, cx + r * 0.36f, cy + r * 0.36f)
+                canvas.drawRoundRect(rect, 6f, 6f, paint)
+            }
+            "EPG_GRID" -> {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#E2E8F0")
+                rect.set(cx - r * 0.74f, cy - r * 0.66f, cx + r * 0.68f, cy + r * 0.66f)
+                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                paint.color = Color.parseColor("#E11D48")
+                rect.set(cx - r * 0.74f, cy - r * 0.66f, cx + r * 0.68f, cy - r * 0.22f)
+                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                paint.color = Color.parseColor("#64748B")
+                for (i in 0..1) {
+                    val ly = cy + i * r * 0.26f
+                    rect.set(cx - r * 0.52f, ly - 4f, cx + r * 0.16f, ly + 4f)
+                    canvas.drawRoundRect(rect, 4f, 4f, paint)
+                }
+                paint.color = Color.parseColor("#0284C7")
+                canvas.drawCircle(cx + r * 0.46f, cy + r * 0.42f, r * 0.34f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = Color.WHITE
+                canvas.drawLine(cx + r * 0.46f, cy + r * 0.42f, cx + r * 0.46f, cy + r * 0.24f, paint)
+                canvas.drawLine(cx + r * 0.46f, cy + r * 0.42f, cx + r * 0.60f, cy + r * 0.42f, paint)
+            }
+            "TOP_CHANNELS" -> {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#4F46E5")
+                canvas.drawCircle(cx, cy, r * 0.80f, paint)
+                paint.color = Color.parseColor("#FBBF24")
+                path.reset()
+                path.moveTo(cx - r * 0.52f, cy + r * 0.36f)
+                path.lineTo(cx - r * 0.58f, cy - r * 0.24f)
+                path.lineTo(cx - r * 0.20f, cy + r * 0.06f)
+                path.lineTo(cx, cy - r * 0.42f)
+                path.lineTo(cx + r * 0.20f, cy + r * 0.06f)
+                path.lineTo(cx + r * 0.58f, cy - r * 0.24f)
+                path.lineTo(cx + r * 0.52f, cy + r * 0.36f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "FAVORITES" -> {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#DB2777")
+                canvas.drawCircle(cx, cy, r * 0.80f, paint)
+                paint.color = Color.parseColor("#FDE047")
+                path.reset()
+                for (i in 0 until 10) {
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val rad = if (i % 2 == 0) r * 0.56f else r * 0.24f
+                    val sx = cx + (rad * cos(a)).toFloat(); val sy = cy + (rad * sin(a)).toFloat()
+                    if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                }
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "AUDIO" -> {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#4338CA")
+                rect.set(cx - r * 0.78f, cy - r * 0.68f, cx + r * 0.78f, cy + r * 0.68f)
+                canvas.drawRoundRect(rect, 16f, 16f, paint)
+                val xs = listOf(-0.45f, -0.15f, 0.15f, 0.45f)
+                val hs = listOf(0.28f, 0.48f, 0.38f, 0.22f)
+                val cols = listOf("#38BDF8", "#34D399", "#FBBF24", "#F472B6")
+                for (i in xs.indices) {
+                    paint.color = Color.parseColor(cols[i])
+                    rect.set(cx + xs[i] * r - 7f, cy - hs[i] * r, cx + xs[i] * r + 7f, cy + hs[i] * r)
+                    canvas.drawRoundRect(rect, 5f, 5f, paint)
                 }
             }
+            "CONTROL_MODE" -> {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#334155")
+                rect.set(cx - r * 0.48f, cy - r * 0.82f, cx + r * 0.48f, cy + r * 0.82f)
+                canvas.drawRoundRect(rect, 18f, 18f, paint)
+                paint.color = Color.parseColor("#EF4444")
+                canvas.drawCircle(cx, cy - r * 0.54f, r * 0.11f, paint)
+                paint.color = Color.parseColor("#38BDF8")
+                canvas.drawCircle(cx, cy - r * 0.08f, r * 0.26f, paint)
+                paint.color = Color.WHITE
+                canvas.drawCircle(cx, cy - r * 0.08f, r * 0.10f, paint)
+                paint.color = Color.parseColor("#94A3B8")
+                for (row in 0..1) {
+                    for (col in -1..1) {
+                        canvas.drawCircle(cx + col * r * 0.22f, cy + r * 0.36f + row * r * 0.22f, r * 0.06f, paint)
+                    }
+                }
+            }
+            "SETTINGS_GEAR" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#0284C7")
+                canvas.drawCircle(cx, cy, r * 0.72f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f; paint.color = Color.WHITE
+                canvas.drawCircle(cx, cy, r * 0.32f, paint)
+            }
+            "SWAP_GROUPS" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#EA580C")
+                canvas.drawCircle(cx, cy, r * 0.72f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f; paint.color = Color.WHITE
+                canvas.drawLine(cx - r * 0.38f, cy - r * 0.16f, cx + r * 0.38f, cy - r * 0.16f, paint)
+                canvas.drawLine(cx - r * 0.38f, cy + r * 0.16f, cx + r * 0.38f, cy + r * 0.16f, paint)
+            }
+            else -> {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#7C3AED")
+                rect.set(cx - r * 0.82f, cy - r * 0.56f, cx + r * 0.82f, cy + r * 0.44f)
+                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                paint.color = Color.parseColor("#38BDF8")
+                rect.set(cx - r * 0.68f, cy - r * 0.42f, cx + r * 0.68f, cy + r * 0.30f)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                paint.color = Color.WHITE
+                canvas.drawCircle(cx, cy - r * 0.06f, r * 0.18f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 6f; paint.color = Color.parseColor("#94A3B8")
+                canvas.drawLine(cx - r * 0.36f, cy + r * 0.66f, cx + r * 0.36f, cy + r * 0.66f, paint)
+            }
         }
     }
-    if (!inPlace) {
-        animateMenuAppear(subModalOverlay)
-        subModalList.requestFocus()
-    }
-}
 
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openInputSubModal(title: String, initialValue: String, onSave: (String) -> Unit) {
-    setSubModalHeaderTitle(title)
-    subModalList.visibility = View.GONE
-    subModalInputContainer.removeAllViews()
-    subModalInputContainer.visibility = View.VISIBLE
-    val input = EditText(this).apply { setText(initialValue); setTextColor(currentTheme().textPrimaryColor); setSingleLine() }
-    subModalInputContainer.addView(input)
-    val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(0, 14, 0, 0) }
-    btnRow.addView(makeModernButton("Сохранить") { onSave(input.text.toString().trim()); navigateBackInMenu() })
-    btnRow.addView(makeModernButton("Назад") { navigateBackInMenu() })
-    subModalInputContainer.addView(btnRow)
-    animateMenuAppear(subModalOverlay)
-    input.requestFocus()
-}
-
-@OptIn(UnstableApi::class)
-internal fun MainActivity.openAddUrlSubModal() {
-    setSubModalHeaderTitle("Новый плейлист по ссылке")
-    subModalList.visibility = View.GONE
-    subModalInputContainer.removeAllViews()
-    subModalInputContainer.visibility = View.VISIBLE
-    val nameInput = EditText(this).apply { hint = "Название плейлиста"; setTextColor(currentTheme().textPrimaryColor); setSingleLine() }
-    val urlInput = EditText(this).apply { hint = "http://... (.m3u8)"; setTextColor(currentTheme().textPrimaryColor); setSingleLine() }
-    subModalInputContainer.addView(nameInput)
-    subModalInputContainer.addView(urlInput)
-    val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(0, 14, 0, 0) }
-    btnRow.addView(makeModernButton("Добавить") {
-        val title = nameInput.text.toString().trim().ifEmpty { "Плейлист " + (playlists.size + 1) }
-        val url = urlInput.text.toString().trim()
-        if (url.isNotEmpty()) {
-            playlists.add(PlaylistEntry(title, url, false))
-            activePlaylistIndex = playlists.size - 1
-            saveState()
-            closeAllMenus()
-            loadActivePlaylist(autoPlayLast = false)
+    private fun drawNeonIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+        val r = minDim * 0.35f
+        val grad = LinearGradient(
+            cx - r, cy - r, cx + r, cy + r,
+            intArrayOf(Color.parseColor("#FF7597"), Color.parseColor("#FFE082"), Color.parseColor("#64FFDA"), Color.parseColor("#00E5FF")),
+            null, Shader.TileMode.CLAMP
+        )
+        if (isTileFocused) {
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.8f; paint.shader = grad
+            canvas.drawCircle(cx, cy, minDim * 0.45f, paint)
         }
-    })
-    btnRow.addView(makeModernButton("Назад") { navigateBackInMenu() })
-    subModalInputContainer.addView(btnRow)
-    animateMenuAppear(subModalOverlay)
-    nameInput.requestFocus()
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 4.5f
+        paint.shader = grad
+
+        when (iconType) {
+            "PLAYLISTS" -> {
+                path.reset()
+                path.moveTo(cx - r * 0.78f, cy - r * 0.52f)
+                path.lineTo(cx - r * 0.18f, cy - r * 0.52f)
+                path.lineTo(cx + r * 0.02f, cy - r * 0.30f)
+                path.lineTo(cx + r * 0.78f, cy - r * 0.30f)
+                path.lineTo(cx + r * 0.78f, cy + r * 0.58f)
+                path.lineTo(cx - r * 0.78f, cy + r * 0.58f)
+                path.close()
+                canvas.drawPath(path, paint)
+                path.reset()
+                path.moveTo(cx - r * 0.16f, cy - r * 0.08f)
+                path.lineTo(cx + r * 0.24f, cy + r * 0.15f)
+                path.lineTo(cx - r * 0.16f, cy + r * 0.38f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "EDITOR" -> {
+                for (i in -1..1) {
+                    val y = cy + i * r * 0.38f
+                    canvas.drawLine(cx - r * 0.68f, y, cx + r * 0.20f, y, paint)
+                }
+                path.reset()
+                path.moveTo(cx + r * 0.38f, cy - r * 0.60f)
+                path.lineTo(cx + r * 0.62f, cy - r * 0.42f)
+                path.lineTo(cx + r * 0.12f, cy + r * 0.52f)
+                path.lineTo(cx - r * 0.10f, cy + r * 0.60f)
+                path.lineTo(cx - r * 0.08f, cy + r * 0.36f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "ANALYZER" -> {
+                for (ring in 1..3) {
+                    val rad = r * (0.28f * ring)
+                    rect.set(cx - rad, cy - rad + r * 0.15f, cx + rad, cy + rad + r * 0.15f)
+                    canvas.drawArc(rect, 210f, 120f, false, paint)
+                }
+                canvas.drawLine(cx - r * 0.20f, cy + r * 0.34f, cx - r * 0.04f, cy + r * 0.50f, paint)
+                canvas.drawLine(cx - r * 0.04f, cy + r * 0.50f, cx + r * 0.28f, cy + r * 0.18f, paint)
+            }
+            "THEMES" -> {
+                canvas.drawCircle(cx, cy, r * 0.74f, paint)
+                canvas.drawCircle(cx - r * 0.28f, cy - r * 0.18f, r * 0.12f, paint)
+                canvas.drawCircle(cx + r * 0.22f, cy - r * 0.24f, r * 0.12f, paint)
+                canvas.drawCircle(cx + r * 0.20f, cy + r * 0.22f, r * 0.14f, paint)
+            }
+            "BUFFER" -> {
+                rect.set(cx - r * 0.72f, cy - r * 0.72f, cx + r * 0.72f, cy + r * 0.72f)
+                canvas.drawArc(rect, 140f, 260f, false, paint)
+                path.reset()
+                path.moveTo(cx + r * 0.08f, cy - r * 0.42f)
+                path.lineTo(cx - r * 0.24f, cy + r * 0.04f)
+                path.lineTo(cx + r * 0.22f, cy + r * 0.04f)
+                path.lineTo(cx - r * 0.08f, cy + r * 0.44f)
+                canvas.drawPath(path, paint)
+            }
+            "DECODER" -> {
+                rect.set(cx - r * 0.52f, cy - r * 0.52f, cx + r * 0.52f, cy + r * 0.52f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                rect.set(cx - r * 0.22f, cy - r * 0.22f, cx + r * 0.22f, cy + r * 0.22f)
+                canvas.drawRect(rect, paint)
+                for (k in -1..1) {
+                    val off = k * r * 0.28f
+                    canvas.drawLine(cx + off, cy - r * 0.76f, cx + off, cy - r * 0.52f, paint)
+                    canvas.drawLine(cx + off, cy + r * 0.52f, cx + off, cy + r * 0.76f, paint)
+                    canvas.drawLine(cx - r * 0.76f, cy + off, cx - r * 0.52f, cy + off, paint)
+                    canvas.drawLine(cx + r * 0.52f, cy + off, cx + r * 0.76f, cy + off, paint)
+                }
+            }
+            "EPG_GRID" -> {
+                rect.set(cx - r * 0.70f, cy - r * 0.60f, cx + r * 0.70f, cy + r * 0.60f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                canvas.drawLine(cx - r * 0.70f, cy - r * 0.20f, cx + r * 0.70f, cy - r * 0.20f, paint)
+                canvas.drawLine(cx - r * 0.44f, cy + r * 0.08f, cx + r * 0.44f, cy + r * 0.08f, paint)
+                canvas.drawLine(cx - r * 0.44f, cy + r * 0.34f, cx + r * 0.16f, cy + r * 0.34f, paint)
+            }
+            "TOP_CHANNELS" -> {
+                path.reset()
+                path.moveTo(cx - r * 0.62f, cy + r * 0.44f)
+                path.lineTo(cx - r * 0.70f, cy - r * 0.30f)
+                path.lineTo(cx - r * 0.24f, cy + r * 0.08f)
+                path.lineTo(cx, cy - r * 0.50f)
+                path.lineTo(cx + r * 0.24f, cy + r * 0.08f)
+                path.lineTo(cx + r * 0.70f, cy - r * 0.30f)
+                path.lineTo(cx + r * 0.62f, cy + r * 0.44f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "FAVORITES" -> {
+                path.reset()
+                for (i in 0 until 10) {
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val rad = if (i % 2 == 0) r * 0.74f else r * 0.32f
+                    val sx = cx + (rad * cos(a)).toFloat(); val sy = cy + (rad * sin(a)).toFloat()
+                    if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                }
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "AUDIO" -> {
+                canvas.drawCircle(cx - r * 0.22f, cy + r * 0.36f, r * 0.28f, paint)
+                canvas.drawLine(cx + r * 0.06f, cy + r * 0.36f, cx + r * 0.06f, cy - r * 0.62f, paint)
+                path.reset()
+                path.moveTo(cx + r * 0.06f, cy - r * 0.62f)
+                path.quadTo(cx + r * 0.58f, cy - r * 0.38f, cx + r * 0.48f, cy - r * 0.05f)
+                canvas.drawPath(path, paint)
+            }
+            "CONTROL_MODE" -> {
+                rect.set(cx - r * 0.44f, cy - r * 0.74f, cx + r * 0.44f, cy + r * 0.74f)
+                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                canvas.drawCircle(cx, cy - r * 0.18f, r * 0.20f, paint)
+                canvas.drawLine(cx - r * 0.16f, cy + r * 0.34f, cx + r * 0.16f, cy + r * 0.34f, paint)
+            }
+            "SETTINGS_GEAR" -> {
+                canvas.drawCircle(cx, cy, r * 0.48f, paint)
+                for (deg in 0 until 360 step 45) {
+                    val rad = Math.toRadians(deg.toDouble())
+                    canvas.drawLine(cx + (r * 0.48f * cos(rad)).toFloat(), cy + (r * 0.48f * sin(rad)).toFloat(), cx + (r * 0.72f * cos(rad)).toFloat(), cy + (r * 0.72f * sin(rad)).toFloat(), paint)
+                }
+            }
+            "SWAP_GROUPS" -> {
+                canvas.drawLine(cx - r * 0.55f, cy - r * 0.22f, cx + r * 0.55f, cy - r * 0.22f, paint)
+                canvas.drawLine(cx - r * 0.55f, cy + r * 0.22f, cx + r * 0.55f, cy + r * 0.22f, paint)
+            }
+            else -> {
+                rect.set(cx - r * 0.74f, cy - r * 0.52f, cx + r * 0.74f, cy + r * 0.38f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                canvas.drawCircle(cx, cy - r * 0.07f, r * 0.20f, paint)
+                canvas.drawLine(cx - r * 0.36f, cy + r * 0.62f, cx + r * 0.36f, cy + r * 0.62f, paint)
+            }
+        }
+    }
+
+    private fun drawAmoledIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+        val r = minDim * 0.36f
+        if (isTileFocused) {
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 2.2f; paint.color = Color.WHITE
+            canvas.drawCircle(cx, cy, minDim * 0.45f, paint)
+        }
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2.2f
+        paint.color = Color.WHITE
+
+        when (iconType) {
+            "PLAYLISTS" -> {
+                rect.set(cx - r * 0.74f, cy - r * 0.52f, cx + r * 0.74f, cy + r * 0.58f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                canvas.drawLine(cx - r * 0.74f, cy - r * 0.24f, cx + r * 0.74f, cy - r * 0.24f, paint)
+                path.reset()
+                path.moveTo(cx - r * 0.18f, cy - r * 0.05f)
+                path.lineTo(cx + r * 0.26f, cy + r * 0.18f)
+                path.lineTo(cx - r * 0.18f, cy + r * 0.41f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "EDITOR" -> {
+                val s = r * 0.56f
+                rect.set(cx - r * 0.70f, cy - r * 0.70f, cx - r * 0.70f + s, cy - r * 0.70f + s)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                canvas.drawLine(rect.centerX() - 8f, rect.centerY(), rect.centerX() - 2f, rect.centerY() + 7f, paint)
+                canvas.drawLine(rect.centerX() - 2f, rect.centerY() + 7f, rect.centerX() + 9f, rect.centerY() - 6f, paint)
+                canvas.drawLine(cx + r * 0.04f, cy - r * 0.42f, cx + r * 0.70f, cy - r * 0.42f, paint)
+
+                rect.set(cx - r * 0.70f, cy + r * 0.12f, cx - r * 0.70f + s, cy + r * 0.12f + s)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                canvas.drawLine(cx + r * 0.04f, cy + r * 0.40f, cx + r * 0.70f, cy + r * 0.40f, paint)
+            }
+            "ANALYZER" -> {
+                canvas.drawCircle(cx, cy, r * 0.74f, paint)
+                canvas.drawCircle(cx, cy, r * 0.38f, paint)
+                canvas.drawLine(cx - r * 0.74f, cy, cx + r * 0.74f, cy, paint)
+                canvas.drawLine(cx, cy - r * 0.74f, cx, cy + r * 0.74f, paint)
+                canvas.drawCircle(cx + r * 0.26f, cy - r * 0.24f, r * 0.09f, paint)
+            }
+            "THEMES" -> {
+                canvas.drawCircle(cx, cy, r * 0.72f, paint)
+                canvas.drawCircle(cx, cy, r * 0.24f, paint)
+                for (deg in 0 until 360 step 60) {
+                    val rad = Math.toRadians(deg.toDouble())
+                    canvas.drawLine(
+                        cx + (r * 0.24f * cos(rad)).toFloat(), cy + (r * 0.24f * sin(rad)).toFloat(),
+                        cx + (r * 0.72f * cos(rad)).toFloat(), cy + (r * 0.72f * sin(rad)).toFloat(), paint
+                    )
+                }
+            }
+            "BUFFER" -> {
+                rect.set(cx - r * 0.74f, cy - r * 0.64f, cx + r * 0.74f, cy + r * 0.84f)
+                canvas.drawArc(rect, 160f, 220f, false, paint)
+                canvas.drawCircle(cx, cy + r * 0.16f, r * 0.12f, paint)
+                canvas.drawLine(cx, cy + r * 0.16f, cx + r * 0.42f, cy - r * 0.28f, paint)
+            }
+            "DECODER" -> {
+                rect.set(cx - r * 0.72f, cy - r * 0.72f, cx + r * 0.72f, cy + r * 0.72f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                rect.set(cx - r * 0.38f, cy - r * 0.38f, cx + r * 0.38f, cy + r * 0.38f)
+                canvas.drawRect(rect, paint)
+                for (k in -1..1) {
+                    val off = k * r * 0.24f
+                    canvas.drawCircle(cx + off, cy - r * 0.55f, r * 0.06f, paint)
+                    canvas.drawCircle(cx + off, cy + r * 0.55f, r * 0.06f, paint)
+                    canvas.drawCircle(cx - r * 0.55f, cy + off, r * 0.06f, paint)
+                    canvas.drawCircle(cx + r * 0.55f, cy + off, r * 0.06f, paint)
+                }
+            }
+            "EPG_GRID" -> {
+                rect.set(cx - r * 0.72f, cy - r * 0.66f, cx + r * 0.72f, cy + r * 0.66f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                canvas.drawLine(cx - r * 0.72f, cy - r * 0.22f, cx + r * 0.72f, cy - r * 0.22f, paint)
+                canvas.drawLine(cx - r * 0.24f, cy - r * 0.22f, cx - r * 0.24f, cy + r * 0.66f, paint)
+                canvas.drawLine(cx - r * 0.72f, cy + r * 0.22f, cx + r * 0.72f, cy + r * 0.22f, paint)
+            }
+            "TOP_CHANNELS" -> {
+                path.reset()
+                path.moveTo(cx - r * 0.58f, cy + r * 0.42f)
+                path.lineTo(cx - r * 0.64f, cy - r * 0.22f)
+                path.lineTo(cx - r * 0.22f, cy + r * 0.08f)
+                path.lineTo(cx, cy - r * 0.42f)
+                path.lineTo(cx + r * 0.22f, cy + r * 0.08f)
+                path.lineTo(cx + r * 0.64f, cy - r * 0.22f)
+                path.lineTo(cx + r * 0.58f, cy + r * 0.42f)
+                path.close()
+                canvas.drawPath(path, paint)
+                canvas.drawCircle(cx, cy - r * 0.52f, r * 0.07f, paint)
+            }
+            "FAVORITES" -> {
+                rect.set(cx - r * 0.74f, cy - r * 0.58f, cx + r * 0.74f, cy + r * 0.58f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                path.reset()
+                for (i in 0 until 10) {
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val rad = if (i % 2 == 0) r * 0.42f else r * 0.18f
+                    val sx = cx + (rad * cos(a)).toFloat(); val sy = cy + (rad * sin(a)).toFloat()
+                    if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                }
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "AUDIO" -> {
+                val xs = listOf(-0.60f, -0.36f, -0.12f, 0.12f, 0.36f, 0.60f)
+                val hs = listOf(0.20f, 0.48f, 0.74f, 0.34f, 0.58f, 0.22f)
+                for (i in xs.indices) {
+                    canvas.drawLine(cx + xs[i] * r, cy - hs[i] * r, cx + xs[i] * r, cy + hs[i] * r, paint)
+                }
+            }
+            "CONTROL_MODE" -> {
+                rect.set(cx - r * 0.76f, cy - r * 0.46f, cx + r * 0.76f, cy + r * 0.46f)
+                canvas.drawRoundRect(rect, 24f, 24f, paint)
+                canvas.drawCircle(cx - r * 0.36f, cy, r * 0.22f, paint)
+                canvas.drawLine(cx - r * 0.36f - 8f, cy, cx - r * 0.36f + 8f, cy, paint)
+                canvas.drawLine(cx - r * 0.36f, cy - 8f, cx - r * 0.36f, cy + 8f, paint)
+                canvas.drawCircle(cx + r * 0.36f, cy - r * 0.10f, r * 0.07f, paint)
+                canvas.drawCircle(cx + r * 0.24f, cy + r * 0.10f, r * 0.07f, paint)
+            }
+            "SETTINGS_GEAR" -> {
+                canvas.drawCircle(cx, cy, r * 0.46f, paint)
+                canvas.drawCircle(cx, cy, r * 0.20f, paint)
+            }
+            "SWAP_GROUPS" -> {
+                canvas.drawLine(cx - r * 0.52f, cy - r * 0.20f, cx + r * 0.52f, cy - r * 0.20f, paint)
+                canvas.drawLine(cx - r * 0.52f, cy + r * 0.20f, cx + r * 0.52f, cy + r * 0.20f, paint)
+            }
+            else -> {
+                rect.set(cx - r * 0.76f, cy - r * 0.52f, cx + r * 0.76f, cy + r * 0.40f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                canvas.drawCircle(cx, cy - r * 0.06f, r * 0.28f, paint)
+                canvas.drawLine(cx - r * 0.34f, cy + r * 0.62f, cx + r * 0.34f, cy + r * 0.62f, paint)
+            }
+        }
+    }
+
+    private fun drawMonochromeIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+        val pad = minDim * 0.08f
+        val r = (minDim - pad * 2) * 0.35f
+        rect.set(pad, pad, width - pad, height - pad)
+        paint.style = Paint.Style.FILL
+        paint.color = if (isTileFocused) Color.parseColor("#E4E4E7") else Color.parseColor("#F8FAFC")
+        canvas.drawRect(rect, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = if (isTileFocused) 3.5f else 1.5f
+        paint.color = if (isTileFocused) Color.parseColor("#3F3F46") else Color.parseColor("#D4D4D8")
+        canvas.drawRect(rect, paint)
+
+        val gray = Color.parseColor("#52525B")
+        paint.color = gray
+
+        when (iconType) {
+            "PLAYLISTS" -> {
+                paint.style = Paint.Style.FILL
+                for (i in -1..1) {
+                    val y = cy + i * r * 0.42f
+                    canvas.drawCircle(cx - r * 0.52f, y, r * 0.11f, paint)
+                    rect.set(cx - r * 0.26f, y - r * 0.09f, cx + r * 0.58f, y + r * 0.09f)
+                    canvas.drawRect(rect, paint)
+                }
+            }
+            "EDITOR" -> {
+                paint.style = Paint.Style.FILL
+                path.reset()
+                path.moveTo(cx + r * 0.35f, cy - r * 0.55f)
+                path.lineTo(cx + r * 0.55f, cy - r * 0.35f)
+                path.lineTo(cx - r * 0.25f, cy + r * 0.45f)
+                path.lineTo(cx - r * 0.55f, cy + r * 0.55f)
+                path.lineTo(cx - r * 0.45f, cy + r * 0.25f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "ANALYZER" -> {
+                paint.style = Paint.Style.FILL
+                for (i in 0..3) {
+                    val left = cx - r * 0.58f + i * r * 0.32f
+                    val top = cy + r * 0.52f - (i + 1) * r * 0.26f
+                    rect.set(left, top, left + r * 0.20f, cy + r * 0.52f)
+                    canvas.drawRect(rect, paint)
+                }
+            }
+            "THEMES" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
+                canvas.drawCircle(cx, cy, r * 0.54f, paint)
+                paint.style = Paint.Style.FILL
+                rect.set(cx - r * 0.54f, cy - r * 0.54f, cx + r * 0.54f, cy + r * 0.54f)
+                canvas.drawArc(rect, 90f, 180f, true, paint)
+            }
+            "BUFFER" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f
+                rect.set(cx - r * 0.56f, cy - r * 0.56f, cx + r * 0.56f, cy + r * 0.56f)
+                canvas.drawArc(rect, -150f, 130f, false, paint)
+                canvas.drawArc(rect, 30f, 130f, false, paint)
+            }
+            "DECODER" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
+                rect.set(cx - r * 0.48f, cy - r * 0.48f, cx + r * 0.48f, cy + r * 0.48f)
+                canvas.drawRect(rect, paint)
+                for (k in -1..1) {
+                    val off = k * r * 0.26f
+                    canvas.drawLine(cx + off, cy - r * 0.70f, cx + off, cy - r * 0.48f, paint)
+                    canvas.drawLine(cx + off, cy + r * 0.48f, cx + off, cy + r * 0.70f, paint)
+                    canvas.drawLine(cx - r * 0.70f, cy + off, cx - r * 0.48f, cy + off, paint)
+                    canvas.drawLine(cx + r * 0.48f, cy + off, cx + r * 0.70f, cy + off, paint)
+                }
+            }
+            "EPG_GRID" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f
+                rect.set(cx - r * 0.60f, cy - r * 0.56f, cx + r * 0.60f, cy + r * 0.60f)
+                canvas.drawRect(rect, paint)
+                canvas.drawLine(cx - r * 0.60f, cy - r * 0.22f, cx + r * 0.60f, cy - r * 0.22f, paint)
+                paint.style = Paint.Style.FILL
+                for (rx in -1..1) {
+                    for (ry in 0..1) {
+                        canvas.drawCircle(cx + rx * r * 0.30f, cy + r * 0.08f + ry * r * 0.26f, r * 0.07f, paint)
+                    }
+                }
+            }
+            "TOP_CHANNELS" -> {
+                paint.style = Paint.Style.FILL
+                path.reset()
+                path.moveTo(cx - r * 0.56f, cy + r * 0.42f)
+                path.lineTo(cx - r * 0.62f, cy - r * 0.22f)
+                path.lineTo(cx - r * 0.22f, cy + r * 0.06f)
+                path.lineTo(cx, cy - r * 0.44f)
+                path.lineTo(cx + r * 0.22f, cy + r * 0.06f)
+                path.lineTo(cx + r * 0.62f, cy - r * 0.22f)
+                path.lineTo(cx + r * 0.56f, cy + r * 0.42f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "FAVORITES" -> {
+                paint.style = Paint.Style.FILL
+                path.reset()
+                for (i in 0 until 10) {
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val rad = if (i % 2 == 0) r * 0.68f else r * 0.28f
+                    val sx = cx + (rad * cos(a)).toFloat(); val sy = cy + (rad * sin(a)).toFloat()
+                    if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                }
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "AUDIO" -> {
+                paint.style = Paint.Style.FILL
+                path.reset()
+                path.moveTo(cx - r * 0.58f, cy - r * 0.20f)
+                path.lineTo(cx - r * 0.28f, cy - r * 0.20f)
+                path.lineTo(cx + r * 0.06f, cy - r * 0.52f)
+                path.lineTo(cx + r * 0.06f, cy + r * 0.52f)
+                path.lineTo(cx - r * 0.28f, cy + r * 0.20f)
+                path.lineTo(cx - r * 0.58f, cy + r * 0.20f)
+                path.close()
+                canvas.drawPath(path, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3f
+                rect.set(cx - r * 0.10f, cy - r * 0.36f, cx + r * 0.38f, cy + r * 0.36f)
+                canvas.drawArc(rect, -55f, 110f, false, paint)
+            }
+            "CONTROL_MODE" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
+                rect.set(cx - r * 0.36f, cy - r * 0.64f, cx + r * 0.36f, cy + r * 0.64f)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                paint.style = Paint.Style.FILL
+                canvas.drawCircle(cx, cy - r * 0.12f, r * 0.14f, paint)
+            }
+            else -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
+                rect.set(cx - r * 0.64f, cy - r * 0.44f, cx + r * 0.64f, cy + r * 0.32f)
+                canvas.drawRect(rect, paint)
+                canvas.drawLine(cx - r * 0.32f, cy + r * 0.52f, cx + r * 0.32f, cy + r * 0.52f, paint)
+            }
+        }
+    }
+
+    private fun drawRetroIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+        val pad = minDim * 0.08f
+        val r = (minDim - pad * 2) * 0.36f
+        val cardColor = when (iconType) {
+            "PLAYLISTS", "FAVORITES", "EDITOR", "TOP_CHANNELS", "MORE" -> Color.parseColor("#2A7B69")
+            "ANALYZER", "BUFFER", "AUDIO" -> Color.parseColor("#9B533F")
+            "THEMES", "EPG_GRID" -> Color.parseColor("#D68928")
+            else -> Color.parseColor("#544F4E")
+        }
+        val corner = minDim * 0.15f
+        paint.style = Paint.Style.FILL
+        paint.color = Color.parseColor("#880A0807")
+        rect.set(pad + 3f, pad + 7f, width - pad + 3f, height - pad + 7f)
+        canvas.drawRoundRect(rect, corner, corner, paint)
+
+        paint.color = cardColor
+        rect.set(pad, pad, width - pad, height - pad)
+        canvas.drawRoundRect(rect, corner, corner, paint)
+        if (isTileFocused) {
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f
+            paint.color = Color.parseColor("#F5E6CC")
+            canvas.drawRoundRect(rect, corner, corner, paint)
+        }
+
+        val cream = Color.parseColor("#F3E5CA")
+        paint.color = cream
+
+        when (iconType) {
+            "PLAYLISTS" -> {
+                paint.style = Paint.Style.FILL; paint.color = cream
+                rect.set(cx - r * 0.72f, cy - r * 0.52f, cx + r * 0.72f, cy + r * 0.56f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                paint.color = Color.parseColor("#2A7B69")
+                canvas.drawCircle(cx - r * 0.30f, cy + r * 0.04f, r * 0.18f, paint)
+                canvas.drawCircle(cx + r * 0.30f, cy + r * 0.04f, r * 0.18f, paint)
+            }
+            "EDITOR" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 8f; paint.color = cream
+                path.reset()
+                path.moveTo(cx - r * 0.55f, cy - r * 0.55f)
+                path.lineTo(cx - r * 0.55f, cy + r * 0.55f)
+                path.lineTo(cx + r * 0.55f, cy + r * 0.55f)
+                canvas.drawPath(path, paint)
+                canvas.drawLine(cx - r * 0.15f, cy + r * 0.25f, cx + r * 0.55f, cy - r * 0.45f, paint)
+            }
+            "ANALYZER" -> {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#E63926")
+                canvas.drawCircle(cx, cy, r * 0.74f, paint)
+                paint.color = cream
+                canvas.drawCircle(cx, cy, r * 0.50f, paint)
+                paint.color = Color.parseColor("#E63926")
+                canvas.drawCircle(cx, cy, r * 0.28f, paint)
+                paint.color = cream
+                canvas.drawCircle(cx, cy, r * 0.12f, paint)
+            }
+            "THEMES" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f; paint.color = cream
+                rect.set(cx - r * 0.64f, cy - r * 0.64f, cx + r * 0.64f, cy + r * 0.64f)
+                canvas.drawRect(rect, paint)
+                canvas.drawLine(cx - r * 0.64f, cy, cx + r * 0.64f, cy, paint)
+                canvas.drawLine(cx, cy - r * 0.64f, cx, cy + r * 0.64f, paint)
+            }
+            "BUFFER" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                canvas.drawCircle(cx, cy + r * 0.06f, r * 0.66f, paint)
+                paint.color = Color.parseColor("#9B533F")
+                canvas.drawCircle(cx, cy + r * 0.06f, r * 0.40f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 6f; paint.color = cream
+                canvas.drawLine(cx, cy + r * 0.06f, cx + r * 0.28f, cy - r * 0.18f, paint)
+                canvas.drawLine(cx, cy - r * 0.60f, cx, cy - r * 0.78f, paint)
+            }
+            "DECODER" -> {
+                paint.style = Paint.Style.FILL; paint.color = cream
+                rect.set(cx - r * 0.62f, cy - r * 0.32f, cx + r * 0.62f, cy + r * 0.60f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 6f; paint.color = cream
+                canvas.drawLine(cx - r * 0.20f, cy - r * 0.32f, cx - r * 0.45f, cy - r * 0.70f, paint)
+                canvas.drawLine(cx + r * 0.20f, cy - r * 0.32f, cx + r * 0.45f, cy - r * 0.70f, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#3B2F63")
+                rect.set(cx - r * 0.44f, cy - r * 0.12f, cx + r * 0.44f, cy + r * 0.38f)
+                canvas.drawRoundRect(rect, 6f, 6f, paint)
+            }
+            "EPG_GRID" -> {
+                paint.style = Paint.Style.FILL; paint.color = cream
+                rect.set(cx - r * 0.64f, cy - r * 0.62f, cx + r * 0.64f, cy + r * 0.62f)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                paint.color = Color.parseColor("#544F4E")
+                for (i in -1..1) {
+                    val y = cy + i * r * 0.32f
+                    rect.set(cx - r * 0.44f, y - 5f, cx + r * 0.44f, y + 5f)
+                    canvas.drawRect(rect, paint)
+                }
+            }
+            "TOP_CHANNELS" -> {
+                paint.style = Paint.Style.FILL; paint.color = cream
+                path.reset()
+                path.moveTo(cx, cy - r * 0.10f)
+                path.lineTo(cx - r * 0.72f, cy + r * 0.56f)
+                path.lineTo(cx + r * 0.72f, cy + r * 0.56f)
+                path.close()
+                canvas.drawPath(path, paint)
+                canvas.drawCircle(cx, cy - r * 0.44f, r * 0.18f, paint)
+            }
+            "FAVORITES" -> {
+                paint.style = Paint.Style.FILL; paint.color = cream
+                canvas.drawCircle(cx, cy + r * 0.15f, r * 0.34f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 6f
+                for (deg in listOf(-150, -120, -90, -60, -30)) {
+                    val rad = Math.toRadians(deg.toDouble())
+                    canvas.drawLine(
+                        cx + (r * 0.46f * cos(rad)).toFloat(), cy + r * 0.15f + (r * 0.46f * sin(rad)).toFloat(),
+                        cx + (r * 0.78f * cos(rad)).toFloat(), cy + r * 0.15f + (r * 0.78f * sin(rad)).toFloat(), paint
+                    )
+                }
+            }
+            "AUDIO" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 7f; paint.color = cream
+                canvas.drawCircle(cx, cy, r * 0.62f, paint)
+                paint.style = Paint.Style.FILL
+                canvas.drawCircle(cx, cy, r * 0.24f, paint)
+            }
+            "CONTROL_MODE" -> {
+                paint.style = Paint.Style.FILL; paint.color = cream
+                rect.set(cx - r * 0.62f, cy + r * 0.18f, cx + r * 0.62f, cy + r * 0.54f)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 8f
+                canvas.drawLine(cx, cy + r * 0.18f, cx + r * 0.24f, cy - r * 0.42f, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#E63926")
+                canvas.drawCircle(cx + r * 0.24f, cy - r * 0.46f, r * 0.20f, paint)
+            }
+            else -> {
+                paint.style = Paint.Style.FILL; paint.color = cream
+                rect.set(cx - r * 0.70f, cy - r * 0.52f, cx + r * 0.70f, cy + r * 0.52f)
+                canvas.drawRoundRect(rect, 14f, 14f, paint)
+                paint.color = Color.parseColor("#2A7B69")
+                rect.set(cx - r * 0.52f, cy - r * 0.36f, cx + r * 0.28f, cy + r * 0.36f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                canvas.drawCircle(cx + r * 0.48f, cy - r * 0.14f, r * 0.08f, paint)
+                canvas.drawCircle(cx + r * 0.48f, cy + r * 0.14f, r * 0.08f, paint)
+            }
+        }
+    }
+
+    private fun drawCarousel3DIptvIcon(canvas: Canvas, cx: Float, cy: Float, minDim: Float) {
+        val discR = minDim * 0.38f
+        val topCy = cy - minDim * 0.035f
+        val r = discR * 0.64f
+
+        val (topHex, edgeHex) = when (iconType) {
+            "PLAYLISTS" -> Pair("#EF4444", "#991B1B")
+            "EDITOR" -> Pair("#65A30D", "#3F6212")
+            "ANALYZER" -> Pair("#0284C7", "#075985")
+            "THEMES" -> Pair("#9333EA", "#6B21A8")
+            "BUFFER" -> Pair("#EA580C", "#9A3412")
+            "DECODER" -> Pair("#0D9488", "#115E59")
+            "EPG_GRID" -> Pair("#E11D48", "#881337")
+            "TOP_CHANNELS" -> Pair("#2563EB", "#1E3A8A")
+            "FAVORITES" -> Pair("#D97706", "#78350F")
+            "AUDIO" -> Pair("#0EA5E9", "#0369A1")
+            "CONTROL_MODE" -> Pair("#4F46E5", "#312E81")
+            else -> Pair("#0284C7", "#075985")
+        }
+
+        paint.style = Paint.Style.FILL
+        paint.color = Color.parseColor("#55000000")
+        canvas.drawCircle(cx, topCy + minDim * 0.105f, discR, paint)
+        paint.color = Color.parseColor(edgeHex)
+        canvas.drawCircle(cx, topCy + minDim * 0.075f, discR, paint)
+        paint.color = Color.parseColor("#F1F5F9")
+        canvas.drawCircle(cx, topCy + minDim * 0.038f, discR, paint)
+        if (iconType == "THEMES") {
+            paint.shader = LinearGradient(
+                cx - discR, topCy - discR, cx + discR, topCy + discR,
+                intArrayOf(Color.parseColor("#8B5CF6"), Color.parseColor("#EC4899"), Color.parseColor("#F59E0B")),
+                null, Shader.TileMode.CLAMP
+            )
+        } else {
+            paint.color = Color.parseColor(topHex)
+        }
+        canvas.drawCircle(cx, topCy, discR, paint)
+        paint.shader = null
+
+        if (isTileFocused) {
+            paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f; paint.color = Color.WHITE
+            canvas.drawCircle(cx, topCy, discR, paint)
+        }
+
+        when (iconType) {
+            "PLAYLISTS" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+                rect.set(cx - r * 0.62f, topCy - r * 0.44f, cx + r * 0.62f, topCy + r * 0.44f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                paint.color = Color.parseColor("#EF4444")
+                path.reset()
+                path.moveTo(cx - r * 0.18f, topCy - r * 0.24f)
+                path.lineTo(cx + r * 0.26f, topCy)
+                path.lineTo(cx - r * 0.18f, topCy + r * 0.24f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "EDITOR" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.5f; paint.color = Color.WHITE
+                canvas.drawLine(cx - r * 0.56f, topCy - r * 0.30f, cx + r * 0.12f, topCy - r * 0.30f, paint)
+                canvas.drawLine(cx - r * 0.56f, topCy, cx + r * 0.02f, topCy, paint)
+                canvas.drawLine(cx - r * 0.56f, topCy + r * 0.30f, cx - r * 0.12f, topCy + r * 0.30f, paint)
+                paint.strokeWidth = 7f; paint.color = Color.parseColor("#FDE047")
+                canvas.drawLine(cx + r * 0.08f, topCy + r * 0.38f, cx + r * 0.54f, topCy - r * 0.28f, paint)
+            }
+            "ANALYZER" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f; paint.color = Color.WHITE
+                for (ring in 1..2) {
+                    val rad = r * (0.34f * ring)
+                    rect.set(cx - rad, topCy - rad + r * 0.10f, cx + rad, topCy + rad + r * 0.10f)
+                    canvas.drawArc(rect, 205f, 130f, false, paint)
+                }
+                paint.color = Color.parseColor("#4ADE80"); paint.strokeWidth = 5f
+                canvas.drawLine(cx - r * 0.22f, topCy + r * 0.24f, cx - r * 0.04f, topCy + r * 0.42f, paint)
+                canvas.drawLine(cx - r * 0.04f, topCy + r * 0.42f, cx + r * 0.28f, topCy + r * 0.08f, paint)
+            }
+            "THEMES" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+                canvas.drawCircle(cx, topCy, r * 0.58f, paint)
+                paint.color = Color.parseColor("#EF4444"); canvas.drawCircle(cx - r * 0.22f, topCy - r * 0.14f, r * 0.11f, paint)
+                paint.color = Color.parseColor("#3B82F6"); canvas.drawCircle(cx + r * 0.02f, topCy - r * 0.28f, r * 0.11f, paint)
+                paint.color = Color.parseColor("#10B981"); canvas.drawCircle(cx + r * 0.24f, topCy - r * 0.08f, r * 0.11f, paint)
+                paint.color = Color.parseColor("#9333EA"); canvas.drawCircle(cx + r * 0.18f, topCy + r * 0.22f, r * 0.14f, paint)
+            }
+            "BUFFER" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f; paint.color = Color.WHITE
+                rect.set(cx - r * 0.56f, topCy - r * 0.56f, cx + r * 0.56f, topCy + r * 0.56f)
+                canvas.drawArc(rect, 140f, 260f, false, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                path.reset()
+                path.moveTo(cx + r * 0.06f, topCy - r * 0.36f)
+                path.lineTo(cx - r * 0.22f, topCy + r * 0.04f)
+                path.lineTo(cx + r * 0.02f, topCy + r * 0.04f)
+                path.lineTo(cx - r * 0.06f, topCy + r * 0.38f)
+                path.lineTo(cx + r * 0.24f, topCy - r * 0.04f)
+                path.lineTo(cx + r * 0.02f, topCy - r * 0.04f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "DECODER" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = Color.WHITE
+                rect.set(cx - r * 0.46f, topCy - r * 0.46f, cx + r * 0.46f, topCy + r * 0.46f)
+                canvas.drawRoundRect(rect, 8f, 8f, paint)
+                for (k in -1..1) {
+                    val off = k * r * 0.24f
+                    canvas.drawLine(cx + off, topCy - r * 0.68f, cx + off, topCy - r * 0.46f, paint)
+                    canvas.drawLine(cx + off, topCy + r * 0.46f, cx + off, topCy + r * 0.68f, paint)
+                    canvas.drawLine(cx - r * 0.68f, topCy + off, cx - r * 0.46f, topCy + off, paint)
+                    canvas.drawLine(cx + r * 0.46f, topCy + off, cx + r * 0.68f, topCy + off, paint)
+                }
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                rect.set(cx - r * 0.20f, topCy - r * 0.20f, cx + r * 0.20f, topCy + r * 0.20f)
+                canvas.drawRoundRect(rect, 4f, 4f, paint)
+            }
+            "EPG_GRID" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+                rect.set(cx - r * 0.56f, topCy - r * 0.48f, cx + r * 0.56f, topCy + r * 0.48f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                paint.color = Color.parseColor("#E11D48")
+                rect.set(cx - r * 0.40f, topCy - r * 0.28f, cx + r * 0.40f, topCy - r * 0.14f)
+                canvas.drawRect(rect, paint)
+                rect.set(cx - r * 0.40f, topCy - r * 0.02f, cx + r * 0.24f, topCy + r * 0.12f)
+                canvas.drawRect(rect, paint)
+                rect.set(cx - r * 0.40f, topCy + r * 0.22f, cx + r * 0.32f, topCy + r * 0.34f)
+                canvas.drawRect(rect, paint)
+            }
+            "TOP_CHANNELS" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                path.reset()
+                path.moveTo(cx - r * 0.52f, topCy + r * 0.36f)
+                path.lineTo(cx - r * 0.58f, topCy - r * 0.22f)
+                path.lineTo(cx - r * 0.20f, topCy + r * 0.06f)
+                path.lineTo(cx, topCy - r * 0.42f)
+                path.lineTo(cx + r * 0.20f, topCy + r * 0.06f)
+                path.lineTo(cx + r * 0.58f, topCy - r * 0.22f)
+                path.lineTo(cx + r * 0.52f, topCy + r * 0.36f)
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "FAVORITES" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+                path.reset()
+                for (i in 0 until 10) {
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val rad = if (i % 2 == 0) r * 0.58f else r * 0.25f
+                    val sx = cx + (rad * cos(a)).toFloat(); val sy = topCy + (rad * sin(a)).toFloat()
+                    if (i == 0) path.moveTo(sx, sy) else path.lineTo(sx, sy)
+                }
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+            "AUDIO" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.WHITE
+                canvas.drawCircle(cx - r * 0.26f, topCy + r * 0.30f, r * 0.17f, paint)
+                canvas.drawCircle(cx + r * 0.22f, topCy + r * 0.22f, r * 0.17f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.5f
+                canvas.drawLine(cx - r * 0.10f, topCy + r * 0.30f, cx - r * 0.10f, topCy - r * 0.34f, paint)
+                canvas.drawLine(cx + r * 0.38f, topCy + r * 0.22f, cx + r * 0.38f, topCy - r * 0.42f, paint)
+                canvas.drawLine(cx - r * 0.10f, topCy - r * 0.34f, cx + r * 0.38f, topCy - r * 0.42f, paint)
+            }
+            "CONTROL_MODE" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.8f; paint.color = Color.WHITE
+                rect.set(cx - r * 0.38f, topCy - r * 0.58f, cx + r * 0.38f, topCy + r * 0.58f)
+                canvas.drawRoundRect(rect, 12f, 12f, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                canvas.drawCircle(cx, topCy - r * 0.12f, r * 0.16f, paint)
+            }
+            else -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f; paint.color = Color.WHITE
+                rect.set(cx - r * 0.58f, topCy - r * 0.42f, cx + r * 0.58f, topCy + r * 0.30f)
+                canvas.drawRoundRect(rect, 10f, 10f, paint)
+                canvas.drawLine(cx - r * 0.30f, topCy + r * 0.48f, cx + r * 0.30f, topCy + r * 0.48f, paint)
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
+                canvas.drawCircle(cx, topCy - r * 0.06f, r * 0.16f, paint)
+            }
+        }
+    }
 }
