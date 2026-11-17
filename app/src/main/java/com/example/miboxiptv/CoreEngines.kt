@@ -23,6 +23,14 @@ import javax.net.ssl.X509TrustManager
 
 object CoreEngines {
     private val dohDnsCache = ConcurrentHashMap<String, String>()
+    private val REGEX_NON_ALNUM = REGEX_NON_ALNUM
+    private val REGEX_GEO_TAG = REGEX_GEO_TAG
+    private val REGEX_MULTI_SPACE = REGEX_MULTI_SPACE
+    private val REGEX_PLUS_TZ1 = REGEX_PLUS_TZ1
+    private val REGEX_PLUS_TZ2 = REGEX_PLUS_TZ2
+    private val REGEX_RESOLUTION = REGEX_RESOLUTION
+    private val REGEX_GROUP_TITLE = REGEX_GROUP_TITLE
+    private val REGEX_TVG_ID = REGEX_TVG_ID
 
     val russianSmartTvAgents = listOf(
         "VLC/3.0.20 LibVLC/3.0.20",
@@ -157,19 +165,19 @@ object CoreEngines {
     }
 
     fun normalizeName(s: String): String =
-        s.lowercase(Locale.getDefault()).replace(Regex("[^a-zа-я0-9]"), "")
+        s.lowercase(Locale.getDefault()).replace(REGEX_NON_ALNUM, "")
 
     fun cleanChannelDisplayName(rawName: String): String {
         val cleaned = rawName
-            .replace(Regex("\\[[^\\]]*(Geo|Not 24)[^\\]]*\\]", RegexOption.IGNORE_CASE), " ")
-            .replace(Regex("\\s{2,}"), " ")
+            .replace(REGEX_GEO_TAG, " ")
+            .replace(REGEX_MULTI_SPACE, " ")
             .trim()
         return cleaned.ifEmpty { rawName.trim() }
     }
 
     fun isRegionalTimeShiftDuplicate(name: String): Boolean {
         val low = name.lowercase()
-        if (Regex("\\+[1-9]\\b").containsMatchIn(low) || Regex("\\(\\+[1-9]\\)").containsMatchIn(low)) return true
+        if (REGEX_PLUS_TZ1.containsMatchIn(low) || REGEX_PLUS_TZ2.containsMatchIn(low)) return true
         val regionalMarkers = listOf("(омск", "(томск", "(владивосток", "(уфа", "(алтай", "(канск", "(абакан", "(иркутск", "(братск", "(пермь", "(элиста", "(белгород", "(липецк", "(тамбов", "(нефтекамск", "(белорецк", "(невинномысск")
         return regionalMarkers.any { low.contains(it) }
     }
@@ -263,7 +271,7 @@ object CoreEngines {
     fun is2kOrHigherStream(rawLine: String, name: String, rawGroup: String, url: String): Boolean {
         val text = "$rawLine $name $rawGroup $url".lowercase()
         if (text.contains("4k") || text.contains("uhd") || text.contains("2160p") || text.contains("1440p") || text.contains("2k") || text.contains("ultra hd")) return true
-        val resMatch = Regex("(\\d{3,4})x(\\d{3,4})").find(text)
+        val resMatch = REGEX_RESOLUTION.find(text)
         if (resMatch != null) {
             val w = resMatch.groupValues[1].toIntOrNull() ?: 0
             val h = resMatch.groupValues[2].toIntOrNull() ?: 0
@@ -388,9 +396,9 @@ object CoreEngines {
             if (l.startsWith("#EXTINF", ignoreCase = true)) {
                 currentRawInfLine = l
                 currentName = cleanChannelDisplayName(l.substringAfterLast(",", "Канал").trim())
-                val groupMatch = Regex("group-title=\"([^\"]+)\"", RegexOption.IGNORE_CASE).find(l)
+                val groupMatch = REGEX_GROUP_TITLE.find(l)
                 currentGroup = groupMatch?.groupValues?.get(1)?.trim() ?: ""
-                val idMatch = Regex("tvg-id=\"([^\"]+)\"", RegexOption.IGNORE_CASE).find(l)
+                val idMatch = REGEX_TVG_ID.find(l)
                 currentTvgId = idMatch?.groupValues?.get(1)?.trim() ?: ""
             } else if (l.startsWith("#EXTGRP:", ignoreCase = true)) {
                 val extGrp = l.substringAfter(":").trim()

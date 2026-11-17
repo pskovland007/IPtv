@@ -85,6 +85,7 @@ class MainActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var dualPipPlayer: ExoPlayer? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var lastAudioSessionId: Int = C.AUDIO_SESSION_ID_UNSET
     private var httpDataSourceFactory: DefaultHttpDataSource.Factory? = null
 
     private lateinit var rootFrame: FrameLayout
@@ -328,7 +329,7 @@ class MainActivity : AppCompatActivity() {
         else -> 1.28f
     }
 
-    private fun exactModalRowHeightPx(): Int = (58f * uiScaleFactor()).toInt()
+    private fun exactModalRowHeightPx(): Int = (56f * uiScaleFactor()).toInt()
 
     private fun targetPanelAlphaInt(): Int = when (uiAlphaStep) {
         0 -> 244
@@ -607,7 +608,11 @@ class MainActivity : AppCompatActivity() {
         try {
             val sessionId = p.audioSessionId
             if (sessionId != C.AUDIO_SESSION_ID_UNSET && sessionId > 0) {
-                if (loudnessEnhancer == null) loudnessEnhancer = LoudnessEnhancer(sessionId)
+                if (loudnessEnhancer == null || lastAudioSessionId != sessionId) {
+                    try { loudnessEnhancer?.release() } catch (_: Exception) {}
+                    loudnessEnhancer = LoudnessEnhancer(sessionId)
+                    lastAudioSessionId = sessionId
+                }
                 val boostMb = when (audioBoostPercent) {
                     130 -> 350; 160 -> 700; 200 -> 1100
                     else -> if (drcNightAudioEnabled) 250 else 0
@@ -639,8 +644,12 @@ class MainActivity : AppCompatActivity() {
             Pair(0f, 0f), Pair(5f, 3f), Pair(10f, 5f), Pair(6f, -4f),
             Pair(0f, -6f), Pair(-6f, -4f), Pair(-10f, 3f), Pair(-5f, 6f)
         )
-        playerView.translationX = 0f
-        playerView.translationY = 0f
+        if (menuHistory.isEmpty()) {
+            playerView.translationX = videoShifts[orbiterStep].first
+            playerView.translationY = videoShifts[orbiterStep].second
+        } else {
+            playerView.translationX = 0f; playerView.translationY = 0f
+        }
         val hx = hudShifts[orbiterStep].first
         val hy = hudShifts[orbiterStep].second
         clockTextView.animate().translationX(hx).translationY(hy).setDuration(900L).start()
@@ -1606,6 +1615,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableTrueFullScreenImmersion()
+        Thread.setDefaultUncaughtExceptionHandler { _, _ -> }
 
         CoreEngines.installTrustAllSsl()
         requestStoragePermissionsIfNeeded()
@@ -1738,7 +1748,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         categoryListView = ListView(this).apply {
-            choiceMode = ListView.CHOICE_MODE_NONE; divider = ColorDrawable(Color.TRANSPARENT); dividerHeight = 4
+            choiceMode = ListView.CHOICE_MODE_NONE; divider = null; dividerHeight = 0
             overScrollMode = View.OVER_SCROLL_NEVER; isScrollingCacheEnabled = false
             isVerticalScrollBarEnabled = true
             isScrollbarFadingEnabled = false
@@ -1748,7 +1758,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         channelListView = ListView(this).apply {
-            choiceMode = ListView.CHOICE_MODE_NONE; divider = ColorDrawable(Color.TRANSPARENT); dividerHeight = 4
+            choiceMode = ListView.CHOICE_MODE_NONE; divider = null; dividerHeight = 0
             overScrollMode = View.OVER_SCROLL_NEVER; isScrollingCacheEnabled = false
             isVerticalScrollBarEnabled = true
             isScrollbarFadingEnabled = false
@@ -2314,7 +2324,7 @@ class MainActivity : AppCompatActivity() {
                     val rowH = exactModalRowHeightPx()
                     tv.layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, rowH)
                     tv.gravity = Gravity.CENTER_VERTICAL
-                    tv.setPadding(20, 5, 20, 5)
+                    tv.setPadding(20, 0, 20, 0)
                 } else {
                     tv.layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                     val padV = (10 * scale).toInt()
@@ -2896,28 +2906,25 @@ class MainActivity : AppCompatActivity() {
                     val bufMs = p.totalBufferedDuration
                     // Не рвём поток во время штатной буферизации HEVC без VPN: ждём реальной остановки (22 сек)
                     val isTrulyStalled = (state == Player.STATE_IDLE ||
-                        (state == Player.STATE_BUFFERING && bufMs < 50L && curPos == lastRenderedFramePositionMs))
+                        (state == Player.STATE_BUFFERING && bufMs < 80L && curPos == lastRenderedFramePositionMs))
                     lastRenderedFramePositionMs = curPos
 
                     if (isTrulyStalled) {
                         lowSignalStuckSeconds += 2
-                        if (lowSignalStuckSeconds >= 30) {
+                        if (lowSignalStuckSeconds >= 22) {
                             lowSignalStuckSeconds = 0
                             consecutiveDropFailures++
-                            if (onDropBehavior == 1 && consecutiveDropFailures >= 4) {
+                            if (onDropBehavior == 1 && consecutiveDropFailures >= 3) {
                                 consecutiveDropFailures = 0
                                 switchChannelByOffset(+1)
                             } else {
-                                val curUrl = currentChannel?.url ?: ""
-                                if (antiBlockEnabled && !CoreEngines.isSingleSessionTokenUrl(curUrl)) {
-                                    userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
-                                }
+                                if (antiBlockEnabled) userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                                 reloadIconIndicator.visibility = View.VISIBLE
                                 uiHandler.postDelayed({ reloadIconIndicator.visibility = View.GONE }, 2200L)
                                 reconnectCurrentStreamSilently()
                             }
                         }
-                    } else if (state == Player.STATE_READY && p.isPlaying) {
+                    } else {
                         lowSignalStuckSeconds = 0
                         consecutiveDropFailures = 0
                     }
@@ -2945,8 +2952,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun applyHeadersToDataSourceForUrl(urlStr: String) {
-        val isToken = CoreEngines.isSingleSessionTokenUrl(urlStr)
-        val activeAgent = if (isToken) {
+        val activeAgent = if (CoreEngines.isSingleSessionTokenUrl(urlStr)) {
             CoreEngines.russianSmartTvAgents[0]
         } else {
             CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
@@ -2971,6 +2977,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 cleanUrl
             }
+            p.stop()
             applyHeadersToDataSourceForUrl(targetUrl)
             p.setMediaItem(createLiveMediaItem(targetUrl), true)
             p.prepare()
@@ -2980,16 +2987,8 @@ class MainActivity : AppCompatActivity() {
 
     internal fun createLiveMediaItem(url: String): MediaItem {
         val cleanUrl = url.substringBefore("#")
-        val liveConfig = MediaItem.LiveConfiguration.Builder()
-            .setTargetOffsetMs(16_000L)
-            .setMinOffsetMs(8_000L)
-            .setMaxOffsetMs(45_000L)
-            .setMinPlaybackSpeed(1.0f)
-            .setMaxPlaybackSpeed(1.0f)
-            .build()
         return MediaItem.Builder()
             .setUri(cleanUrl)
-            .setLiveConfiguration(liveConfig)
             .build()
     }
 
@@ -3021,18 +3020,18 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release(); loudnessEnhancer = null } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
 
-        // Увеличенный эластичный буфер для стабильной работы FHD / HEVC потоков без микрофризов
+        // Увеличенный эластичный буфер для стабильной работы FHD / HEVC потоков без VPN
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(10000, 22000, 1800, 3200)
-            1 -> listOf(18000, 36000, 2500, 4500)
-            2 -> listOf(24000, 48000, 3000, 5500)
-            else -> listOf(32000, 64000, 3500, 6500)
+            0 -> listOf(8000, 18000, 1000, 2000)
+            1 -> listOf(14000, 28000, 1200, 2400)
+            2 -> listOf(20000, 40000, 1500, 3000)
+            else -> listOf(26000, 52000, 1800, 3500)
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
-            .setTargetBufferBytes(64 * 1024 * 1024)
+            .setTargetBufferBytes(32 * 1024 * 1024)
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setBackBuffer(20000, false)
+            .setBackBuffer(15000, false)
             .build()
 
         val extensionMode = when (decoderMode) {
@@ -3044,24 +3043,19 @@ class MainActivity : AppCompatActivity() {
             .setExtensionRendererMode(extensionMode)
             .setEnableDecoderFallback(true)
 
-        val initUrl = currentUrl ?: "http://tsmxkuov.rostelekom.xyz"
-        val activeAgent = if (CoreEngines.isSingleSessionTokenUrl(initUrl)) {
-            CoreEngines.russianSmartTvAgents[0]
-        } else {
-            CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
-        }
+        val activeAgent = CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
         val dsFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(activeAgent)
-            .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(initUrl))
+            .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(currentUrl ?: "http://tsmxkuov.rostelekom.xyz"))
             .setAllowCrossProtocolRedirects(true)
             .setKeepPostFor302Redirects(true)
-            .setConnectTimeoutMs(12000)
-            .setReadTimeoutMs(15000)
+            .setConnectTimeoutMs(8000)
+            .setReadTimeoutMs(8000)
         httpDataSourceFactory = dsFactory
 
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dsFactory)
-            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(12))
+            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(6))
 
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -3072,11 +3066,7 @@ class MainActivity : AppCompatActivity() {
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttrs, false)
-            .setHandleAudioBecomingNoisy(false)
             .build()
-
-        try { newPlayer.setWakeMode(C.WAKE_MODE_NETWORK) } catch (_: Exception) {}
-        playerView.keepScreenOn = true
 
         newPlayer.volume = if (::splashOverlay.isInitialized && splashOverlay.visibility == View.VISIBLE) 0f else 1.0f
         newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
@@ -3126,7 +3116,7 @@ class MainActivity : AppCompatActivity() {
                 if (antiBlockEnabled && !CoreEngines.isSingleSessionTokenUrl(errUrl)) {
                     userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                 }
-                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 800L)
+                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 750L)
             }
         })
 
@@ -3721,8 +3711,6 @@ class MainActivity : AppCompatActivity() {
         val editor = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
             .edit()
             .putString("last_channel_url", lastSavedChannelUrl)
-            .putString("last_channel_name", lastSavedChannelName)
-            .putString("last_channel_group", lastSavedChannelGroup)
             .putString("last_channel_name", lastSavedChannelName)
             .putString("last_channel_group", lastSavedChannelGroup)
         if (syncCommit) editor.commit() else editor.apply()

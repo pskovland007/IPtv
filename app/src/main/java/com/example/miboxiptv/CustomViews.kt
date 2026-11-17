@@ -129,9 +129,9 @@ class MonogramBadgeSpan(
     private val rect = RectF()
 
     override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
-        val boxW = (paint.textSize * 1.18f).toInt().coerceIn(26, 44)
-        val rightGap = (paint.textSize * 0.44f).toInt().coerceAtLeast(10)
-        return boxW + rightGap
+        val boxH = (paint.textSize * 1.05f).toInt().coerceAtLeast(22)
+        val boxW = (boxH * 1.15f).toInt().coerceAtLeast(24)
+        return boxW + (paint.textSize * 0.45f).toInt().coerceAtLeast(10)
     }
 
     override fun draw(
@@ -145,10 +145,9 @@ class MonogramBadgeSpan(
         bottom: Int,
         textPaint: Paint
     ) {
-        val lineH = (bottom - top).toFloat().coerceAtLeast(24f)
-        val boxH = (textPaint.textSize * 1.00f).coerceIn(22f, (lineH - 8f).coerceAtLeast(22f))
-        val boxW = (boxH * 1.16f).coerceIn(26f, 44f)
-        val centerY = top + lineH / 2f
+        val boxH = (textPaint.textSize * 1.05f).coerceAtLeast(22f)
+        val boxW = (boxH * 1.15f).coerceAtLeast(24f)
+        val centerY = (top + bottom) / 2f
         val boxTop = centerY - boxH / 2f
         val boxBottom = centerY + boxH / 2f
         rect.set(x + 2f, boxTop, x + 2f + boxW, boxBottom)
@@ -167,7 +166,7 @@ class MonogramBadgeSpan(
         paint.style = Paint.Style.FILL
         paint.color = Color.WHITE
         paint.textAlign = Paint.Align.CENTER
-        paint.textSize = boxH * 0.50f
+        paint.textSize = textPaint.textSize * 0.56f
         paint.typeface = Typeface.DEFAULT_BOLD
         val fm = paint.fontMetrics
         val textY = centerY - (fm.ascent + fm.descent) / 2f
