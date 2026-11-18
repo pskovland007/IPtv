@@ -65,7 +65,9 @@ object CoreEngines {
         if (isSingleSessionTokenUrl(lUrl)) {
             return mapOf(
                 "Accept" to "*/*",
-                "Connection" to "keep-alive"
+                "Connection" to "close",
+                "Cache-Control" to "no-cache, no-store",
+                "Pragma" to "no-cache"
             )
         }
         val parsedOrigin = try {

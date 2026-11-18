@@ -2959,14 +2959,14 @@ class MainActivity : AppCompatActivity() {
                     val prevPos = lastRenderedFramePositionMs
                     lastRenderedFramePositionMs = curPos
 
-                    // Не рвём поток во время штатной буферизации HEVC без VPN: ждём реальной остановки или замёрзшего кадра
+                    // Детекция зависания даже если в буфере остался хвост аудио 0.1–0.5 сек (bufMs < 1500L)
                     val isTrulyStalled = (state == Player.STATE_IDLE ||
-                        (state == Player.STATE_BUFFERING && bufMs < 80L && curPos == prevPos) ||
-                        (state == Player.STATE_READY && p.isPlaying && curPos == prevPos && bufMs < 150L))
+                        (state == Player.STATE_BUFFERING && (curPos == prevPos || bufMs < 1500L)) ||
+                        (state == Player.STATE_READY && p.isPlaying && curPos == prevPos && bufMs < 1500L))
 
                     if (isTrulyStalled) {
                         lowSignalStuckSeconds += 2
-                        if (lowSignalStuckSeconds >= 22) {
+                        if (lowSignalStuckSeconds >= 10) {
                             lowSignalStuckSeconds = 0
                             consecutiveDropFailures++
                             if (onDropBehavior == 1 && consecutiveDropFailures >= 3) {
@@ -3038,19 +3038,12 @@ class MainActivity : AppCompatActivity() {
             } else {
                 cleanUrl
             }
+            p.stop()
+            p.clearMediaItems()
             applyHeadersToDataSourceForUrl(targetUrl)
-            if (!useMirror && consecutiveDropFailures <= 2 && p.mediaItemCount > 0) {
-                if (p.isCurrentMediaItemLive) {
-                    p.seekToDefaultPosition()
-                }
-                p.prepare()
-                p.play()
-            } else {
-                p.stop()
-                p.setMediaItem(createLiveMediaItem(targetUrl), true)
-                p.prepare()
-                p.play()
-            }
+            p.setMediaItem(createLiveMediaItem(targetUrl), true)
+            p.prepare()
+            p.play()
         } catch (_: Exception) {}
     }
 
@@ -3089,16 +3082,16 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release(); loudnessEnhancer = null; lastAudioSessionId = C.AUDIO_SESSION_ID_UNSET } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
 
-        // Увеличенный эластичный буфер для стабильной работы FHD / HEVC потоков без VPN
+        // Оптимальный буфер без бана 1-сессионного ключа (как в Televizo / TiviMate)
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(8000, 18000, 1000, 2000)
-            1 -> listOf(14000, 28000, 1200, 2400)
-            2 -> listOf(20000, 40000, 1500, 3000)
-            else -> listOf(26000, 52000, 1800, 3500)
+            0 -> listOf(4500, 10000, 500, 1000)
+            1 -> listOf(6500, 14000, 600, 1200)
+            2 -> listOf(9000, 18000, 700, 1400)
+            else -> listOf(12000, 24000, 800, 1600)
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
-            .setTargetBufferBytes(32 * 1024 * 1024)
+            .setTargetBufferBytes(24 * 1024 * 1024)
             .setPrioritizeTimeOverSizeThresholds(true)
             .setBackBuffer(15000, false)
             .build()
@@ -3111,7 +3104,6 @@ class MainActivity : AppCompatActivity() {
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(extensionMode)
             .setEnableDecoderFallback(true)
-            .forceEnableMediaCodecAsynchronousQueueing()
 
         val initUrl = currentUrl ?: "http://tsmxkuov.rostelekom.xyz"
         val activeAgent = if (CoreEngines.isSingleSessionTokenUrl(initUrl)) {
@@ -3124,25 +3116,13 @@ class MainActivity : AppCompatActivity() {
             .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(initUrl))
             .setAllowCrossProtocolRedirects(true)
             .setKeepPostFor302Redirects(true)
-            .setConnectTimeoutMs(12000)
-            .setReadTimeoutMs(12000)
+            .setConnectTimeoutMs(8000)
+            .setReadTimeoutMs(8000)
         httpDataSourceFactory = dsFactory
-
-        val fastRetryPolicy = object : DefaultLoadErrorHandlingPolicy(10) {
-            override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
-                return when (loadErrorInfo.errorCount) {
-                    1 -> 250L
-                    2 -> 400L
-                    3 -> 650L
-                    4 -> 1000L
-                    else -> 1500L
-                }
-            }
-        }
 
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dsFactory)
-            .setLoadErrorHandlingPolicy(fastRetryPolicy)
+            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
 
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -3181,27 +3161,6 @@ class MainActivity : AppCompatActivity() {
                         changed = true
                     }
                 }
-                val videoGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
-                for (vg in videoGroups) {
-                    if (vg.length > 1) {
-                        var bestTrackIdx = -1; var bestScore = -1L; var currentlySelectedIdx = -1
-                        for (i in 0 until vg.length) {
-                            if (vg.isTrackSelected(i)) currentlySelectedIdx = i
-                            if (vg.isTrackSupported(i)) {
-                                val fmt = vg.getTrackFormat(i)
-                                val pixels = (fmt.width.coerceAtLeast(0)).toLong() * (fmt.height.coerceAtLeast(0)).toLong()
-                                val br = fmt.bitrate.coerceAtLeast(0).toLong()
-                                val fpsBonus = if (fmt.frameRate >= 48f) 5_000_000L else 0L
-                                val score = pixels * 10L + br + fpsBonus
-                                if (score > bestScore) { bestScore = score; bestTrackIdx = i }
-                            }
-                        }
-                        if (bestTrackIdx != -1 && bestTrackIdx != currentlySelectedIdx) {
-                            builder = builder.setOverrideForType(TrackSelectionOverride(vg.mediaTrackGroup, listOf(bestTrackIdx)))
-                            changed = true
-                        }
-                    }
-                }
                 if (changed) newPlayer.trackSelectionParameters = builder.build()
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -3224,7 +3183,7 @@ class MainActivity : AppCompatActivity() {
                 if (antiBlockEnabled && !CoreEngines.isSingleSessionTokenUrl(errUrl)) {
                     userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                 }
-                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 750L)
+                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 1200L)
             }
         })
 
@@ -3747,6 +3706,7 @@ class MainActivity : AppCompatActivity() {
         val target = pendingDebouncedChannel ?: return@Runnable
         try {
             player?.stop()
+            player?.clearMediaItems()
             applyHeadersToDataSourceForUrl(target.url)
             player?.setMediaItem(createLiveMediaItem(target.url), true)
             player?.prepare()
