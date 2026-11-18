@@ -46,7 +46,6 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -3192,11 +3191,11 @@ class MainActivity : AppCompatActivity() {
 
         val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(6) {
             override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
-                val ex = loadErrorInfo.exception
-                if (ex is HttpDataSource.InvalidResponseCodeException) {
-                    if (ex.responseCode == 404 || ex.responseCode == 403 || ex.responseCode == 410) {
-                        return C.TIME_UNSET
-                    }
+                val errMsg = loadErrorInfo.exception.message ?: ""
+                if (errMsg.contains("Response code: 404") ||
+                    errMsg.contains("Response code: 403") ||
+                    errMsg.contains("Response code: 410")) {
+                    return C.TIME_UNSET
                 }
                 return when (loadErrorInfo.errorCount) {
                     1 -> 300L
