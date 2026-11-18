@@ -265,6 +265,7 @@ class MainActivity : AppCompatActivity() {
     private var screenAspectMode = 0
 
     private var lowSignalStuckSeconds = 0
+    private var lastChannelSwitchMs: Long = 0L
     private var consecutiveDropFailures = 0
     private var lastRenderedFramePositionMs = -1L
 
@@ -1430,10 +1431,10 @@ class MainActivity : AppCompatActivity() {
         setSubModalHeaderTitle("Буфер удержания потока и Диагностика")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val opts = listOf(
-            "Стандартный буфер (16–30 сек)   •   Базовый уровень (32 МБ)",
-            "Усиленный буфер (28–45 сек)   •   Удержание без провалов (48 МБ)",
-            "Большой анти-фриз (42–64 сек)   •   Плавный поток (56 МБ)",
-            "Максимальное удержание (60–90 сек)   •   Защита от замираний (64 МБ)"
+            "Стандартный буфер (12–24 сек)   •   Быстрый отклик (32 МБ)",
+            "Усиленный буфер (20–36 сек)   •   Удержание без провалов (44 МБ)",
+            "Большой анти-фриз (30–48 сек)   •   Оптимально под окно CDN (56 МБ)",
+            "Максимальное удержание (40–64 сек)   •   Максимум окна сервера (64 МБ)"
         ).mapIndexed { i, t -> (if (i == bufferLevel) "[+]   " else "[-]   ") + t }.toMutableList()
         opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -20 сек")
         opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -45 сек")
@@ -2972,7 +2973,10 @@ class MainActivity : AppCompatActivity() {
         startDualStreamChannel(mainCh)
     }
 
-    internal fun effectiveCategory(ch: Channel): String = customCategoryMap[ch.url] ?: ch.category
+    internal fun effectiveCategory(ch: Channel): String {
+        if (dynamicCategories.isNotEmpty()) return ch.category
+        return customCategoryMap[ch.url] ?: ch.category
+    }
 
     internal var watchdogTickCounter = 0
     internal val timeFmtTicker = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -3001,20 +3005,21 @@ class MainActivity : AppCompatActivity() {
                     val prevPos = lastRenderedFramePositionMs
                     lastRenderedFramePositionMs = curPos
 
-                    // Детекция зависания даже если в буфере остался хвост аудио 0.1–0.5 сек (bufMs < 1500L)
-                    val isTrulyStalled = (state == Player.STATE_IDLE ||
+                    val sinceSwitchMs = System.currentTimeMillis() - lastChannelSwitchMs
+                    // Даём новому каналу 9 секунд на первичный старт без вмешательства Watchdog
+                    val isTrulyStalled = sinceSwitchMs >= 9000L && (state == Player.STATE_IDLE ||
                         (state == Player.STATE_BUFFERING && (curPos == prevPos || bufMs < 1500L)) ||
                         (state == Player.STATE_READY && p.isPlaying && curPos == prevPos && bufMs < 1500L))
 
                     if (isTrulyStalled) {
                         lowSignalStuckSeconds += 2
-                        if (lowSignalStuckSeconds == 4 || lowSignalStuckSeconds >= 12) {
+                        if (lowSignalStuckSeconds == 6 || lowSignalStuckSeconds >= 16) {
                             CoreEngines.appendDiagLog(
                                 "WATCHDOG_STALL",
                                 "ch='${currentChannel?.name}' state=$state bufMs=$bufMs curPos=$curPos prevPos=$prevPos stuckSec=$lowSignalStuckSeconds drops=$consecutiveDropFailures"
                             )
                         }
-                        if (lowSignalStuckSeconds >= 12) {
+                        if (lowSignalStuckSeconds >= 16) {
                             lowSignalStuckSeconds = 0
                             consecutiveDropFailures++
                             if (onDropBehavior == 1 && consecutiveDropFailures >= 3) {
@@ -3070,13 +3075,18 @@ class MainActivity : AppCompatActivity() {
         httpDataSourceFactory?.setDefaultRequestProperties(hdrs)
     }
 
+    private val pendingErrorReconnectRunnable = Runnable {
+        reconnectCurrentStreamSilently()
+    }
+
     internal fun reconnectCurrentStreamSilently() {
         val ch = currentChannel ?: return
         val p = player ?: return
         try {
+            uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
             val cleanUrl = ch.url.substringBefore("#")
-            val normTarget = CoreEngines.normalizeName(ch.name)
-            val useMirror = (consecutiveDropFailures >= 2 && silentFallbackAttemptedForUrl != ch.url)
+            val normTarget = CoreEngines.normalizeName(ch.name.replace(Regex("\\s+orig$", RegexOption.IGNORE_CASE), "").trim())
+            val useMirror = (consecutiveDropFailures >= 1 && silentFallbackAttemptedForUrl != ch.url)
             val targetUrl = if (useMirror) {
                 silentFallbackAttemptedForUrl = ch.url
                 val extMirrors = backupMirrorsMap[normTarget]?.filter { it != cleanUrl && !autoDisabledUrls.contains(it) }.orEmpty()
@@ -3091,6 +3101,7 @@ class MainActivity : AppCompatActivity() {
                 "RECONNECT",
                 "ch='${ch.name}' drops=$consecutiveDropFailures useMirror=$useMirror url='$targetUrl'"
             )
+            lastChannelSwitchMs = System.currentTimeMillis()
             p.stop()
             p.clearMediaItems()
             applyHeadersToDataSourceForUrl(targetUrl)
@@ -3102,16 +3113,8 @@ class MainActivity : AppCompatActivity() {
 
     internal fun createLiveMediaItem(url: String): MediaItem {
         val cleanUrl = url.substringBefore("#")
-        val liveConfig = MediaItem.LiveConfiguration.Builder()
-            .setTargetOffsetMs(18_000L)
-            .setMinOffsetMs(10_000L)
-            .setMaxOffsetMs(60_000L)
-            .setMinPlaybackSpeed(1.0f)
-            .setMaxPlaybackSpeed(1.0f)
-            .build()
         return MediaItem.Builder()
             .setUri(cleanUrl)
-            .setLiveConfiguration(liveConfig)
             .build()
     }
 
@@ -3143,16 +3146,16 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release(); loudnessEnhancer = null; lastAudioSessionId = C.AUDIO_SESSION_ID_UNSET } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
 
-        // Сдвинутая вверх сетка буферов с высоким удержанием потолка (minBuf близок к maxBuf) и двухступенчатым порогом
+        // Оптимизированная по логам сетка буферов под 40–80 сек окно CDN с быстрым выходом из паузы (1.5–2.2 сек)
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(16000, 30000, 1200, 3500)
-            1 -> listOf(28000, 45000, 1400, 4500)
-            2 -> listOf(42000, 64000, 1600, 5500)
-            else -> listOf(60000, 90000, 1800, 6500)
+            0 -> listOf(12000, 24000, 900, 1600)
+            1 -> listOf(20000, 36000, 1000, 1800)
+            2 -> listOf(30000, 48000, 1100, 2000)
+            else -> listOf(40000, 64000, 1200, 2200)
         }
         val targetBytes = when (bufferLevel) {
             0 -> 32 * 1024 * 1024
-            1 -> 48 * 1024 * 1024
+            1 -> 44 * 1024 * 1024
             2 -> 56 * 1024 * 1024
             else -> 64 * 1024 * 1024
         }
@@ -3165,8 +3168,7 @@ class MainActivity : AppCompatActivity() {
 
         val extensionMode = when (decoderMode) {
             0 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
-            2 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
-            else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+            else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
         }
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(extensionMode)
@@ -3183,13 +3185,30 @@ class MainActivity : AppCompatActivity() {
             .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(initUrl))
             .setAllowCrossProtocolRedirects(true)
             .setKeepPostFor302Redirects(true)
-            .setConnectTimeoutMs(8000)
-            .setReadTimeoutMs(8000)
+            .setConnectTimeoutMs(4500)
+            .setReadTimeoutMs(4500)
         httpDataSourceFactory = dsFactory
+
+        val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(6) {
+            override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                val ex = loadErrorInfo.exception
+                if (ex is HttpDataSource.InvalidResponseCodeException) {
+                    if (ex.responseCode == 404 || ex.responseCode == 403 || ex.responseCode == 410) {
+                        return C.TIME_UNSET
+                    }
+                }
+                return when (loadErrorInfo.errorCount) {
+                    1 -> 300L
+                    2 -> 500L
+                    3 -> 800L
+                    else -> 1200L
+                }
+            }
+        }
 
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dsFactory)
-            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(3))
+            .setLoadErrorHandlingPolicy(smartRetryPolicy)
 
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -3264,12 +3283,30 @@ class MainActivity : AppCompatActivity() {
                     }
                     return
                 }
+                if (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED) {
+                    val isAudioErr = error.message?.contains("Audio", ignoreCase = true) == true ||
+                        causeMsg.contains("audio", ignoreCase = true)
+                    if (isAudioErr && silentFallbackAttemptedForUrl == currentChannel?.url) {
+                        try {
+                            CoreEngines.appendDiagLog("AUDIO_FALLBACK", "Отключение несовместимой аудиодорожки MP2 для '${currentChannel?.name}'")
+                            newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
+                                .buildUpon()
+                                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                                .build()
+                            newPlayer.prepare()
+                            newPlayer.play()
+                            return
+                        } catch (_: Exception) {}
+                    }
+                }
                 consecutiveDropFailures++
                 val errUrl = currentChannel?.url ?: ""
                 if (antiBlockEnabled && !CoreEngines.isSingleSessionTokenUrl(errUrl)) {
                     userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                 }
-                uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 1200L)
+                uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
+                uiHandler.postDelayed(pendingErrorReconnectRunnable, 900L)
             }
         })
 
@@ -3593,6 +3630,10 @@ class MainActivity : AppCompatActivity() {
         val requestedStartupUrl = if (autoPlayLast) lastSavedChannelUrl else ""
 
         if (isBuiltin) {
+            for ((normKey, mirrorUrl) in BuiltinCatalog.origBackupPairs) {
+                val list = backupMirrorsMap.getOrPut(normKey) { CopyOnWriteArrayList() }
+                if (!list.contains(mirrorUrl)) list.add(mirrorUrl)
+            }
             val initialBuiltin = mutableListOf<Channel>()
             val initialKeys = HashSet<String>()
             val builtinNameCatKeys = HashSet<String>()
@@ -3786,8 +3827,17 @@ class MainActivity : AppCompatActivity() {
                 "Все каналы" -> activeAll
                 else -> activeAll.filter { effectiveCategory(it) == catName }
             }
-            val topPart = rawFiltered.filter { topUrls.contains(it.url) }.sortedWith(safeChannelComparator)
-            val regularPart = rawFiltered.filter { !topUrls.contains(it.url) }.sortedWith(safeChannelComparator)
+            val isCustomUserPlaylist = dynamicCategories.isNotEmpty()
+            val topPart = if (isCustomUserPlaylist) {
+                rawFiltered.filter { topUrls.contains(it.url) }
+            } else {
+                rawFiltered.filter { topUrls.contains(it.url) }.sortedWith(safeChannelComparator)
+            }
+            val regularPart = if (isCustomUserPlaylist) {
+                rawFiltered.filter { !topUrls.contains(it.url) }
+            } else {
+                rawFiltered.filter { !topUrls.contains(it.url) }.sortedWith(safeChannelComparator)
+            }
 
             displayedChannels.clear()
             displayedChannels.addAll(topPart)
@@ -3840,16 +3890,27 @@ class MainActivity : AppCompatActivity() {
     internal val executeDebouncedPlayRunnable = Runnable {
         val target = pendingDebouncedChannel ?: return@Runnable
         try {
+            uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
+            lastChannelSwitchMs = System.currentTimeMillis()
             CoreEngines.appendDiagLog(
                 "PLAY_CHANNEL",
                 "name='${target.name}' group='${effectiveCategory(target)}' bufLvl=$bufferLevel dec=$decoderMode url='${target.url.substringBefore("#")}'"
             )
-            player?.stop()
-            player?.clearMediaItems()
-            applyHeadersToDataSourceForUrl(target.url)
-            player?.setMediaItem(createLiveMediaItem(target.url), true)
-            player?.prepare()
-            player?.play()
+            val p = player
+            if (p != null) {
+                if (p.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_AUDIO)) {
+                    p.trackSelectionParameters = p.trackSelectionParameters
+                        .buildUpon()
+                        .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                        .build()
+                }
+                p.stop()
+                p.clearMediaItems()
+                applyHeadersToDataSourceForUrl(target.url)
+                p.setMediaItem(createLiveMediaItem(target.url), true)
+                p.prepare()
+                p.play()
+            }
         } catch (_: Exception) {}
         uiHandler.removeCallbacks(preloadNeighborsRunnable)
         if (!isAnalyzerRunning) uiHandler.postDelayed(preloadNeighborsRunnable, 8000L)
@@ -3874,6 +3935,8 @@ class MainActivity : AppCompatActivity() {
 
         refreshChannelAdapter()
 
+        uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
+        lastChannelSwitchMs = System.currentTimeMillis()
         uiHandler.removeCallbacks(executeDebouncedPlayRunnable)
         if (immediate) {
             executeDebouncedPlayRunnable.run()

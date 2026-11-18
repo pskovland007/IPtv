@@ -302,7 +302,8 @@ object CoreEngines {
             "(czech", "(hungary)", "(italy)", "(poland)", "(germany)", "(france)", "(spain)", "(romania)",
             "(bulgaria)", "(serbia)", "(croatia)", "(slovenia)", "(slovakia)", "(portugal)", "(netherlands)",
             "(sweden)", "(norway)", "(denmark)", "(finland)", "(greece)", "(turkey)", "(israel)", "(brazil)",
-            "(mexico)", "(argentina)", "(colombia)", "(chile)", "(peru)", "(uk)", "(usa)", "(canada)", "international"
+            "(mexico)", "(argentina)", "(colombia)", "(chile)", "(peru)", "(uk)", "(usa)", "(canada)", "international",
+            "(japan)", "japan", "brazil", "brasil", "latam", "uzbekistan", "deportes", "verguenza", "polska", "ukraine"
         )
         return bannedTokens.any { low.contains(it) }
     }
@@ -369,7 +370,10 @@ object CoreEngines {
     }
 
     fun mapCategory(rawGroup: String, name: String, rawLine: String = "", url: String = ""): String {
-        if (is2kOrHigherStream(rawLine, name, rawGroup, url)) return "2K"
+        if (rawGroup.equals("2K", ignoreCase = true) || rawGroup.equals("4K", ignoreCase = true) ||
+            (url.contains("rostelekom.xyz", ignoreCase = true) && is2kOrHigherStream(rawLine, name, rawGroup, url))) {
+            return "2K"
+        }
         val g = rawGroup.lowercase()
         val n = name.lowercase()
         val combined = "$g $n"
@@ -494,8 +498,17 @@ object CoreEngines {
                     currentGroup = extGrp
                 }
             } else if (l.startsWith("http://", ignoreCase = true) || l.startsWith("https://", ignoreCase = true) || l.startsWith("rtmp://", ignoreCase = true)) {
-                val isDeadHost = l.contains("sc.id-tv.kz", ignoreCase = true) || l.contains("ott-cdn.ucom.am", ignoreCase = true)
-                val isAdultGroup = currentGroup.equals("взрослые", ignoreCase = true) || currentGroup.contains("18+", ignoreCase = true) || currentGroup.contains("adult", ignoreCase = true)
+                val isDeadHost = l.contains("sc.id-tv.kz", ignoreCase = true) ||
+                    l.contains("ott-cdn.ucom.am", ignoreCase = true) ||
+                    l.contains("jmp2.uk", ignoreCase = true) ||
+                    l.contains("plutotv.net", ignoreCase = true) ||
+                    l.contains("stream.mcquack.net", ignoreCase = true) ||
+                    l.contains("iptv-24.net", ignoreCase = true) ||
+                    l.contains("tvstitch.com", ignoreCase = true) ||
+                    l.contains("freem3u.xyz", ignoreCase = true) ||
+                    l.contains("103.255.250.188", ignoreCase = true) ||
+                    l.contains("170.83.49.66", ignoreCase = true)
+                val isAdultGroup = !keepOriginalGroups && (currentGroup.equals("взрослые", ignoreCase = true) || currentGroup.contains("18+", ignoreCase = true) || currentGroup.contains("adult", ignoreCase = true))
                 if (currentName.isNotEmpty() && !isDeadHost && !isAdultGroup) {
                     var skip = false
                     if (filterBuiltinRules) {
@@ -508,6 +521,9 @@ object CoreEngines {
                                 if (!isStrictRu) skip = true
                             } else {
                                 when (mappedCat) {
+                                    "2K" -> {
+                                        if (!l.contains("rostelekom.xyz", ignoreCase = true)) skip = true
+                                    }
                                     "Детские", "Кино и сериалы", "Познавательные", "Развлечения", "Новости и общие", "Прочее" -> {
                                         if (!isStrictRu) skip = true
                                     }
@@ -519,13 +535,15 @@ object CoreEngines {
                         }
                     }
                     if (!skip) {
-                        val category = customCategoryMap[l] ?: if (keepOriginalGroups) {
-                            currentGroup.ifEmpty { mapCategory(currentGroup, currentName, currentRawInfLine, l) }
+                        val category = if (keepOriginalGroups) {
+                            currentGroup.ifEmpty { "Общие" }
                         } else {
-                            mapCategory(currentGroup, currentName, currentRawInfLine, l)
+                            customCategoryMap[l] ?: mapCategory(currentGroup, currentName, currentRawInfLine, l)
                         }
                         val streamIdKey = l.substringBefore("?").lowercase()
-                        val dedupKey = if (category == "Детские" || category == "Кино и сериалы" || category == "Музыка" || category == "Познавательные" || category == "Развлечения") {
+                        val dedupKey = if (keepOriginalGroups) {
+                            "${category}_${normalizeName(currentName)}_${l.hashCode()}"
+                        } else if (category == "2K" || category == "Детские" || category == "Кино и сериалы" || category == "Музыка" || category == "Познавательные" || category == "Развлечения") {
                             normalizeName(currentName) + "_" + category + "_" + streamIdKey.hashCode()
                         } else {
                             normalizeName(currentName) + "_" + category
