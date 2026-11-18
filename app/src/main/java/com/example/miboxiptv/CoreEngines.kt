@@ -1,7 +1,10 @@
 package com.example.miboxiptv
 
+import android.content.Context
+import android.os.Environment
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Date
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
@@ -23,6 +26,62 @@ import javax.net.ssl.X509TrustManager
 
 object CoreEngines {
     private val dohDnsCache = ConcurrentHashMap<String, String>()
+    private val diagLock = Any()
+    private val diagTimeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    @Volatile var diagAppContext: Context? = null
+
+    fun resolveDiagLogFile(ctx: Context? = diagAppContext): File {
+        try {
+            val dlDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            if (dlDir != null && (dlDir.exists() || dlDir.mkdirs()) && dlDir.canWrite()) {
+                return File(dlDir, "TiViLook_diag.txt")
+            }
+        } catch (_: Exception) {}
+        val extDir = ctx?.getExternalFilesDir(null)
+        if (extDir != null) return File(extDir, "TiViLook_diag.txt")
+        val intDir = ctx?.filesDir
+        if (intDir != null) return File(intDir, "TiViLook_diag.txt")
+        return File("/sdcard/Download/TiViLook_diag.txt")
+    }
+
+    fun appendDiagLog(tag: String, msg: String) {
+        try {
+            synchronized(diagLock) {
+                val f = resolveDiagLogFile()
+                if (f.exists() && f.length() > 1_500_000L) {
+                    val tail = f.readText().takeLast(450_000)
+                    f.writeText("--- [ЛОГ УСЕЧЁН ПО ЛИМИТУ 1.5 МБ] ---\n" + tail)
+                }
+                val ts = diagTimeFmt.format(Date())
+                FileWriter(f, true).use { fw ->
+                    fw.write("$ts [$tag] $msg\n")
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun clearDiagLog(): String {
+        return try {
+            synchronized(diagLock) {
+                val f = resolveDiagLogFile()
+                f.writeText("${diagTimeFmt.format(Date())} [INIT] Диагностический лог TiViLook очищен пользователем\n")
+                f.absolutePath
+            }
+        } catch (_: Exception) {
+            "/sdcard/Download/TiViLook_diag.txt"
+        }
+    }
+
+    fun getDiagLogStatusText(): String {
+        return try {
+            val f = resolveDiagLogFile()
+            val kb = if (f.exists()) (f.length() / 1024L).coerceAtLeast(1L) else 0L
+            "${f.name} (${kb} КБ)"
+        } catch (_: Exception) {
+            "TiViLook_diag.txt"
+        }
+    }
+
     private val REGEX_NON_ALNUM: Regex = Regex("[^a-zа-я0-9]")
     private val REGEX_GEO_TAG: Regex = Regex("\\[[^\\]]*(Geo|Not 24)[^\\]]*\\]", RegexOption.IGNORE_CASE)
     private val REGEX_MULTI_SPACE: Regex = Regex("\\s{2,}")

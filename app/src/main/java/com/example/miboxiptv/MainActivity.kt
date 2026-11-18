@@ -49,8 +49,12 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import java.io.IOException
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -224,6 +228,7 @@ class MainActivity : AppCompatActivity() {
     private val autoDisabledUrls = ConcurrentHashMap.newKeySet<String>()
     private val disabledCategories = ConcurrentHashMap.newKeySet<String>()
     private val customCategoryMap = ConcurrentHashMap<String, String>()
+    private val backupMirrorsMap = ConcurrentHashMap<String, CopyOnWriteArrayList<String>>()
     private val playlists = CopyOnWriteArrayList<PlaylistEntry>()
 
     private val channelHealthMap = ConcurrentHashMap<String, Boolean>()
@@ -443,12 +448,21 @@ class MainActivity : AppCompatActivity() {
             val curMenu = menuHistory.lastOrNull()
             val sideWidthPx = 680.coerceAtMost((dm.widthPixels * 0.46f).toInt())
             val leftMenuEdgePx = if (curMenu == "SIDE") {
-                sideWidthPx + leftSafeMarginPx() + 16
+                sideWidthPx + leftSafeMarginPx() + 12
             } else {
                 (dm.widthPixels * 0.50f).toInt()
             }
-            val availW = (dm.widthPixels - leftMenuEdgePx - 24).coerceAtLeast(360)
-            val targetScale = (availW.toFloat() / dm.widthPixels.toFloat()).coerceIn(0.38f, 0.52f)
+            val rightPadPx = 14
+            val availW = (dm.widthPixels - leftMenuEdgePx - rightPadPx).coerceAtLeast(360)
+            val availH = (dm.heightPixels - 32).coerceAtLeast(240)
+            val isWideScreenPhone = (controlMode == 1 || dm.widthPixels.toFloat() / dm.heightPixels.toFloat() > 1.85f)
+            val targetScale = if (isWideScreenPhone) {
+                val videoBaseW = minOf(dm.widthPixels.toFloat(), dm.heightPixels.toFloat() * 16f / 9f).coerceAtLeast(360f)
+                val videoBaseH = minOf(dm.heightPixels.toFloat(), dm.widthPixels.toFloat() * 9f / 16f).coerceAtLeast(240f)
+                minOf(availW.toFloat() / videoBaseW, availH.toFloat() / videoBaseH).coerceIn(0.45f, 0.94f)
+            } else {
+                (availW.toFloat() / dm.widthPixels.toFloat()).coerceIn(0.38f, 0.54f)
+            }
             val targetCenterX = leftMenuEdgePx + availW / 2f
             val shiftX = targetCenterX - dm.widthPixels / 2f
 
@@ -534,7 +548,7 @@ class MainActivity : AppCompatActivity() {
             2 -> Color.HSVToColor(floatArrayOf(ambilightHue, 0.72f, 0.90f))
             else -> capturedFrameColor
         }
-        return Color.argb(maxAlpha.coerceIn(18, 120), Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
+        return Color.argb(maxAlpha.coerceIn(24, 245), Color.red(baseColor), Color.green(baseColor), Color.blue(baseColor))
     }
 
     private fun makeThemedPanelBg(): LayerDrawable {
@@ -543,17 +557,17 @@ class MainActivity : AppCompatActivity() {
         val panelColorWithAlpha = Color.argb(a, Color.red(t.panelBgColor), Color.green(t.panelBgColor), Color.blue(t.panelBgColor))
         val outerGlow = GradientDrawable().apply {
             setColor(Color.TRANSPARENT)
-            cornerRadius = t.cornerRadiusDp + 6f
-            setStroke(6, ambilightColor(if (ambilightMode == 0) 25 else 55))
+            cornerRadius = t.cornerRadiusDp + 7f
+            setStroke(11, ambilightColor(if (ambilightMode == 0) 55 else 140))
         }
         val mainCard = GradientDrawable().apply {
             setColor(panelColorWithAlpha)
             cornerRadius = t.cornerRadiusDp
-            setStroke(2, ambilightColor(if (ambilightMode == 0) 65 else 110))
+            setStroke(4, ambilightColor(if (ambilightMode == 0) 130 else 235))
         }
         return LayerDrawable(arrayOf(outerGlow, mainCard)).apply {
             setLayerInset(0, 0, 0, 0, 0)
-            setLayerInset(1, 5, 5, 5, 5)
+            setLayerInset(1, 6, 6, 6, 6)
         }
     }
 
@@ -1028,6 +1042,7 @@ class MainActivity : AppCompatActivity() {
             "[>]   Машина времени   •   Отмотать эфир на -30 сек",
             sleepRow,
             "[>]   Телепрограмма EPG   •   Обновить расписание сейчас",
+            "[>]   Диагностический лог (${CoreEngines.getDiagLogStatusText()})   •   Очистить файл",
             "[>]   Обновление TiViLook   •   Проверить и установить с GitHub"
         )
         updateSubModalListItems(items, smoothToggle = inPlace, preservePositionIndex = keepIndex)
@@ -1051,7 +1066,12 @@ class MainActivity : AppCompatActivity() {
                 11 -> { rewindLiveBufferSeconds(30); closeAllMenus() }
                 12 -> navigateToMenu("POWER_AND_SLEEP_MENU")
                 13 -> { loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu() }
-                14 -> checkAndInstallAppUpdateFromGithub()
+                14 -> {
+                    val path = CoreEngines.clearDiagLog()
+                    Toast.makeText(this, "Лог очищен: $path", Toast.LENGTH_LONG).show()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = which)
+                }
+                15 -> checkAndInstallAppUpdateFromGithub()
             }
         }
         if (!inPlace) {
@@ -1407,23 +1427,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openBufferSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        setSubModalHeaderTitle("Буфер подкачки и Машина времени")
+        setSubModalHeaderTitle("Буфер удержания потока и Диагностика")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val opts = listOf(
-            "Маленький буфер (4–10 сек)   •   Мгновенный старт",
-            "Оптимальный буфер (6–14 сек)   •   Рекомендуется (без банов)",
-            "Средний буфер (9–18 сек)   •   Плавный поток",
-            "Большой буфер (12–24 сек)   •   Защита от помех Wi-Fi"
+            "Стандартный буфер (16–30 сек)   •   Базовый уровень (32 МБ)",
+            "Усиленный буфер (28–45 сек)   •   Удержание без провалов (48 МБ)",
+            "Большой анти-фриз (42–64 сек)   •   Плавный поток (56 МБ)",
+            "Максимальное удержание (60–90 сек)   •   Защита от замираний (64 МБ)"
         ).mapIndexed { i, t -> (if (i == bufferLevel) "[+]   " else "[-]   ") + t }.toMutableList()
         opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -20 сек")
         opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -45 сек")
+        opts.add("[>]   Лог ошибок (${CoreEngines.getDiagLogStatusText()})   •   Очистить файл в Download")
         val targetIdx = if (keepIndex >= 0) keepIndex else bufferLevel
         updateSubModalListItems(opts, smoothToggle = inPlace, preservePositionIndex = targetIdx)
         subModalList.setOnItemClickListener { _, _, which, _ ->
             when (which) {
-                in 0..3 -> { bufferLevel = which; saveState(); initPlayer(); openBufferSubModal(inPlace = true, keepIndex = which) }
+                in 0..3 -> {
+                    bufferLevel = which
+                    CoreEngines.appendDiagLog("BUFFER_MODE", "Установлен уровень буфера: $which")
+                    saveState(); initPlayer(); openBufferSubModal(inPlace = true, keepIndex = which)
+                }
                 4 -> { rewindLiveBufferSeconds(20); closeAllMenus() }
                 5 -> { rewindLiveBufferSeconds(45); closeAllMenus() }
+                6 -> {
+                    val path = CoreEngines.clearDiagLog()
+                    Toast.makeText(this, "Лог очищен: $path", Toast.LENGTH_LONG).show()
+                    openBufferSubModal(inPlace = true, keepIndex = which)
+                }
             }
         }
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
@@ -1645,7 +1675,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        CoreEngines.diagAppContext = applicationContext
         CoreEngines.installTrustAllSsl()
+        CoreEngines.appendDiagLog("APP_START", "Запуск TiViLook v2.7 (SDK=${Build.VERSION.SDK_INT}, Device=${Build.MODEL})")
         requestStoragePermissionsIfNeeded()
         loadSavedState()
         currentAnimatedAlphaInt = targetPanelAlphaInt()
@@ -2071,18 +2103,22 @@ class MainActivity : AppCompatActivity() {
 
         subModalOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
-            setPadding(26, 18, 26, 18)
-            layoutParams = FrameLayout.LayoutParams(940, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+            setPadding(26, 20, 26, 20)
+            layoutParams = FrameLayout.LayoutParams(960, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER).apply {
+                setMargins(28, 20, 28, 20)
+            }
         }
         subModalTitle = TextView(this).apply {
-            setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 18.5f)
-            typeface = themeBoldFont(); setPadding(4, 0, 4, 10)
+            setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 19.5f)
+            typeface = themeBoldFont(); gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(4, 2, 4, 14)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
         subModalOverlay.addView(subModalTitle)
 
         subModalTopButtons = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            visibility = View.GONE; setPadding(0, 0, 0, 10)
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+            visibility = View.GONE; setPadding(0, 0, 0, 12)
         }
         subModalOverlay.addView(subModalTopButtons)
 
@@ -2090,12 +2126,15 @@ class MainActivity : AppCompatActivity() {
         subModalOverlay.addView(subModalInputContainer)
 
         subModalList = ListView(this).apply {
-            choiceMode = ListView.CHOICE_MODE_NONE; divider = null; dividerHeight = 0; overScrollMode = View.OVER_SCROLL_NEVER
+            choiceMode = ListView.CHOICE_MODE_NONE
+            divider = ColorDrawable(Color.TRANSPARENT)
+            dividerHeight = (7 * uiScaleFactor()).toInt().coerceAtLeast(6)
+            overScrollMode = View.OVER_SCROLL_NEVER
             isVerticalScrollBarEnabled = true
             isScrollbarFadingEnabled = false
             isSmoothScrollbarEnabled = false
-            selector = ColorDrawable(Color.TRANSPARENT); setBackgroundDrawable(makeThemedSubBg()); setPadding(8, 8, 12, 8)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 432)
+            selector = ColorDrawable(Color.TRANSPARENT); setBackgroundDrawable(makeThemedSubBg()); setPadding(12, 10, 14, 10)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
         subModalAdapter = createRoundedSelectorAdapter(subModalItems, 15.5f, true, fixedRowHeight = true) { pos -> subModalHighlightedPos == pos }
         subModalList.adapter = subModalAdapter
@@ -2266,13 +2305,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun updateSubModalTitleWithCounter() {
-        val total = subModalItems.size
-        if (total > 1 && subModalList.visibility == View.VISIBLE) {
-            val cur = (subModalHighlightedPos + 1).coerceIn(1, total)
-            subModalTitle.text = colorizeStatusText("$subModalBaseTitleText   •   [$cur / $total]")
-        } else {
-            subModalTitle.text = colorizeStatusText(subModalBaseTitleText)
-        }
+        subModalTitle.text = colorizeStatusText(subModalBaseTitleText)
     }
 
     internal var carouselScrollAnimator: ValueAnimator? = null
@@ -2443,14 +2476,16 @@ class MainActivity : AppCompatActivity() {
 
     internal fun fitSubModalListToWholeRows(itemCount: Int) {
         val dm = resources.displayMetrics
-        val rowH = exactModalRowHeightPx()
-        val maxAvailH = (dm.heightPixels * 0.62f).toInt()
-        val maxWholeRows = (maxAvailH / rowH).coerceIn(5, 10)
-        val visibleRows = itemCount.coerceAtLeast(1).coerceAtMost(maxWholeRows)
-        val exactListH = visibleRows * rowH + 16
+        val divH = (7 * uiScaleFactor()).toInt().coerceAtLeast(6)
+        subModalList.dividerHeight = divH
+        val rowH = exactModalRowHeightPx() + divH
+        val availListH = (dm.heightPixels - 140).coerceAtLeast(320)
+        val fitsWithoutScroll = (itemCount * rowH + 20) <= availListH
+        subModalList.isVerticalScrollBarEnabled = !fitsWithoutScroll
         subModalList.layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            exactListH
+            0,
+            1f
         )
     }
 
@@ -2613,9 +2648,13 @@ class MainActivity : AppCompatActivity() {
 
     internal fun fitSideListsExactRows() {
         val rowH = exactModalRowHeightPx().coerceAtLeast(42)
-        val maxH = (resources.displayMetrics.heightPixels - 68).coerceAtLeast(300)
-        val exactRows = (maxH / rowH).coerceAtLeast(5)
-        val exactH = exactRows * rowH + 16
+        val divH = 4
+        val stepH = rowH + divH
+        val maxH = (resources.displayMetrics.heightPixels - 64).coerceAtLeast(300)
+        val exactRows = (maxH / stepH).coerceAtLeast(5)
+        val exactH = exactRows * rowH + (exactRows - 1).coerceAtLeast(0) * divH + 20
+        categoryListView.isVerticalScrollBarEnabled = (activeCategoryList().size > exactRows)
+        channelListView.isVerticalScrollBarEnabled = (displayedChannels.size > exactRows)
         categoryListView.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, exactH, Gravity.CENTER_VERTICAL)
         channelListView.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, exactH, Gravity.CENTER_VERTICAL)
     }
@@ -2794,11 +2833,14 @@ class MainActivity : AppCompatActivity() {
         subModalTopButtons.removeAllViews()
 
         val dm = resources.displayMetrics
+        val isCompactInput = (menuId == "EPG" || menuId == "ADD_URL")
         subModalOverlay.layoutParams = FrameLayout.LayoutParams(
-            (dm.widthPixels * 0.76f).toInt().coerceIn(800, 1360),
-            FrameLayout.LayoutParams.WRAP_CONTENT,
+            (dm.widthPixels * 0.78f).toInt().coerceIn(820, 1380),
+            if (isCompactInput) FrameLayout.LayoutParams.WRAP_CONTENT else FrameLayout.LayoutParams.MATCH_PARENT,
             Gravity.CENTER
-        )
+        ).apply {
+            setMargins(28, 20, 28, 20)
+        }
 
         when (menuId) {
             "SIDE" -> {
@@ -2966,7 +3008,13 @@ class MainActivity : AppCompatActivity() {
 
                     if (isTrulyStalled) {
                         lowSignalStuckSeconds += 2
-                        if (lowSignalStuckSeconds >= 10) {
+                        if (lowSignalStuckSeconds == 4 || lowSignalStuckSeconds >= 12) {
+                            CoreEngines.appendDiagLog(
+                                "WATCHDOG_STALL",
+                                "ch='${currentChannel?.name}' state=$state bufMs=$bufMs curPos=$curPos prevPos=$prevPos stuckSec=$lowSignalStuckSeconds drops=$consecutiveDropFailures"
+                            )
+                        }
+                        if (lowSignalStuckSeconds >= 12) {
                             lowSignalStuckSeconds = 0
                             consecutiveDropFailures++
                             if (onDropBehavior == 1 && consecutiveDropFailures >= 3) {
@@ -3027,17 +3075,22 @@ class MainActivity : AppCompatActivity() {
         val p = player ?: return
         try {
             val cleanUrl = ch.url.substringBefore("#")
-            val useMirror = (consecutiveDropFailures >= 3 && silentFallbackAttemptedForUrl != ch.url && !CoreEngines.isSingleSessionTokenUrl(cleanUrl))
+            val normTarget = CoreEngines.normalizeName(ch.name)
+            val useMirror = (consecutiveDropFailures >= 2 && silentFallbackAttemptedForUrl != ch.url)
             val targetUrl = if (useMirror) {
                 silentFallbackAttemptedForUrl = ch.url
-                val normTarget = CoreEngines.normalizeName(ch.name)
-                val mirror = allChannels.firstOrNull {
+                val extMirrors = backupMirrorsMap[normTarget]?.filter { it != cleanUrl && !autoDisabledUrls.contains(it) }.orEmpty()
+                val catalogMirror = allChannels.firstOrNull {
                     it.url != ch.url && !autoDisabledUrls.contains(it.url) && CoreEngines.normalizeName(it.name) == normTarget
-                }
-                mirror?.url?.substringBefore("#") ?: cleanUrl
+                }?.url?.substringBefore("#")
+                extMirrors.firstOrNull() ?: catalogMirror ?: cleanUrl
             } else {
                 cleanUrl
             }
+            CoreEngines.appendDiagLog(
+                "RECONNECT",
+                "ch='${ch.name}' drops=$consecutiveDropFailures useMirror=$useMirror url='$targetUrl'"
+            )
             p.stop()
             p.clearMediaItems()
             applyHeadersToDataSourceForUrl(targetUrl)
@@ -3049,8 +3102,16 @@ class MainActivity : AppCompatActivity() {
 
     internal fun createLiveMediaItem(url: String): MediaItem {
         val cleanUrl = url.substringBefore("#")
+        val liveConfig = MediaItem.LiveConfiguration.Builder()
+            .setTargetOffsetMs(18_000L)
+            .setMinOffsetMs(10_000L)
+            .setMaxOffsetMs(60_000L)
+            .setMinPlaybackSpeed(1.0f)
+            .setMaxPlaybackSpeed(1.0f)
+            .build()
         return MediaItem.Builder()
             .setUri(cleanUrl)
+            .setLiveConfiguration(liveConfig)
             .build()
     }
 
@@ -3082,18 +3143,24 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release(); loudnessEnhancer = null; lastAudioSessionId = C.AUDIO_SESSION_ID_UNSET } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
 
-        // Оптимальный буфер без бана 1-сессионного ключа (как в Televizo / TiviMate)
+        // Сдвинутая вверх сетка буферов с высоким удержанием потолка (minBuf близок к maxBuf) и двухступенчатым порогом
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(4500, 10000, 500, 1000)
-            1 -> listOf(6500, 14000, 600, 1200)
-            2 -> listOf(9000, 18000, 700, 1400)
-            else -> listOf(12000, 24000, 800, 1600)
+            0 -> listOf(16000, 30000, 1200, 3500)
+            1 -> listOf(28000, 45000, 1400, 4500)
+            2 -> listOf(42000, 64000, 1600, 5500)
+            else -> listOf(60000, 90000, 1800, 6500)
+        }
+        val targetBytes = when (bufferLevel) {
+            0 -> 32 * 1024 * 1024
+            1 -> 48 * 1024 * 1024
+            2 -> 56 * 1024 * 1024
+            else -> 64 * 1024 * 1024
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
-            .setTargetBufferBytes(24 * 1024 * 1024)
+            .setTargetBufferBytes(targetBytes)
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setBackBuffer(15000, false)
+            .setBackBuffer(20000, false)
             .build()
 
         val extensionMode = when (decoderMode) {
@@ -3165,9 +3232,28 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 updateSignalIndicator()
+                val stName = when (playbackState) {
+                    Player.STATE_IDLE -> "IDLE"
+                    Player.STATE_BUFFERING -> "BUFFERING"
+                    Player.STATE_READY -> "READY"
+                    Player.STATE_ENDED -> "ENDED"
+                    else -> "UNKNOWN($playbackState)"
+                }
+                val bufMs = newPlayer.totalBufferedDuration
+                if (playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_ENDED || playbackState == Player.STATE_IDLE) {
+                    CoreEngines.appendDiagLog(
+                        "STATE_$stName",
+                        "ch='${currentChannel?.name}' bufMs=$bufMs pos=${newPlayer.currentPosition} drops=$consecutiveDropFailures"
+                    )
+                }
                 if (playbackState == Player.STATE_ENDED) reconnectCurrentStreamSilently()
             }
             override fun onPlayerError(error: PlaybackException) {
+                val causeMsg = error.cause?.let { "${it.javaClass.simpleName}: ${it.message}" } ?: "none"
+                CoreEngines.appendDiagLog(
+                    "PLAYER_ERROR",
+                    "ch='${currentChannel?.name}' code=${error.errorCodeName}(${error.errorCode}) msg='${error.message}' cause='$causeMsg' bufMs=${newPlayer.totalBufferedDuration}"
+                )
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     try {
                         newPlayer.seekToDefaultPosition()
@@ -3184,6 +3270,49 @@ class MainActivity : AppCompatActivity() {
                     userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                 }
                 uiHandler.postDelayed({ reconnectCurrentStreamSilently() }, 1200L)
+            }
+        })
+
+        newPlayer.addAnalyticsListener(object : AnalyticsListener {
+            override fun onLoadError(
+                eventTime: AnalyticsListener.EventTime,
+                loadEventInfo: LoadEventInfo,
+                mediaLoadData: MediaLoadData,
+                error: IOException,
+                wasCanceled: Boolean
+            ) {
+                if (!wasCanceled) {
+                    CoreEngines.appendDiagLog(
+                        "HTTP_LOAD_ERR",
+                        "ch='${currentChannel?.name}' dataType=${mediaLoadData.dataType} trackType=${mediaLoadData.trackType} durMs=${loadEventInfo.loadDurationMs} uri='${loadEventInfo.uri}' err='${error.javaClass.simpleName}: ${error.message}'"
+                    )
+                }
+            }
+            override fun onDroppedVideoFrames(
+                eventTime: AnalyticsListener.EventTime,
+                droppedFrames: Int,
+                elapsedMs: Long
+            ) {
+                if (droppedFrames >= 6) {
+                    CoreEngines.appendDiagLog(
+                        "DROPPED_FRAMES",
+                        "ch='${currentChannel?.name}' dropped=$droppedFrames in ${elapsedMs}ms bufMs=${newPlayer.totalBufferedDuration}"
+                    )
+                }
+            }
+            override fun onDownstreamFormatChanged(
+                eventTime: AnalyticsListener.EventTime,
+                mediaLoadData: MediaLoadData
+            ) {
+                if (mediaLoadData.trackType == C.TRACK_TYPE_VIDEO) {
+                    val fmt = mediaLoadData.trackFormat
+                    if (fmt != null) {
+                        CoreEngines.appendDiagLog(
+                            "VIDEO_FORMAT",
+                            "ch='${currentChannel?.name}' ${fmt.width}x${fmt.height} fps=${fmt.frameRate} mime=${fmt.sampleMimeType} br=${fmt.bitrate}"
+                        )
+                    }
+                }
             }
         })
 
@@ -3537,7 +3666,13 @@ class MainActivity : AppCompatActivity() {
 
                 val combined = ArrayList<Channel>(initialBuiltin)
                 for (ch in mergedMap.values) {
-                    val nameCatKey = CoreEngines.normalizeName(ch.name) + "_" + ch.category
+                    val normName = CoreEngines.normalizeName(ch.name)
+                    val cleanMirrorUrl = ch.url.substringBefore("#")
+                    if (normName.isNotEmpty() && cleanMirrorUrl.isNotEmpty()) {
+                        val mirrors = backupMirrorsMap.getOrPut(normName) { CopyOnWriteArrayList() }
+                        if (!mirrors.contains(cleanMirrorUrl)) mirrors.add(cleanMirrorUrl)
+                    }
+                    val nameCatKey = normName + "_" + ch.category
                     if (builtinNameCatKeys.contains(nameCatKey)) continue
                     val key = nameCatKey + "_" + ch.url.substringBefore("?").hashCode()
                     if (initialKeys.add(key)) combined.add(ch)
@@ -3705,6 +3840,10 @@ class MainActivity : AppCompatActivity() {
     internal val executeDebouncedPlayRunnable = Runnable {
         val target = pendingDebouncedChannel ?: return@Runnable
         try {
+            CoreEngines.appendDiagLog(
+                "PLAY_CHANNEL",
+                "name='${target.name}' group='${effectiveCategory(target)}' bufLvl=$bufferLevel dec=$decoderMode url='${target.url.substringBefore("#")}'"
+            )
             player?.stop()
             player?.clearMediaItems()
             applyHeadersToDataSourceForUrl(target.url)
@@ -3815,7 +3954,7 @@ class MainActivity : AppCompatActivity() {
             .putString("playlists_json", arr.toString())
             .putString("custom_cats_json", customCatJson.toString())
             .putInt("active_playlist", activePlaylistIndex)
-            .putInt("buffer_level_v33", bufferLevel)
+            .putInt("buffer_level_v34", bufferLevel)
             .putInt("decoder_mode", decoderMode)
             .putInt("theme_index", themeIndex.coerceIn(0, themes.lastIndex))
             .putInt("ui_scale_step_v27", uiScaleStep)
@@ -3849,7 +3988,7 @@ class MainActivity : AppCompatActivity() {
 
     internal fun loadSavedState() {
         val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
-        bufferLevel = prefs.getInt("buffer_level_v33", 1)
+        bufferLevel = prefs.getInt("buffer_level_v34", 2)
         decoderMode = prefs.getInt("decoder_mode", 1)
         themeIndex = prefs.getInt("theme_index", 0).coerceIn(0, themes.lastIndex)
         controlMode = prefs.getInt("control_mode_v13", 0)

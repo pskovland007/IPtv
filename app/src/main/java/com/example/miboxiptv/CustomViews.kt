@@ -35,7 +35,7 @@ class GraphicOrbSpan(private val orbType: Int) : ReplacementSpan() {
     private val path = Path()
 
     override fun getSize(paint: Paint, text: CharSequence?, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
-        return if (orbType >= 10) 80 else 48
+        return if (start == 0 || orbType >= 10) 76 else 44
     }
 
     override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, textPaint: Paint) {
@@ -58,7 +58,7 @@ class GraphicOrbSpan(private val orbType: Int) : ReplacementSpan() {
             return
         }
 
-        val cx = x + 21f
+        val cx = if (start == 0) (x + 37f) else (x + 20f)
         val r = 14.5f
         val (lightHex, mainHex, darkHex) = when (orbType) {
             1 -> Triple("#80FFC8", "#00E676", "#007E3A")
