@@ -184,10 +184,7 @@ object CoreEngines {
         val lUrl = clean.lowercase()
         if (isSingleSessionTokenUrl(lUrl)) {
             return mapOf(
-                "Accept" to "*/*",
-                "Connection" to "close",
-                "Cache-Control" to "no-cache, no-store",
-                "Pragma" to "no-cache"
+                "Accept" to "*/*"
             )
         }
         val parsedOrigin = try {

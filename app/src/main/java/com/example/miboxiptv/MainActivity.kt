@@ -46,6 +46,16 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -91,7 +101,38 @@ class MainActivity : AppCompatActivity() {
     private var dualPipPlayer: ExoPlayer? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var lastAudioSessionId: Int = C.AUDIO_SESSION_ID_UNSET
-    private var httpDataSourceFactory: DefaultHttpDataSource.Factory? = null
+    private var httpDataSourceFactory: OkHttpDataSource.Factory? = null
+    private var wasStoppedInBackground: Boolean = false
+    private val streamOkHttpClient: OkHttpClient by lazy { buildStreamOkHttpClient() }
+
+    private fun buildStreamOkHttpClient(): OkHttpClient {
+        val dispatcher = Dispatcher().apply {
+            maxRequests = 8
+            maxRequestsPerHost = 1
+        }
+        val builder = OkHttpClient.Builder()
+            .dispatcher(dispatcher)
+            .connectionPool(ConnectionPool(2, 30, TimeUnit.SECONDS))
+            .protocols(listOf(Protocol.HTTP_1_1))
+            .connectTimeout(6000, TimeUnit.MILLISECONDS)
+            .readTimeout(5500, TimeUnit.MILLISECONDS)
+            .writeTimeout(6000, TimeUnit.MILLISECONDS)
+            .retryOnConnectionFailure(true)
+            .followRedirects(true)
+            .followSslRedirects(true)
+        try {
+            val trustAllCerts = object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            }
+            val sc = SSLContext.getInstance("TLS")
+            sc.init(null, arrayOf<TrustManager>(trustAllCerts), SecureRandom())
+            builder.sslSocketFactory(sc.socketFactory, trustAllCerts)
+            builder.hostnameVerifier { _, _ -> true }
+        } catch (_: Exception) {}
+        return builder.build()
+    }
 
     private lateinit var rootFrame: FrameLayout
     private lateinit var playerContainerFrame: FrameLayout
@@ -3223,16 +3264,12 @@ class MainActivity : AppCompatActivity() {
         } else {
             CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
         }
-        val dsFactory = DefaultHttpDataSource.Factory()
+        val dsFactory = OkHttpDataSource.Factory(streamOkHttpClient)
             .setUserAgent(activeAgent)
             .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(initUrl))
-            .setAllowCrossProtocolRedirects(true)
-            .setKeepPostFor302Redirects(true)
-            .setConnectTimeoutMs(8000)
-            .setReadTimeoutMs(9000)
         httpDataSourceFactory = dsFactory
 
-        val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(2) {
+        val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(1) {
             override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
                 val errMsg = loadErrorInfo.exception.message ?: ""
                 if (errMsg.contains("Response code: 404") ||
@@ -3240,10 +3277,7 @@ class MainActivity : AppCompatActivity() {
                     errMsg.contains("Response code: 410")) {
                     return C.TIME_UNSET
                 }
-                return when (loadErrorInfo.errorCount) {
-                    1 -> 600L
-                    else -> 1200L
-                }
+                return 500L
             }
         }
 
@@ -4244,16 +4278,41 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         enableTrueFullScreenImmersion()
         startClockAndWatchdogUpdater()
-        if (player == null) initPlayer() else player?.play()
+        if (player == null) {
+            initPlayer()
+        } else if (wasStoppedInBackground) {
+            wasStoppedInBackground = false
+            val ch = currentChannel
+            if (ch != null) {
+                playChannelObj(ch, immediate = true, silentSwap = true, updateSavedUrl = false)
+            }
+            if (isDualStreamActive) {
+                dualStreamChannel?.let { startDualStreamChannel(it) }
+            }
+        } else {
+            player?.play()
+        }
         if (allChannels.isEmpty()) loadActivePlaylist(autoPlayLast = true)
     }
 
     override fun onStop() {
         super.onStop()
+        wasStoppedInBackground = true
         saveLastChannelOnly(syncCommit = true)
         stopClockAndWatchdogUpdater()
-        player?.pause()
-        dualPipPlayer?.pause()
+        uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
+        uiHandler.removeCallbacks(preloadNeighborsRunnable)
+        try {
+            player?.stop()
+            player?.clearMediaItems()
+        } catch (_: Exception) {}
+        try {
+            dualPipPlayer?.stop()
+            dualPipPlayer?.clearMediaItems()
+        } catch (_: Exception) {}
+        try {
+            streamOkHttpClient.connectionPool.evictAll()
+        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {
