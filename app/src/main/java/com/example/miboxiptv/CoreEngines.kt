@@ -1,7 +1,10 @@
 package com.example.miboxiptv
 
+import android.content.ContentValues
 import android.content.Context
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Date
@@ -79,6 +82,65 @@ object CoreEngines {
             "${f.name} (${kb} КБ)"
         } catch (_: Exception) {
             "TiViLook_diag.txt"
+        }
+    }
+
+    fun readDiagLogTail(maxLines: Int = 45): List<String> {
+        return try {
+            synchronized(diagLock) {
+                val f = resolveDiagLogFile()
+                if (!f.exists()) {
+                    listOf("[-]   Лог-файл пока пуст (${f.absolutePath})")
+                } else {
+                    val allLines = f.readLines().filter { it.isNotBlank() }
+                    val header = "[+]   Путь: ${f.absolutePath} (${(f.length() / 1024L).coerceAtLeast(1L)} КБ)"
+                    listOf(header) + allLines.takeLast(maxLines).reversed()
+                }
+            }
+        } catch (e: Exception) {
+            listOf("[-]   Ошибка чтения лога: ${e.message}")
+        }
+    }
+
+    fun exportDiagLogToPublicDownloads(ctx: Context): String {
+        return try {
+            val src = resolveDiagLogFile(ctx)
+            val content = synchronized(diagLock) {
+                if (src.exists()) src.readText() else "${diagTimeFmt.format(Date())} [INIT] Лог пуст
+"
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val resolver = ctx.contentResolver
+                val fileName = "TiViLook_diag_TV.txt"
+                try {
+                    resolver.delete(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        "${MediaStore.Downloads.DISPLAY_NAME}=?",
+                        arrayOf(fileName)
+                    )
+                } catch (_: Exception) {}
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                    put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri != null) {
+                    resolver.openOutputStream(uri)?.use { os ->
+                        os.write(content.toByteArray(Charsets.UTF_8))
+                    }
+                    return "Download/$fileName"
+                }
+            }
+            val dlDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            if (dlDir != null && (dlDir.exists() || dlDir.mkdirs()) && dlDir.canWrite()) {
+                val dst = File(dlDir, "TiViLook_diag_TV.txt")
+                dst.writeText(content)
+                return dst.absolutePath
+            }
+            src.absolutePath
+        } catch (e: Exception) {
+            "Ошибка экспорта: ${e.message}"
         }
     }
 
@@ -344,15 +406,23 @@ object CoreEngines {
 
     fun isAllowedMusicChannel(name: String, url: String, rawGroup: String): Boolean {
         if (isArabicOrIndianChannel(name, rawGroup, url)) return false
+        val lName = " ${name.lowercase()} "
+        val lUrl = url.lowercase()
+        val musicNoiseBan = listOf(
+            "nigeria", "australia", "napoli", "hiru", "kayhan", "fusion tv", "impact tv",
+            "kn music", "lamore", "yayin.com.tr", "cdni.live", "intv.mk", "nasatv.com.mk",
+            "hiruhost", "cloudflarestream", "infomaniak", "streamlock.net"
+        )
+        if (musicNoiseBan.any { lName.contains(it) || lUrl.contains(it) }) return false
         if (isStrictlyRussianChannel(name, url, rawGroup)) return true
-        val lName = name.lowercase()
         val topEuroMusicWhitelist = listOf(
-            "mtv", "vh1", "mezzo", "deluxe music", "mcm", "trace", "clubbing", "stingray",
-            "iconcerts", "now 70", "now 80", "now 90", "now rock", "kerrang", "kiss", "box hits",
-            "the box", "4music", "4 music", "4fun", "4 fun", "stars.tv", "stars tv", "eska",
-            "polo tv", "nuta", "power tv", "vox music", "rfm tv", "nrj", "m6 music", "cstar",
-            "melody", "vevo", "qello", "classic fm", "classic music", "dance", "eurodance", "retro",
-            "one music", "hit tv", "hits hd", "music box", "djing", "rock", "metal", "jazz", "chill", "lounge", "v2beat"
+            " mtv", " vh1", "mezzo", "deluxe music", " mcm ", "trace urban", "clubbing tv",
+            "stingray", "iconcerts", "now 70", "now 80", "now 90", "now rock", "kerrang",
+            "kiss tv", "box hits", "the box", "4music", "4 music", "4fun", "4 fun",
+            "stars.tv", "stars tv", "eska", "polo tv", "vox music", "rfm tv", "nrj hits",
+            "m6 music", "cstar", "vevo", "qello", "classic music", "eurodance",
+            "music box russia", "music box gold", "music box classic", "music box dance",
+            "music box hits", "v2beat"
         )
         return topEuroMusicWhitelist.any { lName.contains(it) }
     }

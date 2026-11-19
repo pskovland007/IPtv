@@ -1043,7 +1043,7 @@ class MainActivity : AppCompatActivity() {
             "[>]   Машина времени   •   Отмотать эфир на -30 сек",
             sleepRow,
             "[>]   Телепрограмма EPG   •   Обновить расписание сейчас",
-            "[>]   Диагностический лог (${CoreEngines.getDiagLogStatusText()})   •   Очистить файл",
+            "[>]   Диагностический лог (${CoreEngines.getDiagLogStatusText()})   •   Просмотр и экспорт",
             "[>]   Обновление TiViLook   •   Проверить и установить с GitHub"
         )
         updateSubModalListItems(items, smoothToggle = inPlace, preservePositionIndex = keepIndex)
@@ -1067,11 +1067,7 @@ class MainActivity : AppCompatActivity() {
                 11 -> { rewindLiveBufferSeconds(30); closeAllMenus() }
                 12 -> navigateToMenu("POWER_AND_SLEEP_MENU")
                 13 -> { loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu() }
-                14 -> {
-                    val path = CoreEngines.clearDiagLog()
-                    Toast.makeText(this, "Лог очищен: $path", Toast.LENGTH_LONG).show()
-                    openMoreSettingsSubModal(inPlace = true, keepIndex = which)
-                }
+                14 -> navigateToMenu("DIAG_LOG_VIEW")
                 15 -> checkAndInstallAppUpdateFromGithub()
             }
         }
@@ -1427,18 +1423,48 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun openDiagLogViewerModal(firstOpen: Boolean = false) {
+        setSubModalHeaderTitle("Диагностический лог (${CoreEngines.getDiagLogStatusText()})")
+        subModalInputContainer.visibility = View.GONE
+        subModalList.visibility = View.VISIBLE
+        subModalTopButtons.visibility = View.VISIBLE
+        subModalTopButtons.removeAllViews()
+        subModalTopButtons.addView(makeModernButton("↻ Обновить") {
+            openDiagLogViewerModal(firstOpen = false)
+        })
+        subModalTopButtons.addView(makeModernButton("📥 В Download") {
+            val savedPath = CoreEngines.exportDiagLogToPublicDownloads(this)
+            Toast.makeText(this, "Сохранено: $savedPath", Toast.LENGTH_LONG).show()
+            openDiagLogViewerModal(firstOpen = false)
+        })
+        subModalTopButtons.addView(makeModernButton("🗑 Очистить") {
+            val path = CoreEngines.clearDiagLog()
+            Toast.makeText(this, "Лог очищен: $path", Toast.LENGTH_SHORT).show()
+            openDiagLogViewerModal(firstOpen = false)
+        })
+        val lines = CoreEngines.readDiagLogTail(45)
+        updateSubModalListItems(lines, smoothToggle = !firstOpen, preservePositionIndex = 0)
+        subModalList.setOnItemClickListener { _, _, _, _ ->
+            openDiagLogViewerModal(firstOpen = false)
+        }
+        if (firstOpen) {
+            animateMenuAppear(subModalOverlay)
+            subModalList.requestFocus()
+        }
+    }
+
     private fun openBufferSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
         setSubModalHeaderTitle("Буфер удержания потока и Диагностика")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val opts = listOf(
-            "Стандартный буфер (12–24 сек)   •   Быстрый отклик (32 МБ)",
-            "Усиленный буфер (20–36 сек)   •   Удержание без провалов (44 МБ)",
-            "Большой анти-фриз (30–48 сек)   •   Оптимально под окно CDN (56 МБ)",
-            "Максимальное удержание (40–64 сек)   •   Максимум окна сервера (64 МБ)"
+            "Стандартный буфер (10–20 сек)   •   Быстрый отклик (24 МБ)",
+            "Оптимальный буфер (15–28 сек)   •   Рекомендуется для ТВ (32 МБ)",
+            "Усиленный анти-фриз (22–38 сек)   •   Запас под окно CDN (44 МБ)",
+            "Максимальное удержание (30–50 сек)   •   Защита от помех Wi-Fi (56 МБ)"
         ).mapIndexed { i, t -> (if (i == bufferLevel) "[+]   " else "[-]   ") + t }.toMutableList()
         opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -20 сек")
         opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -45 сек")
-        opts.add("[>]   Лог ошибок (${CoreEngines.getDiagLogStatusText()})   •   Очистить файл в Download")
+        opts.add("[>]   Лог ошибок (${CoreEngines.getDiagLogStatusText()})   •   Просмотр на экране и Download")
         val targetIdx = if (keepIndex >= 0) keepIndex else bufferLevel
         updateSubModalListItems(opts, smoothToggle = inPlace, preservePositionIndex = targetIdx)
         subModalList.setOnItemClickListener { _, _, which, _ ->
@@ -1450,11 +1476,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 4 -> { rewindLiveBufferSeconds(20); closeAllMenus() }
                 5 -> { rewindLiveBufferSeconds(45); closeAllMenus() }
-                6 -> {
-                    val path = CoreEngines.clearDiagLog()
-                    Toast.makeText(this, "Лог очищен: $path", Toast.LENGTH_LONG).show()
-                    openBufferSubModal(inPlace = true, keepIndex = which)
-                }
+                6 -> navigateToMenu("DIAG_LOG_VIEW")
             }
         }
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
@@ -2761,8 +2783,16 @@ class MainActivity : AppCompatActivity() {
 
     internal fun requestStoragePermissionsIfNeeded() {
         if (Build.VERSION.SDK_INT in Build.VERSION_CODES.M..Build.VERSION_CODES.S_V2) {
+            val needed = mutableListOf<String>()
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 2002)
+                needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                needed.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+            if (needed.isNotEmpty()) {
+                ActivityCompat.requestPermissions(this, needed.toTypedArray(), 2002)
             }
         }
     }
@@ -2897,6 +2927,7 @@ class MainActivity : AppCompatActivity() {
             "BUFFER" -> openBufferSubModal(inPlace = false)
             "DECODER" -> openDecoderSubModal(inPlace = false)
             "AUDIO" -> openAudioSubModal(inPlace = false)
+            "DIAG_LOG_VIEW" -> openDiagLogViewerModal(firstOpen = true)
             "EPG" -> openInputSubModal("Ссылка на телепрограмму XMLTV", epgUrl) { newVal ->
                 if (newVal.isNotEmpty()) { epgUrl = newVal; saveState(); loadEpgOncePerDayInBackground(forceRefresh = true) }
             }
@@ -3075,23 +3106,28 @@ class MainActivity : AppCompatActivity() {
         httpDataSourceFactory?.setDefaultRequestProperties(hdrs)
     }
 
+    private var pendingForceMirror: Boolean = false
     private val pendingErrorReconnectRunnable = Runnable {
-        reconnectCurrentStreamSilently()
+        val useMirrorNow = pendingForceMirror
+        pendingForceMirror = false
+        reconnectCurrentStreamSilently(forceMirror = useMirrorNow)
     }
 
-    internal fun reconnectCurrentStreamSilently() {
+    internal fun reconnectCurrentStreamSilently(forceMirror: Boolean = false) {
         val ch = currentChannel ?: return
         val p = player ?: return
         try {
             uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
             val cleanUrl = ch.url.substringBefore("#")
             val normTarget = CoreEngines.normalizeName(ch.name.replace(Regex("\\s+orig$", RegexOption.IGNORE_CASE), "").trim())
-            val useMirror = (consecutiveDropFailures >= 1 && silentFallbackAttemptedForUrl != ch.url)
+            val useMirror = (forceMirror || consecutiveDropFailures >= 3) && silentFallbackAttemptedForUrl != ch.url
             val targetUrl = if (useMirror) {
                 silentFallbackAttemptedForUrl = ch.url
                 val extMirrors = backupMirrorsMap[normTarget]?.filter { it != cleanUrl && !autoDisabledUrls.contains(it) }.orEmpty()
                 val catalogMirror = allChannels.firstOrNull {
-                    it.url != ch.url && !autoDisabledUrls.contains(it.url) && CoreEngines.normalizeName(it.name) == normTarget
+                    it.url != ch.url && !autoDisabledUrls.contains(it.url) &&
+                        !it.name.endsWith("orig", ignoreCase = true) &&
+                        CoreEngines.normalizeName(it.name) == normTarget
                 }?.url?.substringBefore("#")
                 extMirrors.firstOrNull() ?: catalogMirror ?: cleanUrl
             } else {
@@ -3099,9 +3135,15 @@ class MainActivity : AppCompatActivity() {
             }
             CoreEngines.appendDiagLog(
                 "RECONNECT",
-                "ch='${ch.name}' drops=$consecutiveDropFailures useMirror=$useMirror url='$targetUrl'"
+                "ch='${ch.name}' drops=$consecutiveDropFailures forceMirror=$forceMirror useMirror=$useMirror url='$targetUrl'"
             )
             lastChannelSwitchMs = System.currentTimeMillis()
+            if (p.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_AUDIO)) {
+                p.trackSelectionParameters = p.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                    .build()
+            }
             p.stop()
             p.clearMediaItems()
             applyHeadersToDataSourceForUrl(targetUrl)
@@ -3146,29 +3188,30 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release(); loudnessEnhancer = null; lastAudioSessionId = C.AUDIO_SESSION_ID_UNSET } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
 
-        // Оптимизированная по логам сетка буферов под 40–80 сек окно CDN с быстрым выходом из паузы (1.5–2.2 сек)
+        // Оптимизированная сетка буферов под реальное 20–30 сек окно CDN + быстрый подхват на ТВ
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(12000, 24000, 900, 1600)
-            1 -> listOf(20000, 36000, 1000, 1800)
-            2 -> listOf(30000, 48000, 1100, 2000)
-            else -> listOf(40000, 64000, 1200, 2200)
+            0 -> listOf(10000, 20000, 900, 1500)
+            1 -> listOf(15000, 28000, 1000, 1800)
+            2 -> listOf(22000, 38000, 1100, 2000)
+            else -> listOf(30000, 50000, 1200, 2200)
         }
         val targetBytes = when (bufferLevel) {
-            0 -> 32 * 1024 * 1024
-            1 -> 44 * 1024 * 1024
-            2 -> 56 * 1024 * 1024
-            else -> 64 * 1024 * 1024
+            0 -> 24 * 1024 * 1024
+            1 -> 32 * 1024 * 1024
+            2 -> 44 * 1024 * 1024
+            else -> 56 * 1024 * 1024
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
             .setTargetBufferBytes(targetBytes)
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setBackBuffer(20000, false)
+            .setBackBuffer(15000, false)
             .build()
 
         val extensionMode = when (decoderMode) {
             0 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
-            else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+            2 -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+            else -> DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
         }
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(extensionMode)
@@ -3185,11 +3228,11 @@ class MainActivity : AppCompatActivity() {
             .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(initUrl))
             .setAllowCrossProtocolRedirects(true)
             .setKeepPostFor302Redirects(true)
-            .setConnectTimeoutMs(4500)
-            .setReadTimeoutMs(4500)
+            .setConnectTimeoutMs(8000)
+            .setReadTimeoutMs(9000)
         httpDataSourceFactory = dsFactory
 
-        val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(6) {
+        val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(2) {
             override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
                 val errMsg = loadErrorInfo.exception.message ?: ""
                 if (errMsg.contains("Response code: 404") ||
@@ -3198,9 +3241,7 @@ class MainActivity : AppCompatActivity() {
                     return C.TIME_UNSET
                 }
                 return when (loadErrorInfo.errorCount) {
-                    1 -> 300L
-                    2 -> 500L
-                    3 -> 800L
+                    1 -> 600L
                     else -> 1200L
                 }
             }
@@ -3283,30 +3324,21 @@ class MainActivity : AppCompatActivity() {
                     }
                     return
                 }
-                if (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
-                    error.errorCode == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED) {
-                    val isAudioErr = error.message?.contains("Audio", ignoreCase = true) == true ||
-                        causeMsg.contains("audio", ignoreCase = true)
-                    if (isAudioErr && silentFallbackAttemptedForUrl == currentChannel?.url) {
-                        try {
-                            CoreEngines.appendDiagLog("AUDIO_FALLBACK", "Отключение несовместимой аудиодорожки MP2 для '${currentChannel?.name}'")
-                            newPlayer.trackSelectionParameters = newPlayer.trackSelectionParameters
-                                .buildUpon()
-                                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
-                                .build()
-                            newPlayer.prepare()
-                            newPlayer.play()
-                            return
-                        } catch (_: Exception) {}
-                    }
-                }
+                val isDecoderOr404 = (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)
                 consecutiveDropFailures++
                 val errUrl = currentChannel?.url ?: ""
                 if (antiBlockEnabled && !CoreEngines.isSingleSessionTokenUrl(errUrl)) {
                     userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                 }
+                if (isDecoderOr404 && silentFallbackAttemptedForUrl == currentChannel?.url) {
+                    CoreEngines.appendDiagLog("DECODER_STOP", "Поток '${currentChannel?.name}' требует FFmpeg-кодек MP2/AC3 (нет AAC-зеркала)")
+                    return
+                }
+                pendingForceMirror = isDecoderOr404
                 uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
-                uiHandler.postDelayed(pendingErrorReconnectRunnable, 900L)
+                uiHandler.postDelayed(pendingErrorReconnectRunnable, if (isDecoderOr404) 250L else 900L)
             }
         })
 
