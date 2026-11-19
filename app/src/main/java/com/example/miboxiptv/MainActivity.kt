@@ -454,7 +454,8 @@ class MainActivity : AppCompatActivity() {
         "https://cdn.jsdelivr.net/gh/Free-TV/IPTV@master/playlists/playlist_russia.m3u8",
         "https://iptv-org.github.io/iptv/countries/ru.m3u",
         "https://iptv-org.github.io/iptv/countries/by.m3u",
-        "https://iptv-org.github.io/iptv/categories/music.m3u"
+        "https://iptv-org.github.io/iptv/categories/music.m3u",
+        "https://iptv-org.github.io/iptv/categories/sports.m3u"
     )
 
     private val epgUrls = listOf(

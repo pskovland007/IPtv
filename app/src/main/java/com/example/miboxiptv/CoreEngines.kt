@@ -408,12 +408,9 @@ object CoreEngines {
             "bangla", "pakistan", "geo news", "ary digital", "hum tv", "samaa", "kurd", "farsi", "persian",
             "latino", "viva latino", "3abn", "telemundo", "univision", "azteca", "caracol", "kral ",
             "trt ", "haberturk", "powerturk", "dream turk", "afrobeat", "nollywood", "iran", "afghan",
-            "[magenta]", " in ", " ae ", " qa ", " br ", " pl ", " de ", " fr ", " es ", " it ", " nl ", " se ", " dk ", " no ", " fi ", " ro ", " hr ", " cz ", " sk ", " lt ", " lv ", " ee ",
-            "(czech", "(hungary)", "(italy)", "(poland)", "(germany)", "(france)", "(spain)", "(romania)",
-            "(bulgaria)", "(serbia)", "(croatia)", "(slovenia)", "(slovakia)", "(portugal)", "(netherlands)",
-            "(sweden)", "(norway)", "(denmark)", "(finland)", "(greece)", "(turkey)", "(israel)", "(brazil)",
-            "(mexico)", "(argentina)", "(colombia)", "(chile)", "(peru)", "(uk)", "(usa)", "(canada)", "international",
-            "(japan)", "japan", "brazil", "brasil", "latam", "uzbekistan", "deportes", "verguenza", "polska", "ukraine",
+            "[magenta]", " in ", " ae ", " qa ", " br ", "(brazil)", "(mexico)", "(argentina)",
+            "(colombia)", "(chile)", "(peru)", "(usa)", "(canada)", "(japan)", "japan", "brazil",
+            "brasil", "latam", "uzbekistan", "deportes", "verguenza", "polska", "ukraine",
             "spanish", "afarin", "balapan", "aghani", "azahares", "nigeria", "australia", "babyfirst"
         )
         return bannedTokens.any { low.contains(it) }
@@ -459,15 +456,30 @@ object CoreEngines {
         if (musicNoiseBan.any { lName.contains(it) || lUrl.contains(it) }) return false
         if (isStrictlyRussianChannel(name, url, rawGroup)) return true
         val topEuroMusicWhitelist = listOf(
-            " mtv", " vh1", "mezzo", "deluxe music", " mcm ", "trace urban", "clubbing tv",
+            " mtv", " vh1", "mezzo", "deluxe", " mcm", "trace", "clubbing",
             "stingray", "iconcerts", "now 70", "now 80", "now 90", "now rock", "kerrang",
-            "kiss tv", "box hits", "the box", "4music", "4 music", "4fun", "4 fun",
-            "stars.tv", "stars tv", "eska", "polo tv", "vox music", "rfm tv", "nrj hits",
+            "kiss", "box hits", "the box", "4music", "4 music", "4fun", "4 fun",
+            "stars.tv", "stars tv", "eska", "polo tv", "vox music", "rfm", "nrj",
             "m6 music", "cstar", "vevo", "qello", "classic music", "eurodance",
-            "music box russia", "music box gold", "music box classic", "music box dance",
-            "music box hits", "v2beat"
+            "music box", "v2beat", "dance", "rock", "hits", "party", "retro"
         )
-        return topEuroMusicWhitelist.any { lName.contains(it) }
+        return topEuroMusicWhitelist.any { lName.contains(it) || lUrl.contains(it) }
+    }
+
+    fun isAllowedSportsChannel(name: String, url: String, rawGroup: String): Boolean {
+        if (isArabicOrIndianChannel(name, rawGroup, url)) return false
+        val lName = " ${name.lowercase()} "
+        val lUrl = url.lowercase()
+        val sportsNoiseBan = listOf("nigeria", "australia", "hiru", "kayhan", "streamlock.net")
+        if (sportsNoiseBan.any { lName.contains(it) || lUrl.contains(it) }) return false
+        if (isStrictlyRussianChannel(name, url, rawGroup)) return true
+        val euroSportsWhitelist = listOf(
+            "sport", "football", "soccer", "fifa", "uefa", "laliga", "bundesliga",
+            "serie a", "ligue 1", "premier", "champions", "eurosport", "bein",
+            "motor", "racing", "rally", "fight", "boxing", "mma", "ufc", "red bull",
+            "real madrid", "barca", "gol", "arena", "match", "khl", "belarus 5"
+        )
+        return euroSportsWhitelist.any { lName.contains(it) || lUrl.contains(it) }
     }
 
     fun is2kOrHigherStream(rawLine: String, name: String, rawGroup: String, url: String): Boolean {
@@ -645,11 +657,17 @@ object CoreEngines {
                                     "2K" -> {
                                         // Разрешаем открытые 2K/4K/UHD потоки из бесплатных источников
                                     }
-                                    "Детские", "Кино и сериалы", "Познавательные", "Развлечения", "Новости и общие", "Прочее" -> {
+                                    "Детские", "Кино и сериалы" -> {
                                         if (!isStrictRu) skip = true
+                                    }
+                                    "Спорт" -> {
+                                        if (!isAllowedSportsChannel(currentName, l, currentGroup)) skip = true
                                     }
                                     "Музыка" -> {
                                         if (!isAllowedMusicChannel(currentName, l, currentGroup)) skip = true
+                                    }
+                                    "Познавательные", "Развлечения", "Новости и общие", "Прочее" -> {
+                                        if (!isStrictRu) skip = true
                                     }
                                 }
                             }
