@@ -145,9 +145,18 @@ object CoreEngines {
 
     private val REGEX_NON_ALNUM: Regex = Regex("[^a-zа-я0-9]")
     private val REGEX_GEO_TAG: Regex = Regex("\\[[^\\]]*(Geo|Not 24)[^\\]]*\\]", RegexOption.IGNORE_CASE)
+    private val REGEX_MOSCOW_TAG: Regex = Regex(
+        "\\s*[(\\[]\\s*(?:москва|мск|msk|moscow|московская\\s+обл(?:асть)?|\\+?0|мск\\s*\\+?0|msk\\s*\\+?0)\\s*[)\\]]",
+        RegexOption.IGNORE_CASE
+    )
     private val REGEX_MULTI_SPACE: Regex = Regex("\\s{2,}")
-    private val REGEX_PLUS_TZ1: Regex = Regex("\\+[1-9]\\b")
-    private val REGEX_PLUS_TZ2: Regex = Regex("\\(\\+[1-9]\\)")
+    private val REGEX_TZ_OFFSET: Regex = Regex(
+        "(?:[(\\[]\\s*[+-]\\s*[1-9]\\d?\\s*[)\\]]|(?:^|[\\s(\\[])(?:мск|msk)\\s*[+-]\\s*[1-9]\\d?\\b|\\s[+-][1-9]\\d?(?=\\s|$|[)\\]]))",
+        RegexOption.IGNORE_CASE
+    )
+    private val REGEX_BRACKET_BLOCK: Regex = Regex("[(\\[]([^)\\]]+)[)\\]]")
+    private val REGEX_CYRILLIC: Regex = Regex("[а-яё]", RegexOption.IGNORE_CASE)
+    private val REGEX_DUBL: Regex = Regex("\\bдубль\\s*\\d*\\b", RegexOption.IGNORE_CASE)
     private val REGEX_RESOLUTION: Regex = Regex("(\\d{3,4})x(\\d{3,4})")
     private val REGEX_GROUP_TITLE: Regex = Regex("group-title=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
     private val REGEX_TVG_ID: Regex = Regex("tvg-id=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
@@ -328,16 +337,47 @@ object CoreEngines {
     fun cleanChannelDisplayName(rawName: String): String {
         val cleaned = rawName
             .replace(REGEX_GEO_TAG, " ")
+            .replace(REGEX_MOSCOW_TAG, " ")
             .replace(REGEX_MULTI_SPACE, " ")
             .trim()
         return cleaned.ifEmpty { rawName.trim() }
     }
 
+    private val safeBracketExact = setOf(
+        "ани", "рф", "ссср", "рус", "тв", "хд", "hd", "мир", "россия", "прямой", "резерв"
+    )
+    private val safeBracketSub = listOf(
+        "прямой cdn", "резерв", "основн", "ориг", "интернет", "онлайн", "лайв",
+        "версия", "эфир", "кино", "фильм", "мульт", "детск", "спорт", "музык",
+        "новост", "сериал", "комеди", "драма", "боевик", "фантаст", "истори",
+        "природ", "наук", "документ", "юмор", "развлеч", "европ", "международ", "канал"
+    )
+    private val regionalAdminTokens = listOf(
+        " обл", "обл.", "област", " кр", "край", "респ", " ао", "хмао", "янао", "гтрк",
+        "сибирь", "урал", "дальний восток", "примор", "поволж", "кавказ", "крым"
+    )
+
     fun isRegionalTimeShiftDuplicate(name: String): Boolean {
-        val low = name.lowercase()
-        if (REGEX_PLUS_TZ1.containsMatchIn(low) || REGEX_PLUS_TZ2.containsMatchIn(low)) return true
-        val regionalMarkers = listOf("(омск", "(томск", "(владивосток", "(уфа", "(алтай", "(канск", "(абакан", "(иркутск", "(братск", "(пермь", "(элиста", "(белгород", "(липецк", "(тамбов", "(нефтекамск", "(белорецк", "(невинномысск")
-        return regionalMarkers.any { low.contains(it) }
+        val low = name.lowercase().trim()
+        if (REGEX_TZ_OFFSET.containsMatchIn(low)) return true
+        if (REGEX_DUBL.containsMatchIn(low)) return true
+        if (low.contains("гтрк")) return true
+        for (m in REGEX_BRACKET_BLOCK.findAll(low)) {
+            val inner = m.groupValues[1].trim()
+            if (inner.isEmpty()) continue
+            val padded = " $inner "
+            if (regionalAdminTokens.any { padded.contains(it) }) return true
+            if (REGEX_CYRILLIC.containsMatchIn(inner)) {
+                if (safeBracketExact.contains(inner)) continue
+                if (safeBracketSub.any { inner.contains(it) }) continue
+                return true
+            }
+        }
+        if (low.contains(" - ") || low.contains(" — ")) {
+            val tail = " " + low.substringAfterLast(" - ").substringAfterLast(" — ").trim() + " "
+            if (regionalAdminTokens.any { tail.contains(it) }) return true
+        }
+        return false
     }
 
     fun parseXmltvDate(raw: String): Long {
