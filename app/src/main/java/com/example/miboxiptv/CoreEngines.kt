@@ -106,8 +106,7 @@ object CoreEngines {
         return try {
             val src = resolveDiagLogFile(ctx)
             val content = synchronized(diagLock) {
-                if (src.exists()) src.readText() else "${diagTimeFmt.format(Date())} [INIT] Лог пуст
-"
+                if (src.exists()) src.readText() else "${diagTimeFmt.format(Date())} [INIT] Лог пуст\n"
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val resolver = ctx.contentResolver
