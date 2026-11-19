@@ -153,10 +153,10 @@ object CoreEngines {
     private val REGEX_TVG_ID: Regex = Regex("tvg-id=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
 
     val russianSmartTvAgents = listOf(
-        "VLC/3.0.20 LibVLC/3.0.20",
         "Televizo/1.9.7.14 (Linux; Android 11; Xiaomi Mi Box S)",
         "OTT Navigator/1.6.9.4 (Linux; Android 11; AndroidTV)",
         "Wink/1.44.0 (AndroidTV; Android 11; Xiaomi Mi Box S)",
+        "VLC/3.0.20 LibVLC/3.0.20",
         "Lavf/60.16.100"
     )
 
@@ -176,7 +176,7 @@ object CoreEngines {
 
     fun isSingleSessionTokenUrl(urlStr: String): Boolean {
         val l = urlStr.lowercase()
-        return l.contains("rostelekom.xyz") || l.contains("/iptv/")
+        return l.contains("/iptv/") || l.contains("token=")
     }
 
     fun headersForStreamUrl(urlStr: String): Map<String, String> {
@@ -361,7 +361,8 @@ object CoreEngines {
             "(bulgaria)", "(serbia)", "(croatia)", "(slovenia)", "(slovakia)", "(portugal)", "(netherlands)",
             "(sweden)", "(norway)", "(denmark)", "(finland)", "(greece)", "(turkey)", "(israel)", "(brazil)",
             "(mexico)", "(argentina)", "(colombia)", "(chile)", "(peru)", "(uk)", "(usa)", "(canada)", "international",
-            "(japan)", "japan", "brazil", "brasil", "latam", "uzbekistan", "deportes", "verguenza", "polska", "ukraine"
+            "(japan)", "japan", "brazil", "brasil", "latam", "uzbekistan", "deportes", "verguenza", "polska", "ukraine",
+            "spanish", "afarin", "balapan", "aghani", "azahares", "nigeria", "australia", "babyfirst"
         )
         return bannedTokens.any { low.contains(it) }
     }
@@ -372,30 +373,22 @@ object CoreEngines {
         val lName = name.lowercase().trim()
         val lUrl = url.lowercase()
         if (lUrl.contains(".ru/") || lUrl.contains(".su/") || lUrl.contains(".by/") ||
-            lUrl.contains("vgtrk") || lUrl.contains("1tv") || lUrl.contains("ntv") || lUrl.contains("smotrim") ||
+            lUrl.contains("vgtrk") || lUrl.contains("1tv.") || lUrl.contains("1internet.tv") ||
+            lUrl.contains("ntv.ru") || lUrl.contains("smotrim") ||
             lUrl.contains("tricolor") || lUrl.contains("wink") || lUrl.contains("peers") || lUrl.contains("catcast") ||
             lUrl.contains("cdnvideo") || lUrl.contains("ngenix") || lUrl.contains("mediavitrina") ||
             lUrl.contains("uma.media") || lUrl.contains("1hd.ru") || lUrl.contains("gcdn.co") ||
             lUrl.contains("bonus-tv") || lUrl.contains("rutube") || lUrl.contains("ok.ru")) {
             return true
         }
-        val ruPrefixes = listOf(
-            "vf ", "uz ", "mm ", "bcu ", "yosso ", "cineman ", "kli ", "z!", "prokop ",
-            "veles ", "dosug ", "kinoshka ", "fresh ", "liberty ", "magic ", "eye ", "cobra "
-        )
-        if (ruPrefixes.any { lName.startsWith(it) }) return true
-
         val ruLatinWhitelist = listOf(
-            "viju", "tv1000", "amedia", "karusel", "mult", "tiji", "gulli", "nickelodeon", "nick jr", "nicktoons",
-            "cartoon network", "cartoonito", "boomerang", "jimjam", "jim jam", "da vinci", "sts kids", "ani", "fan hd",
+            "karusel", "mult", "sts kids", "anitv", "ani tv",
             "bridge", "muz tv", "muz-tv", "ru.tv", "rutv", "ru tv", "1hd", "europa plus", "zhara", "shanson",
-            "tnt", "sts", "ren tv", "ntv", "match", "khl", "kino", "illuzion", "soyuzmult", "smeshariki",
+            "tnt", "ren tv", "ntv ", "match", "khl", "kino", "illuzion", "soyuzmult", "smeshariki",
             "masha", "fixiki", "luntik", "tri kota", "multilandia", "tlum", "unicum", "radost", "deti", "detskiy",
             "mosfilm", "lenfilm", "kinomiks", "kinoprem", "kinohit", "kinosemya", "kinokomediya", "kinoseriya",
             "kinosvidanie", "kinouzhas", "dom kino", "evrokino", "russkiy", "rodnoe", "nashe", "lyubimoe", "feniks",
-            "cinema", "hollywood", ".red", ".sci-fi", ".black", "tv xxi", "shot tv", "retro", "ussr", "vhs",
-            "discovery", "national geographic", "nat geo", "animal planet", "history", "h2", "ocean tv", "rtg",
-            "outdoor", "travel+adventure", "2x2", "comedy central", "eurosport", "setanta", "mma-tv"
+            "tv xxi", "shot tv", "ussr", "ocean tv", "rtg", "2x2", "belarus"
         )
         return ruLatinWhitelist.any { lName.contains(it) }
     }
@@ -437,7 +430,7 @@ object CoreEngines {
 
     fun mapCategory(rawGroup: String, name: String, rawLine: String = "", url: String = ""): String {
         if (rawGroup.equals("2K", ignoreCase = true) || rawGroup.equals("4K", ignoreCase = true) ||
-            (url.contains("rostelekom.xyz", ignoreCase = true) && is2kOrHigherStream(rawLine, name, rawGroup, url))) {
+            is2kOrHigherStream(rawLine, name, rawGroup, url)) {
             return "2K"
         }
         val g = rawGroup.lowercase()
@@ -573,7 +566,15 @@ object CoreEngines {
                     l.contains("tvstitch.com", ignoreCase = true) ||
                     l.contains("freem3u.xyz", ignoreCase = true) ||
                     l.contains("103.255.250.188", ignoreCase = true) ||
-                    l.contains("170.83.49.66", ignoreCase = true)
+                    l.contains("170.83.49.66", ignoreCase = true) ||
+                    l.contains("streamlock.net", ignoreCase = true) ||
+                    l.contains("alsolnet.com", ignoreCase = true) ||
+                    l.contains("bozztv.com", ignoreCase = true) ||
+                    l.contains("streamlane.tv", ignoreCase = true) ||
+                    l.contains("qazcdn.com", ignoreCase = true) ||
+                    l.contains("31.148.48.15", ignoreCase = true) ||
+                    l.contains("5.188.159.128", ignoreCase = true) ||
+                    (filterBuiltinRules && l.contains("/iptv/", ignoreCase = true))
                 val isAdultGroup = !keepOriginalGroups && (currentGroup.equals("взрослые", ignoreCase = true) || currentGroup.contains("18+", ignoreCase = true) || currentGroup.contains("adult", ignoreCase = true))
                 if (currentName.isNotEmpty() && !isDeadHost && !isAdultGroup) {
                     var skip = false
@@ -588,7 +589,7 @@ object CoreEngines {
                             } else {
                                 when (mappedCat) {
                                     "2K" -> {
-                                        if (!l.contains("rostelekom.xyz", ignoreCase = true)) skip = true
+                                        // Разрешаем открытые 2K/4K/UHD потоки из бесплатных источников
                                     }
                                     "Детские", "Кино и сериалы", "Познавательные", "Развлечения", "Новости и общие", "Прочее" -> {
                                         if (!isStrictRu) skip = true

@@ -107,16 +107,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildStreamOkHttpClient(): OkHttpClient {
         val dispatcher = Dispatcher().apply {
-            maxRequests = 8
-            maxRequestsPerHost = 1
+            maxRequests = 16
+            maxRequestsPerHost = 4
         }
         val builder = OkHttpClient.Builder()
             .dispatcher(dispatcher)
-            .connectionPool(ConnectionPool(2, 30, TimeUnit.SECONDS))
+            .connectionPool(ConnectionPool(4, 30, TimeUnit.SECONDS))
             .protocols(listOf(Protocol.HTTP_1_1))
-            .connectTimeout(6000, TimeUnit.MILLISECONDS)
-            .readTimeout(5500, TimeUnit.MILLISECONDS)
-            .writeTimeout(6000, TimeUnit.MILLISECONDS)
+            .connectTimeout(7000, TimeUnit.MILLISECONDS)
+            .readTimeout(7000, TimeUnit.MILLISECONDS)
+            .writeTimeout(7000, TimeUnit.MILLISECONDS)
             .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
@@ -433,19 +433,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val openRusSources = listOf(
+        "https://ngrch.github.io/iptv/ru.m3u",
+        "https://ngrch.github.io/iptv/cartoons.m3u",
+        "https://ngrch.github.io/iptv/music.m3u",
         "https://cdn.jsdelivr.net/gh/Free-TV/IPTV@master/playlists/playlist_russia.m3u8",
         "https://cdn.jsdelivr.net/gh/smolnp/iptvru@gh-pages/playlist.m3u8",
         "https://cdn.jsdelivr.net/gh/ipstreet312/freeiptv@master/all.m3u",
         "https://cdn.jsdelivr.net/gh/Dimonovich/IPTV@master/IPTV.m3u",
         "https://iptv-org.github.io/iptv/languages/rus.m3u",
         "https://iptv-org.github.io/iptv/countries/ru.m3u",
-        "https://iptv-org.github.io/iptv/categories/kids.m3u",
-        "https://iptv-org.github.io/iptv/categories/animation.m3u",
-        "https://iptv-org.github.io/iptv/categories/music.m3u",
-        "https://iptv-org.github.io/iptv/categories/movies.m3u",
-        "https://iptv-org.github.io/iptv/categories/science.m3u",
-        "https://iptv-org.github.io/iptv/categories/documentary.m3u",
-        "https://iptv-org.github.io/iptv/categories/entertainment.m3u"
+        "https://iptv-org.github.io/iptv/countries/by.m3u",
+        "https://iptv-org.github.io/iptv/categories/music.m3u"
     )
 
     private val epgUrls = listOf(
@@ -3258,7 +3256,7 @@ class MainActivity : AppCompatActivity() {
             .setExtensionRendererMode(extensionMode)
             .setEnableDecoderFallback(true)
 
-        val initUrl = currentUrl ?: "http://tsmxkuov.rostelekom.xyz"
+        val initUrl = currentUrl ?: "https://vgtrkregion-reg.cdnvideo.ru"
         val activeAgent = if (CoreEngines.isSingleSessionTokenUrl(initUrl)) {
             CoreEngines.russianSmartTvAgents[0]
         } else {
@@ -3271,6 +3269,7 @@ class MainActivity : AppCompatActivity() {
 
         val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(1) {
             override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                if (loadErrorInfo.errorCount > 1) return C.TIME_UNSET
                 val errMsg = loadErrorInfo.exception.message ?: ""
                 if (errMsg.contains("Response code: 404") ||
                     errMsg.contains("Response code: 403") ||
@@ -3693,7 +3692,8 @@ class MainActivity : AppCompatActivity() {
         val myGen = ++playlistLoadGeneration
         val isBuiltin = entry.source == "BUILTIN_OPEN_RU" || entry.source == "BUILTIN_STRICT_RU_ONLY"
         val strictRuOnly = entry.source == "BUILTIN_STRICT_RU_ONLY"
-        val requestedStartupUrl = if (autoPlayLast) lastSavedChannelUrl else ""
+        val rawStartupUrl = if (autoPlayLast) lastSavedChannelUrl else ""
+        val requestedStartupUrl = if (isBuiltin && rawStartupUrl.contains("/iptv/", ignoreCase = true)) "" else rawStartupUrl
 
         if (isBuiltin) {
             for ((normKey, mirrorUrl) in BuiltinCatalog.origBackupPairs) {
