@@ -173,6 +173,38 @@ class MainActivity : AppCompatActivity() {
     private var openChannelsDirectlyWithCurrentFocus = true
     private var focusedCategoryPos = 1
     private var focusedChannelPos = 0
+    private var topBrowseAnchorUrl: String? = null
+    private var topBrowseAnchorName: String? = null
+    private var topBrowseAnchorPrevUrl: String? = null
+    private var topBrowseAnchorPrevName: String? = null
+    private var topBrowseAnchorNextUrl: String? = null
+    private var topBrowseAnchorNextName: String? = null
+    private var topBrowseAnchorCategoryIndex: Int = -1
+    private var topBrowseAnchorFallbackIndex: Int = -1
+
+    internal fun clearTopBrowseAnchor() {
+        topBrowseAnchorUrl = null
+        topBrowseAnchorName = null
+        topBrowseAnchorPrevUrl = null
+        topBrowseAnchorPrevName = null
+        topBrowseAnchorNextUrl = null
+        topBrowseAnchorNextName = null
+        topBrowseAnchorCategoryIndex = -1
+        topBrowseAnchorFallbackIndex = -1
+    }
+
+    internal fun findActiveChannelIndex(list: List<Channel>, target: Channel?, hintPos: Int = -1): Int {
+        if (list.isEmpty() || target == null) return -1
+        if (hintPos in list.indices && list[hintPos].url == target.url && list[hintPos].name == target.name) {
+            return hintPos
+        }
+        val exactIdx = list.indexOfFirst { it.url == target.url && it.name == target.name }
+        if (exactIdx >= 0) return exactIdx
+        if (hintPos in list.indices && list[hintPos].url == target.url) {
+            return hintPos
+        }
+        return list.indexOfFirst { it.url == target.url }
+    }
     private var centerLongPressHandled = false
 
     private var brightnessPercent = 100
@@ -2490,7 +2522,7 @@ class MainActivity : AppCompatActivity() {
         zappingRowContainer.removeAllViews()
         zappingRowContainer.visibility = View.VISIBLE
 
-        val curIdx = list.indexOfFirst { it.url == currentChannel?.url }.takeIf { it >= 0 } ?: 0
+        val curIdx = findActiveChannelIndex(list, currentChannel, focusedChannelPos).takeIf { it >= 0 } ?: 0
         val offsets = listOf(-2, -1, 0, 1, 2)
         var centerCard: View? = null
 
@@ -2697,11 +2729,22 @@ class MainActivity : AppCompatActivity() {
                         return true
                     }
                 } else if (abs(dy) > abs(dx) * 1.35f && abs(dy) > 85f) {
+                    val touchedEmptySpace = !isTouchInsideAnyActiveMenu(e1)
                     if (curMenu == null || curMenu == "INFO") {
                         switchChannelByOffset(if (dy < 0) +1 else -1)
                         return true
-                    } else if (curMenu == "OSD" && dy > 0) {
-                        buildAndShowZappingBar()
+                    } else if (curMenu == "OSD") {
+                        if (touchedEmptySpace) {
+                            resetMenuInactivityTimer()
+                            switchChannelByOffset(if (dy < 0) +1 else -1)
+                            return true
+                        } else if (dy > 0) {
+                            buildAndShowZappingBar()
+                            return true
+                        }
+                    } else if (curMenu == "SIDE" && touchedEmptySpace) {
+                        resetMenuInactivityTimer()
+                        switchChannelByOffset(if (dy < 0) +1 else -1)
                         return true
                     }
                 }
@@ -2742,7 +2785,7 @@ class MainActivity : AppCompatActivity() {
         channelListView.visibility = View.VISIBLE
 
         val list = displayedChannels.toList()
-        val activeIdx = if (focusCurrentChannelIfSameGroup) list.indexOfFirst { it.url == currentChannel?.url } else focusedChannelPos
+        val activeIdx = if (focusCurrentChannelIfSameGroup) findActiveChannelIndex(list, currentChannel, focusedChannelPos) else focusedChannelPos
         val targetPos = if (activeIdx in list.indices) activeIdx else 0
         focusedChannelPos = targetPos
         refreshChannelAdapter()
@@ -3008,7 +3051,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             val list = displayedChannels.toList()
             if (list.size < 2) return
-            val curIdx = list.indexOfFirst { it.url == currentChannel?.url }.takeIf { it >= 0 } ?: 0
+            val curIdx = findActiveChannelIndex(list, currentChannel, focusedChannelPos).takeIf { it >= 0 } ?: 0
             val secondCh = previousChannel ?: list[(curIdx + 1) % list.size]
             startDualStreamChannel(secondCh)
         }
@@ -3126,7 +3169,10 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (infoPanel.visibility == View.VISIBLE) updateStreamInfoText()
-                if (centerOsdPanel.visibility == View.VISIBLE) updateCenterOsdContent()
+                if (centerOsdPanel.visibility == View.VISIBLE) {
+            updateCenterOsdContent()
+            if (zappingRowContainer.visibility == View.VISIBLE) buildAndShowZappingBar()
+        }
             } catch (_: Exception) {}
             if (isWatchdogTickerActive) {
                 uiHandler.postDelayed(this, 1500L)
@@ -3722,7 +3768,9 @@ class MainActivity : AppCompatActivity() {
             }
             val initialBuiltin = mutableListOf<Channel>()
             val seenNameCatKeys = HashSet<String>()
+            val seenStreamUrls = HashSet<String>()
             val builtinDirectKeys = HashSet<String>()
+            val builtinDirectUrls = HashSet<String>()
             for (extra in BuiltinCatalog.extraOpenStreams) {
                 if (CoreEngines.isArabicOrIndianChannel(extra.name, extra.category, extra.url)) continue
                 if (strictRuOnly && !CoreEngines.isStrictlyRussianChannel(extra.name, extra.url, extra.category)) continue
@@ -3730,8 +3778,12 @@ class MainActivity : AppCompatActivity() {
                 val cat = customCategoryMap[extra.url] ?: extra.category
                 val normName = CoreEngines.normalizeName(cleanTitle)
                 val nameCatKey = normName + "_" + cat
+                val cleanUrlKey = extra.url.substringBefore("#").trim().lowercase()
                 builtinDirectKeys.add(nameCatKey)
-                if (seenNameCatKeys.add(nameCatKey)) {
+                if (cleanUrlKey.isNotEmpty()) builtinDirectUrls.add(cleanUrlKey)
+                if (cleanUrlKey.isNotEmpty() && !seenStreamUrls.contains(cleanUrlKey) && !seenNameCatKeys.contains(nameCatKey)) {
+                    seenStreamUrls.add(cleanUrlKey)
+                    seenNameCatKeys.add(nameCatKey)
                     initialBuiltin.add(Channel(cleanTitle, extra.url, cat, extra.tvgId))
                 }
             }
@@ -3755,12 +3807,15 @@ class MainActivity : AppCompatActivity() {
                     for (ch in cachedMap.values) {
                         val normName = CoreEngines.normalizeName(ch.name)
                         val cleanMirrorUrl = ch.url.substringBefore("#")
+                        val cleanUrlKey = cleanMirrorUrl.trim().lowercase()
                         if (normName.isNotEmpty() && cleanMirrorUrl.isNotEmpty()) {
                             val mirrors = backupMirrorsMap.getOrPut(normName) { CopyOnWriteArrayList() }
                             if (!mirrors.contains(cleanMirrorUrl) && mirrors.size < 8) mirrors.add(cleanMirrorUrl)
                         }
                         val nameCatKey = normName + "_" + ch.category
-                        if (seenNameCatKeys.add(nameCatKey)) {
+                        if (cleanUrlKey.isNotEmpty() && !seenStreamUrls.contains(cleanUrlKey) && !seenNameCatKeys.contains(nameCatKey)) {
+                            seenStreamUrls.add(cleanUrlKey)
+                            seenNameCatKeys.add(nameCatKey)
                             cachedVisible.add(ch)
                         }
                     }
@@ -3838,6 +3893,7 @@ class MainActivity : AppCompatActivity() {
 
                 val freshCombined = ArrayList<Channel>(initialBuiltin)
                 val freshSeenKeys = HashSet<String>(builtinDirectKeys)
+                val freshSeenUrls = HashSet<String>(builtinDirectUrls)
                 val cacheChannels = ArrayList<Channel>()
                 val cacheSeenUrls = HashSet<String>()
                 var fetchedTotal = 0
@@ -3848,19 +3904,22 @@ class MainActivity : AppCompatActivity() {
                         fetchedTotal++
                         val normName = CoreEngines.normalizeName(ch.name)
                         val cleanMirrorUrl = ch.url.substringBefore("#")
+                        val cleanUrlKey = cleanMirrorUrl.trim().lowercase()
                         if (normName.isNotEmpty() && cleanMirrorUrl.isNotEmpty()) {
                             val mirrors = backupMirrorsMap.getOrPut(normName) { CopyOnWriteArrayList() }
                             if (!mirrors.contains(cleanMirrorUrl) && mirrors.size < 8) {
                                 mirrors.add(cleanMirrorUrl)
-                                if (cacheSeenUrls.add(cleanMirrorUrl) && cacheChannels.size < 2500) {
+                                if (cacheSeenUrls.add(cleanUrlKey) && cacheChannels.size < 2500) {
                                     cacheChannels.add(ch)
                                 }
                             }
                         }
                         val nameCatKey = normName + "_" + ch.category
-                        if (freshSeenKeys.add(nameCatKey)) {
+                        if (cleanUrlKey.isNotEmpty() && !freshSeenUrls.contains(cleanUrlKey) && !freshSeenKeys.contains(nameCatKey)) {
+                            freshSeenUrls.add(cleanUrlKey)
+                            freshSeenKeys.add(nameCatKey)
                             freshCombined.add(ch)
-                            if (cacheSeenUrls.add(cleanMirrorUrl) && cacheChannels.size < 2500) {
+                            if (cacheSeenUrls.add(cleanUrlKey) && cacheChannels.size < 2500) {
                                 cacheChannels.add(ch)
                             }
                         }
@@ -3993,6 +4052,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val cats = activeCategoryList()
             if (index !in cats.indices) return
+            if (index != topBrowseAnchorCategoryIndex) clearTopBrowseAnchor()
             currentCategoryIndex = index; focusedCategoryPos = index
             val catName = cats[index]
             val activeAll = allChannels.filter { isChannelActive(it) }
@@ -4017,7 +4077,7 @@ class MainActivity : AppCompatActivity() {
             displayedChannels.addAll(topPart)
             displayedChannels.addAll(regularPart)
 
-            val activePosInGroup = displayedChannels.indexOfFirst { it.url == currentChannel?.url }
+            val activePosInGroup = findActiveChannelIndex(displayedChannels, currentChannel, focusedChannelPos)
             focusedChannelPos = if (activePosInGroup >= 0) activePosInGroup else 0
             refreshChannelAdapter()
         } catch (_: Exception) {}
@@ -4027,12 +4087,13 @@ class MainActivity : AppCompatActivity() {
         if (!::channelListAdapter.isInitialized) return
         try {
             val list = displayedChannels.toList()
+            val activePlayIdx = findActiveChannelIndex(list, currentChannel, focusedChannelPos)
             val newItems = if (list.isEmpty()) {
                 listOf("[-]   В этой категории пока нет каналов")
             } else {
-                list.map { ch ->
+                list.mapIndexed { idx, ch ->
                     val mono = extractTwoLetters(ch.name)
-                    val isPlaying = (ch.url == currentChannel?.url)
+                    val isPlaying = (idx == activePlayIdx)
                     val playOrb = if (isPlaying) "[+] " else ""
                     val topBadge = if (topUrls.contains(ch.url)) "▲ " else ""
                     val favBadge = if (favoriteUrls.contains(ch.url)) "★ " else ""
@@ -4052,7 +4113,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun toggleTopChannel(ch: Channel) {
-        if (!topUrls.remove(ch.url)) topUrls.add(ch.url)
+        val wasTop = topUrls.contains(ch.url)
+        if (!wasTop) {
+            val snapshot = displayedChannels.toList()
+            val oldIdx = findActiveChannelIndex(snapshot, ch, focusedChannelPos)
+            if (oldIdx >= 0 && snapshot.size > 1) {
+                val prevCh = snapshot[(oldIdx - 1 + snapshot.size) % snapshot.size]
+                val nextCh = snapshot[(oldIdx + 1) % snapshot.size]
+                topBrowseAnchorUrl = ch.url
+                topBrowseAnchorName = ch.name
+                topBrowseAnchorPrevUrl = prevCh.url
+                topBrowseAnchorPrevName = prevCh.name
+                topBrowseAnchorNextUrl = nextCh.url
+                topBrowseAnchorNextName = nextCh.name
+                topBrowseAnchorCategoryIndex = currentCategoryIndex
+                topBrowseAnchorFallbackIndex = oldIdx
+            } else {
+                clearTopBrowseAnchor()
+            }
+            topUrls.add(ch.url)
+        } else {
+            topUrls.remove(ch.url)
+            if (ch.url == topBrowseAnchorUrl) clearTopBrowseAnchor()
+        }
         saveState(); selectCategory(currentCategoryIndex)
     }
 
@@ -4094,6 +4177,9 @@ class MainActivity : AppCompatActivity() {
         val prevPlayingUrl = currentChannel?.url
         if (!silentSwap && currentChannel != null && prevPlayingUrl != channel.url) {
             previousChannel = currentChannel
+        }
+        if (topBrowseAnchorUrl != null && (channel.url != topBrowseAnchorUrl || channel.name != topBrowseAnchorName)) {
+            clearTopBrowseAnchor()
         }
         currentChannel = channel
         pendingDebouncedChannel = channel
@@ -4301,10 +4387,51 @@ class MainActivity : AppCompatActivity() {
     internal fun switchChannelByOffset(offset: Int) {
         val list = displayedChannels.toList()
         if (list.isEmpty()) return
-        val idx = list.indexOfFirst { it.url == currentChannel?.url }
-        val targetIdx = if (idx == -1) 0 else (idx + offset + list.size) % list.size
+        val cur = currentChannel
+        val targetIdx = if (
+            topBrowseAnchorUrl != null &&
+            currentCategoryIndex == topBrowseAnchorCategoryIndex &&
+            cur != null &&
+            cur.url == topBrowseAnchorUrl &&
+            (topBrowseAnchorName == null || cur.name == topBrowseAnchorName)
+        ) {
+            val anchorIdx = if (offset >= 0) {
+                val nextIdx = list.indexOfFirst {
+                    it.url == topBrowseAnchorNextUrl && (topBrowseAnchorNextName == null || it.name == topBrowseAnchorNextName)
+                }.takeIf { it >= 0 } ?: list.indexOfFirst { it.url == topBrowseAnchorNextUrl }
+                if (nextIdx >= 0) {
+                    (nextIdx + (offset - 1) + list.size) % list.size
+                } else {
+                    (topBrowseAnchorFallbackIndex.coerceAtLeast(0) + (offset - 1) + list.size) % list.size
+                }
+            } else {
+                val prevIdx = list.indexOfFirst {
+                    it.url == topBrowseAnchorPrevUrl && (topBrowseAnchorPrevName == null || it.name == topBrowseAnchorPrevName)
+                }.takeIf { it >= 0 } ?: list.indexOfFirst { it.url == topBrowseAnchorPrevUrl }
+                if (prevIdx >= 0) {
+                    (prevIdx + (offset + 1) + list.size) % list.size
+                } else {
+                    ((topBrowseAnchorFallbackIndex - 1).coerceAtLeast(0) + (offset + 1) + list.size) % list.size
+                }
+            }
+            clearTopBrowseAnchor()
+            anchorIdx
+        } else {
+            val idx = findActiveChannelIndex(list, cur, focusedChannelPos)
+            if (idx == -1) 0 else (idx + offset + list.size) % list.size
+        }
         focusedChannelPos = targetIdx
         playChannelObj(list[targetIdx], immediate = false)
+        if (sidePanel.visibility == View.VISIBLE && channelListView.visibility == View.VISIBLE) {
+            channelListView.post {
+                val firstVis = channelListView.firstVisiblePosition
+                val lastVis = channelListView.lastVisiblePosition
+                if (targetIdx < firstVis || targetIdx > lastVis) {
+                    channelListView.setSelection(targetIdx)
+                }
+                refreshSimpleListHighlightInPlace(channelListView, targetIdx)
+            }
+        }
     }
 
     override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
