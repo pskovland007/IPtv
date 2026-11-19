@@ -433,14 +433,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val openRusSources = listOf(
+        "https://loganettv.github.io/playlists/all.m3u",
+        "https://loganettv.github.io/playlists/movie.m3u",
+        "https://loganettv.github.io/playlists/kids.m3u",
+        "https://loganettv.github.io/playlists/sport.m3u",
+        "https://loganettv.github.io/playlists/music.m3u",
+        "https://raw.githubusercontent.com/CrocoUser/zabava-project/main/zabava-full.m3u",
+        "https://m3u.su/ruz",
+        "https://m3u.su/kk2",
+        "https://m3u.su/tru",
+        "https://m3u.su/rut",
+        "https://m3u.su/runtv",
+        "https://m3u.su/d1",
         "https://ngrch.github.io/iptv/ru.m3u",
         "https://ngrch.github.io/iptv/cartoons.m3u",
         "https://ngrch.github.io/iptv/music.m3u",
+        "https://raw.githubusercontent.com/smolnp/IPTVru/gh-pages/IPTVstable.m3u8",
+        "https://raw.githubusercontent.com/smolnp/IPTVru/gh-pages/IPTVru.m3u",
+        "https://spirt007.github.io/Tvru/Rus.m3u",
         "https://cdn.jsdelivr.net/gh/Free-TV/IPTV@master/playlists/playlist_russia.m3u8",
-        "https://cdn.jsdelivr.net/gh/smolnp/iptvru@gh-pages/playlist.m3u8",
-        "https://cdn.jsdelivr.net/gh/ipstreet312/freeiptv@master/all.m3u",
-        "https://cdn.jsdelivr.net/gh/Dimonovich/IPTV@master/IPTV.m3u",
-        "https://iptv-org.github.io/iptv/languages/rus.m3u",
         "https://iptv-org.github.io/iptv/countries/ru.m3u",
         "https://iptv-org.github.io/iptv/countries/by.m3u",
         "https://iptv-org.github.io/iptv/categories/music.m3u"
@@ -3146,6 +3157,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var pendingForceMirror: Boolean = false
+    private var mirrorCycleIndex: Int = 0
     private val pendingErrorReconnectRunnable = Runnable {
         val useMirrorNow = pendingForceMirror
         pendingForceMirror = false
@@ -3159,16 +3171,23 @@ class MainActivity : AppCompatActivity() {
             uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
             val cleanUrl = ch.url.substringBefore("#")
             val normTarget = CoreEngines.normalizeName(ch.name.replace(Regex("\\s+orig$", RegexOption.IGNORE_CASE), "").trim())
-            val useMirror = (forceMirror || consecutiveDropFailures >= 3) && silentFallbackAttemptedForUrl != ch.url
+            val allMirrors = LinkedHashSet<String>().apply {
+                backupMirrorsMap[normTarget]?.forEach { m ->
+                    if (m != cleanUrl && !autoDisabledUrls.contains(m)) add(m)
+                }
+                allChannels.forEach { cand ->
+                    val u = cand.url.substringBefore("#")
+                    if (u != cleanUrl && !autoDisabledUrls.contains(cand.url) && CoreEngines.normalizeName(cand.name) == normTarget) {
+                        add(u)
+                    }
+                }
+            }.toList()
+            val useMirror = (forceMirror || consecutiveDropFailures >= 2) && allMirrors.isNotEmpty()
             val targetUrl = if (useMirror) {
                 silentFallbackAttemptedForUrl = ch.url
-                val extMirrors = backupMirrorsMap[normTarget]?.filter { it != cleanUrl && !autoDisabledUrls.contains(it) }.orEmpty()
-                val catalogMirror = allChannels.firstOrNull {
-                    it.url != ch.url && !autoDisabledUrls.contains(it.url) &&
-                        !it.name.endsWith("orig", ignoreCase = true) &&
-                        CoreEngines.normalizeName(it.name) == normTarget
-                }?.url?.substringBefore("#")
-                extMirrors.firstOrNull() ?: catalogMirror ?: cleanUrl
+                val chosen = allMirrors[mirrorCycleIndex % allMirrors.size]
+                mirrorCycleIndex++
+                chosen
             } else {
                 cleanUrl
             }
@@ -3693,7 +3712,7 @@ class MainActivity : AppCompatActivity() {
         val isBuiltin = entry.source == "BUILTIN_OPEN_RU" || entry.source == "BUILTIN_STRICT_RU_ONLY"
         val strictRuOnly = entry.source == "BUILTIN_STRICT_RU_ONLY"
         val rawStartupUrl = if (autoPlayLast) lastSavedChannelUrl else ""
-        val requestedStartupUrl = if (isBuiltin && rawStartupUrl.contains("/iptv/", ignoreCase = true)) "" else rawStartupUrl
+        val requestedStartupUrl = if (isBuiltin && (rawStartupUrl.contains("8fupzrusy2skcm", ignoreCase = true) || rawStartupUrl.contains("rostelekom.xyz", ignoreCase = true))) "" else rawStartupUrl
 
         if (isBuiltin) {
             for ((normKey, mirrorUrl) in BuiltinCatalog.origBackupPairs) {
@@ -3701,27 +3720,66 @@ class MainActivity : AppCompatActivity() {
                 if (!list.contains(mirrorUrl)) list.add(mirrorUrl)
             }
             val initialBuiltin = mutableListOf<Channel>()
-            val initialKeys = HashSet<String>()
-            val builtinNameCatKeys = HashSet<String>()
+            val seenNameCatKeys = HashSet<String>()
+            val builtinDirectKeys = HashSet<String>()
             for (extra in BuiltinCatalog.extraOpenStreams) {
                 if (CoreEngines.isArabicOrIndianChannel(extra.name, extra.category, extra.url)) continue
                 if (strictRuOnly && !CoreEngines.isStrictlyRussianChannel(extra.name, extra.url, extra.category)) continue
                 val cleanTitle = CoreEngines.cleanChannelDisplayName(extra.name)
-                val nameCatKey = CoreEngines.normalizeName(cleanTitle) + "_" + extra.category
-                builtinNameCatKeys.add(nameCatKey)
-                if (initialKeys.add(nameCatKey + "_" + extra.url.hashCode())) {
-                    initialBuiltin.add(Channel(cleanTitle, extra.url, customCategoryMap[extra.url] ?: extra.category, extra.tvgId))
+                val cat = customCategoryMap[extra.url] ?: extra.category
+                val normName = CoreEngines.normalizeName(cleanTitle)
+                val nameCatKey = normName + "_" + cat
+                builtinDirectKeys.add(nameCatKey)
+                if (seenNameCatKeys.add(nameCatKey)) {
+                    initialBuiltin.add(Channel(cleanTitle, extra.url, cat, extra.tvgId))
                 }
             }
-            if (requestedStartupUrl.isNotEmpty() && initialBuiltin.none { it.url == requestedStartupUrl }) {
+
+            // Мгновенно подхватываем локальный кэш открытых источников (если уже загружались ранее)
+            val cacheFile = File(filesDir, "open_catalog_cache_v16.m3u")
+            val cachedVisible = mutableListOf<Channel>()
+            if (cacheFile.exists() && cacheFile.length() > 100L) {
+                try {
+                    val cachedMap = LinkedHashMap<String, Channel>()
+                    cacheFile.bufferedReader().use { br ->
+                        CoreEngines.parseM3uReaderIntoMap(
+                            reader = br,
+                            targetMap = cachedMap,
+                            customCategoryMap = customCategoryMap,
+                            filterBuiltinRules = true,
+                            onlyRussianAllCategories = strictRuOnly,
+                            keepOriginalGroups = false
+                        )
+                    }
+                    for (ch in cachedMap.values) {
+                        val normName = CoreEngines.normalizeName(ch.name)
+                        val cleanMirrorUrl = ch.url.substringBefore("#")
+                        if (normName.isNotEmpty() && cleanMirrorUrl.isNotEmpty()) {
+                            val mirrors = backupMirrorsMap.getOrPut(normName) { CopyOnWriteArrayList() }
+                            if (!mirrors.contains(cleanMirrorUrl) && mirrors.size < 8) mirrors.add(cleanMirrorUrl)
+                        }
+                        val nameCatKey = normName + "_" + ch.category
+                        if (seenNameCatKeys.add(nameCatKey)) {
+                            cachedVisible.add(ch)
+                        }
+                    }
+                    CoreEngines.appendDiagLog("CACHE_LOAD", "Из кэша загружено каналов: ${cachedVisible.size}")
+                } catch (_: Exception) {}
+            }
+
+            val startupList = ArrayList<Channel>(initialBuiltin.size + cachedVisible.size + 1)
+            startupList.addAll(initialBuiltin)
+            startupList.addAll(cachedVisible)
+
+            if (requestedStartupUrl.isNotEmpty() && startupList.none { it.url == requestedStartupUrl }) {
                 val restoredName = lastSavedChannelName.ifEmpty { "Канал" }
-                val restoredCat = customCategoryMap[requestedStartupUrl] ?: lastSavedChannelGroup.ifEmpty { "Детские" }
+                val restoredCat = customCategoryMap[requestedStartupUrl] ?: lastSavedChannelGroup.ifEmpty { "Новости и общие" }
                 if (!manualDisabledUrls.contains(requestedStartupUrl)) {
-                    initialBuiltin.add(0, Channel(restoredName, requestedStartupUrl, restoredCat, ""))
+                    startupList.add(0, Channel(restoredName, requestedStartupUrl, restoredCat, ""))
                 }
             }
             allChannels.clear()
-            allChannels.addAll(initialBuiltin)
+            allChannels.addAll(startupList)
             dynamicCategories.clear()
             updateCategoriesList()
             val currentList = allChannels.filter { isChannelActive(it) }
@@ -3744,50 +3802,92 @@ class MainActivity : AppCompatActivity() {
             }
 
             thread(priority = Thread.MIN_PRIORITY) {
-                try { Thread.sleep(1500L) } catch (_: Exception) {}
+                try { Thread.sleep(350L) } catch (_: Exception) {}
                 if (myGen != playlistLoadGeneration) return@thread
-                val mergedMap = ConcurrentHashMap<String, Channel>()
-                val loaderPool = Executors.newFixedThreadPool(2)
-                for (srcUrl in openRusSources) {
+                val perSourceResults = arrayOfNulls<List<Channel>>(openRusSources.size)
+                val loaderPool = Executors.newFixedThreadPool(6)
+                for (srcIdx in openRusSources.indices) {
+                    val srcUrl = openRusSources[srcIdx]
                     loaderPool.submit {
                         if (myGen != playlistLoadGeneration) return@submit
+                        val shortName = srcUrl.substringAfter("://").take(44)
                         try {
                             val localMap = LinkedHashMap<String, Channel>()
-                            val reader = CoreEngines.openStreamWithBypass(srcUrl, userAgentIndex, dohEnabled, 5500).bufferedReader()
-                            CoreEngines.parseM3uReaderIntoMap(
-                                reader = reader,
-                                targetMap = localMap,
-                                customCategoryMap = customCategoryMap,
-                                filterBuiltinRules = true,
-                                onlyRussianAllCategories = strictRuOnly,
-                                keepOriginalGroups = false
-                            )
-                            for ((k, v) in localMap) mergedMap.putIfAbsent(k, v)
-                        } catch (_: Exception) {}
+                            CoreEngines.openStreamWithBypass(srcUrl, userAgentIndex, dohEnabled, 7500).bufferedReader().use { reader ->
+                                CoreEngines.parseM3uReaderIntoMap(
+                                    reader = reader,
+                                    targetMap = localMap,
+                                    customCategoryMap = customCategoryMap,
+                                    filterBuiltinRules = true,
+                                    onlyRussianAllCategories = strictRuOnly,
+                                    keepOriginalGroups = false
+                                )
+                            }
+                            perSourceResults[srcIdx] = localMap.values.toList()
+                            CoreEngines.appendDiagLog("SRC_LOAD", "OK $shortName -> ${localMap.size} кан.")
+                        } catch (e: Exception) {
+                            CoreEngines.appendDiagLog("SRC_LOAD", "FAIL $shortName -> ${e.javaClass.simpleName}: ${e.message}")
+                        }
                     }
                 }
                 loaderPool.shutdown()
-                try { loaderPool.awaitTermination(14, TimeUnit.SECONDS) } catch (_: Exception) {}
+                try { loaderPool.awaitTermination(24, TimeUnit.SECONDS) } catch (_: Exception) {}
                 loaderPool.shutdownNow()
-                if (myGen != playlistLoadGeneration || mergedMap.isEmpty()) return@thread
+                if (myGen != playlistLoadGeneration) return@thread
 
-                val combined = ArrayList<Channel>(initialBuiltin)
-                for (ch in mergedMap.values) {
-                    val normName = CoreEngines.normalizeName(ch.name)
-                    val cleanMirrorUrl = ch.url.substringBefore("#")
-                    if (normName.isNotEmpty() && cleanMirrorUrl.isNotEmpty()) {
-                        val mirrors = backupMirrorsMap.getOrPut(normName) { CopyOnWriteArrayList() }
-                        if (!mirrors.contains(cleanMirrorUrl)) mirrors.add(cleanMirrorUrl)
+                val freshCombined = ArrayList<Channel>(initialBuiltin)
+                val freshSeenKeys = HashSet<String>(builtinDirectKeys)
+                val cacheChannels = ArrayList<Channel>()
+                val cacheSeenUrls = HashSet<String>()
+                var fetchedTotal = 0
+
+                for (list in perSourceResults) {
+                    if (list == null) continue
+                    for (ch in list) {
+                        fetchedTotal++
+                        val normName = CoreEngines.normalizeName(ch.name)
+                        val cleanMirrorUrl = ch.url.substringBefore("#")
+                        if (normName.isNotEmpty() && cleanMirrorUrl.isNotEmpty()) {
+                            val mirrors = backupMirrorsMap.getOrPut(normName) { CopyOnWriteArrayList() }
+                            if (!mirrors.contains(cleanMirrorUrl) && mirrors.size < 8) {
+                                mirrors.add(cleanMirrorUrl)
+                                if (cacheSeenUrls.add(cleanMirrorUrl) && cacheChannels.size < 2500) {
+                                    cacheChannels.add(ch)
+                                }
+                            }
+                        }
+                        val nameCatKey = normName + "_" + ch.category
+                        if (freshSeenKeys.add(nameCatKey)) {
+                            freshCombined.add(ch)
+                            if (cacheSeenUrls.add(cleanMirrorUrl) && cacheChannels.size < 2500) {
+                                cacheChannels.add(ch)
+                            }
+                        }
                     }
-                    val nameCatKey = normName + "_" + ch.category
-                    if (builtinNameCatKeys.contains(nameCatKey)) continue
-                    val key = nameCatKey + "_" + ch.url.substringBefore("?").hashCode()
-                    if (initialKeys.add(key)) combined.add(ch)
                 }
+
+                CoreEngines.appendDiagLog("OPEN_CATALOG", "Итого загружено: $fetchedTotal потоков -> уникальных каналов: ${freshCombined.size}")
+                if (fetchedTotal == 0) return@thread
+
+                // Сохраняем свежий каталог открытых источников в локальный кэш
+                try {
+                    val tmp = File(filesDir, "open_catalog_cache_v16.tmp")
+                    tmp.bufferedWriter().use { bw ->
+                        bw.write("#EXTM3U\n")
+                        for (c in cacheChannels) {
+                            val safeGrp = c.category.replace("\"", "")
+                            val safeName = c.name.replace("\n", " ").replace("\r", " ")
+                            bw.write("#EXTINF:-1 group-title=\"$safeGrp\",$safeName\n")
+                            bw.write("${c.url}\n")
+                        }
+                    }
+                    tmp.renameTo(cacheFile)
+                } catch (_: Exception) {}
+
                 runOnUiThread {
                     if (isFinishing || isDestroyed || myGen != playlistLoadGeneration) return@runOnUiThread
                     allChannels.clear()
-                    allChannels.addAll(combined)
+                    allChannels.addAll(freshCombined)
                     updateCategoriesList()
 
                     if (matchedInBuiltin == null && requestedStartupUrl.isNotEmpty()) {
@@ -3799,8 +3899,15 @@ class MainActivity : AppCompatActivity() {
                             return@runOnUiThread
                         }
                     }
-                    if (sidePanel.visibility != View.VISIBLE) {
-                        selectCategory(currentCategoryIndex)
+                    // Всегда обновляем текущий список каналов/категорий, даже если боковое меню сейчас открыто
+                    selectCategory(currentCategoryIndex)
+                    if (sidePanel.visibility == View.VISIBLE) {
+                        fitSideListsExactRows()
+                        if (isSideShowingChannels) {
+                            refreshChannelAdapter()
+                        } else {
+                            refreshSimpleListHighlightInPlace(categoryListView, focusedCategoryPos)
+                        }
                     }
                 }
             }
@@ -3996,6 +4103,7 @@ class MainActivity : AppCompatActivity() {
             saveLastChannelOnly(syncCommit = true)
         }
         silentFallbackAttemptedForUrl = ""
+        mirrorCycleIndex = 0
         lowSignalStuckSeconds = 0
         consecutiveDropFailures = 0
 

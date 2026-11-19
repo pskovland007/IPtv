@@ -176,16 +176,26 @@ object CoreEngines {
 
     fun isSingleSessionTokenUrl(urlStr: String): Boolean {
         val l = urlStr.lowercase()
-        return l.contains("/iptv/") || l.contains("token=")
+        return l.contains("token=") || l.contains("md5=") || l.contains("key=")
     }
 
     fun headersForStreamUrl(urlStr: String): Map<String, String> {
         val clean = urlStr.substringBefore("#")
         val lUrl = clean.lowercase()
-        if (isSingleSessionTokenUrl(lUrl)) {
-            return mapOf(
-                "Accept" to "*/*"
-            )
+        if (isSingleSessionTokenUrl(lUrl) ||
+            lUrl.contains("github.io") || lUrl.contains("githubusercontent.com") ||
+            lUrl.contains("jsdelivr.net") || lUrl.contains("m3u.su") ||
+            lUrl.endsWith(".m3u") || lUrl.endsWith(".m3u8")) {
+            if (lUrl.contains("github.io") || lUrl.contains("githubusercontent.com") ||
+                lUrl.contains("jsdelivr.net") || lUrl.contains("m3u.su")) {
+                return mapOf(
+                    "Accept" to "*/*",
+                    "Accept-Language" to "ru-RU,ru;q=0.9"
+                )
+            }
+            if (isSingleSessionTokenUrl(lUrl)) {
+                return mapOf("Accept" to "*/*")
+            }
         }
         val parsedOrigin = try {
             val u = URL(clean)
@@ -259,7 +269,6 @@ object CoreEngines {
         while (redirects < 6) {
             val parsed = URL(currentUrl)
             val originalHost = parsed.host
-            val resolvedIp = if (dohEnabled) resolveHostViaCloudflareDoH(originalHost, true) else null
             val activeAgent = if (isSingleSessionTokenUrl(currentUrl)) russianSmartTvAgents[0] else russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size]
             val hdrs = headersForStreamUrl(currentUrl)
             try {
@@ -282,7 +291,10 @@ object CoreEngines {
                 }
                 return conn.inputStream
             } catch (e: Exception) {
-                if (dohEnabled && !resolvedIp.isNullOrEmpty() && resolvedIp != originalHost && parsed.protocol.equals("http", ignoreCase = true)) {
+                val resolvedIp = if (dohEnabled && parsed.protocol.equals("http", ignoreCase = true)) {
+                    resolveHostViaCloudflareDoH(originalHost, true)
+                } else null
+                if (!resolvedIp.isNullOrEmpty() && resolvedIp != originalHost && parsed.protocol.equals("http", ignoreCase = true)) {
                     val ipUrl = URL(parsed.protocol, resolvedIp, parsed.port, parsed.file)
                     val ipConn = (ipUrl.openConnection() as HttpURLConnection).apply {
                         setRequestProperty("Host", originalHost)
@@ -378,7 +390,9 @@ object CoreEngines {
             lUrl.contains("tricolor") || lUrl.contains("wink") || lUrl.contains("peers") || lUrl.contains("catcast") ||
             lUrl.contains("cdnvideo") || lUrl.contains("ngenix") || lUrl.contains("mediavitrina") ||
             lUrl.contains("uma.media") || lUrl.contains("1hd.ru") || lUrl.contains("gcdn.co") ||
-            lUrl.contains("bonus-tv") || lUrl.contains("rutube") || lUrl.contains("ok.ru")) {
+            lUrl.contains("bonus-tv") || lUrl.contains("rutube") || lUrl.contains("ok.ru") ||
+            lUrl.contains("zabava") || lUrl.contains("rt.ru") || lUrl.contains("smotreshka") ||
+            lUrl.contains("vintera") || lUrl.contains("m3u.su")) {
             return true
         }
         val ruLatinWhitelist = listOf(
@@ -574,7 +588,7 @@ object CoreEngines {
                     l.contains("qazcdn.com", ignoreCase = true) ||
                     l.contains("31.148.48.15", ignoreCase = true) ||
                     l.contains("5.188.159.128", ignoreCase = true) ||
-                    (filterBuiltinRules && l.contains("/iptv/", ignoreCase = true))
+                    (filterBuiltinRules && (l.contains("8fupzrusy2skcm", ignoreCase = true) || l.contains("rostelekom.xyz", ignoreCase = true)))
                 val isAdultGroup = !keepOriginalGroups && (currentGroup.equals("взрослые", ignoreCase = true) || currentGroup.contains("18+", ignoreCase = true) || currentGroup.contains("adult", ignoreCase = true))
                 if (currentName.isNotEmpty() && !isDeadHost && !isAdultGroup) {
                     var skip = false
