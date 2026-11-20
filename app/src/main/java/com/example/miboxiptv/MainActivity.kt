@@ -2,6 +2,10 @@ package com.example.miboxiptv
 
 import android.Manifest
 import android.animation.ValueAnimator
+import android.app.Activity
+import android.provider.OpenableColumns
+import android.provider.Settings
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -97,6 +101,17 @@ import kotlin.system.exitProcess
 
 @OptIn(UnstableApi::class)
 class MainActivity : AppCompatActivity() {
+    private val systemPlaylistPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.data
+            if (uri != null) {
+                importPlaylistFromUri(uri)
+            }
+        }
+    }
+
     private var player: ExoPlayer? = null
     private var dualPipPlayer: ExoPlayer? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
@@ -1212,6 +1227,102 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun hasAllFilesAccess(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else {
+            true
+        }
+    }
+
+    private fun requestAllFilesAccessPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+                return
+            } catch (_: Exception) {}
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                return
+            } catch (_: Exception) {}
+            Toast.makeText(this, "Откройте Настройки → Приложения → TiViLook → Доступ ко всем файлам", Toast.LENGTH_LONG).show()
+        } else {
+            requestStoragePermissionsIfNeeded()
+        }
+    }
+
+    private fun launchSystemPlaylistPicker() {
+        val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        try {
+            systemPlaylistPickerLauncher.launch(openDoc)
+            return
+        } catch (_: Exception) {}
+        val getContent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        try {
+            systemPlaylistPickerLauncher.launch(getContent)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Системный проводник недоступен на этом устройстве — используйте встроенный проводник", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun resolveUriDisplayName(uri: Uri): String {
+        try {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) {
+                        val name = cursor.getString(idx)
+                        if (!name.isNullOrBlank()) return name.trim()
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        val seg = uri.lastPathSegment?.substringAfterLast("/")?.substringAfterLast(":")
+        return if (!seg.isNullOrBlank()) seg.trim() else "playlist.m3u8"
+    }
+
+    private fun importPlaylistFromUri(uri: Uri) {
+        try {
+            val displayName = resolveUriDisplayName(uri)
+            val safeName = displayName.replace(Regex("[^a-zA-Zа-яА-Я0-9._ -]"), "_").ifBlank { "playlist.m3u8" }
+            val destDir = File(filesDir, "user_playlists").apply { mkdirs() }
+            val destFile = File(destDir, "${System.currentTimeMillis()}_$safeName")
+            val input = contentResolver.openInputStream(uri)
+            if (input == null) {
+                Toast.makeText(this, "Не удалось открыть выбранный файл", Toast.LENGTH_LONG).show()
+                return
+            }
+            input.use { src ->
+                FileOutputStream(destFile).use { dst ->
+                    src.copyTo(dst)
+                }
+            }
+            if (!destFile.exists() || destFile.length() == 0L) {
+                try { destFile.delete() } catch (_: Exception) {}
+                Toast.makeText(this, "Выбранный файл пуст", Toast.LENGTH_LONG).show()
+                return
+            }
+            playlists.add(PlaylistEntry(displayName, destFile.absolutePath, true))
+            activePlaylistIndex = playlists.size - 1
+            saveState()
+            closeAllMenus()
+            Toast.makeText(this, "Плейлист добавлен: $displayName", Toast.LENGTH_SHORT).show()
+            loadActivePlaylist(autoPlayLast = false)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка импорта файла: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun openPlaylistsSubModal() {
         ensureDefaultPlaylists()
         setSubModalHeaderTitle("Плейлисты (2 встроенных + ваши списки)")
@@ -1219,7 +1330,8 @@ class MainActivity : AppCompatActivity() {
         val snapshot = playlists.toList()
         val items = snapshot.mapIndexed { idx, p -> (if (idx == activePlaylistIndex) "[+]   " else "[-]   ") + p.title }.toMutableList()
         items.add("[>]   Добавить свой плейлист по ссылке   •   Сохранение групп")
-        items.add("[>]   Проводник   •   Выбрать файл .m3u/.m3u8 с устройства или USB")
+        items.add("[>]   Выбрать файл .m3u/.m3u8 (Система)   •   Android 11–16")
+        items.add("[>]   Встроенный проводник   •   Память устройства / USB")
         if (snapshot.size > 2 && activePlaylistIndex >= 2) items.add("[-]   Удалить выбранный пользовательский плейлист")
         updateSubModalListItems(items, preservePositionIndex = activePlaylistIndex)
 
@@ -1227,14 +1339,22 @@ class MainActivity : AppCompatActivity() {
             when {
                 which < snapshot.size -> { activePlaylistIndex = which; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false) }
                 which == snapshot.size -> navigateToMenu("ADD_URL")
-                which == snapshot.size + 1 -> {
+                which == snapshot.size + 1 -> launchSystemPlaylistPicker()
+                which == snapshot.size + 2 -> {
                     currentBrowseDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                     if (!currentBrowseDir.exists()) currentBrowseDir = Environment.getExternalStorageDirectory()
                     navigateToMenu("FILE_BROWSER")
                 }
                 else -> {
                     if (activePlaylistIndex >= 2 && activePlaylistIndex < playlists.size) {
-                        playlists.removeAt(activePlaylistIndex); activePlaylistIndex = 0; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
+                        val removed = playlists.removeAt(activePlaylistIndex)
+                        try {
+                            val internalDir = File(filesDir, "user_playlists").absolutePath
+                            if (removed.isLocal && removed.source.startsWith(internalDir)) {
+                                File(removed.source).delete()
+                            }
+                        } catch (_: Exception) {}
+                        activePlaylistIndex = 0; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
                     }
                 }
             }
@@ -1249,35 +1369,78 @@ class MainActivity : AppCompatActivity() {
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
 
+        subModalTopButtons.addView(makeModernButton("📂 Система") { launchSystemPlaylistPicker() })
         subModalTopButtons.addView(makeModernButton("📥 Download") { openFolderExplorerModal(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)) })
         subModalTopButtons.addView(makeModernButton("🏠 Память") { openFolderExplorerModal(Environment.getExternalStorageDirectory()) })
         subModalTopButtons.addView(makeModernButton("🔌 USB") { openFolderExplorerModal(File("/storage")) })
-        subModalTopButtons.addView(makeModernButton("⌨ Путь вручную") {
-            openInputSubModal("Путь к файлу .m3u / .m3u8", "/sdcard/Download/playlist.m3u8") { path -> addLocalPlaylistFile(File(path)) }
+        subModalTopButtons.addView(makeModernButton("⌨ Путь") {
+            openInputSubModal("Путь к файлу .m3u / .m3u8", "/sdcard/Download/playlist.m3u8") { path -> addLocalPlaylistFile(File(path.trim())) }
         })
 
-        val entries = mutableListOf<Pair<String, File?>>()
-        val parent = dir.parentFile
-        if (parent != null && parent.canRead()) entries.add(Pair("[>]   .. [На уровень вверх]", parent))
-        val rawChildren = try { dir.listFiles()?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
-        for (d in rawChildren.filter { it.isDirectory && !it.name.startsWith(".") }.sortedBy { it.name.lowercase() }) entries.add(Pair("[>]   Папка: " + d.name, d))
-        for (f in rawChildren.filter { it.isFile && (it.name.endsWith(".m3u", true) || it.name.endsWith(".m3u8", true) || it.name.endsWith(".txt", true)) }.sortedBy { it.name.lowercase() }) {
-            entries.add(Pair("[+]   Файл: " + f.name + "   •   " + (f.length() / 1024) + " КБ", f))
+        val entries = mutableListOf<Triple<String, String, File?>>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !hasAllFilesAccess()) {
+            entries.add(Triple("[!]   Выдать доступ ко всем файлам (чтобы видеть .m3u/.m3u8 в папках)", "GRANT_ALL_FILES", null))
         }
-        if (entries.isEmpty()) entries.add(Pair("[-]   Папка пуста или нет доступа", null))
+        val parent = dir.parentFile
+        if (parent != null && parent.canRead()) entries.add(Triple("[>]   .. [На уровень вверх]", "FILE", parent))
+        val rawChildren = try { dir.listFiles()?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
+        for (d in rawChildren.filter { it.isDirectory && !it.name.startsWith(".") }.sortedBy { it.name.lowercase() }) {
+            entries.add(Triple("[>]   Папка: " + d.name, "FILE", d))
+        }
+        val playlistFiles = rawChildren.filter {
+            it.isFile && (it.name.endsWith(".m3u", true) || it.name.endsWith(".m3u8", true) || it.name.endsWith(".txt", true) || it.name.endsWith(".pls", true))
+        }.sortedBy { it.name.lowercase() }
+        for (f in playlistFiles) {
+            entries.add(Triple("[+]   Файл: " + f.name + "   •   " + ((f.length() / 1024L).coerceAtLeast(1L)) + " КБ", "FILE", f))
+        }
+        if (playlistFiles.isEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !hasAllFilesAccess()) {
+            entries.add(Triple("[>]   Открыть системный выбор файла (.m3u / .m3u8 без спецправ)", "SYSTEM_PICKER", null))
+        } else if (entries.isEmpty()) {
+            entries.add(Triple("[-]   Папка пуста или нет доступа", "NONE", null))
+        }
 
         updateSubModalListItems(entries.map { it.first }, preservePositionIndex = 0)
         subModalList.setOnItemClickListener { _, _, idx, _ ->
-            val target = entries.getOrNull(idx)?.second ?: return@setOnItemClickListener
-            if (target.isDirectory) openFolderExplorerModal(target) else if (target.isFile) addLocalPlaylistFile(target)
+            val item = entries.getOrNull(idx) ?: return@setOnItemClickListener
+            when (item.second) {
+                "GRANT_ALL_FILES" -> requestAllFilesAccessPermission()
+                "SYSTEM_PICKER" -> launchSystemPlaylistPicker()
+                "FILE" -> {
+                    val target = item.third ?: return@setOnItemClickListener
+                    if (target.isDirectory) openFolderExplorerModal(target) else if (target.isFile) addLocalPlaylistFile(target)
+                }
+            }
         }
         animateMenuAppear(subModalOverlay); subModalList.requestFocus()
     }
 
     private fun addLocalPlaylistFile(file: File) {
-        if (!file.exists() || !file.canRead()) return
-        playlists.add(PlaylistEntry(file.name, file.absolutePath, true))
-        activePlaylistIndex = playlists.size - 1; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
+        if (!file.exists()) {
+            Toast.makeText(this, "Файл не найден: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!file.canRead()) {
+            Toast.makeText(this, "Нет доступа к файлу. Нажмите «📂 Система» или выдайте «Доступ ко всем файлам»", Toast.LENGTH_LONG).show()
+            return
+        }
+        var targetPath = file.absolutePath
+        try {
+            val safeName = file.name.replace(Regex("[^a-zA-Zа-яА-Я0-9._ -]"), "_").ifBlank { "playlist.m3u8" }
+            val destDir = File(filesDir, "user_playlists").apply { mkdirs() }
+            val destFile = File(destDir, "${System.currentTimeMillis()}_$safeName")
+            file.inputStream().use { src ->
+                FileOutputStream(destFile).use { dst -> src.copyTo(dst) }
+            }
+            if (destFile.exists() && destFile.length() > 0L) {
+                targetPath = destFile.absolutePath
+            }
+        } catch (_: Exception) {}
+        playlists.add(PlaylistEntry(file.name, targetPath, true))
+        activePlaylistIndex = playlists.size - 1
+        saveState()
+        closeAllMenus()
+        Toast.makeText(this, "Плейлист добавлен: ${file.name}", Toast.LENGTH_SHORT).show()
+        loadActivePlaylist(autoPlayLast = false)
     }
 
     private fun openChannelEditorGroupsModal(inPlace: Boolean = false, keepIndex: Int = -1) {
@@ -3982,14 +4145,16 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     CoreEngines.openStreamWithBypass(entry.source, userAgentIndex, dohEnabled, 10000).bufferedReader()
                 }
-                CoreEngines.parseM3uReaderIntoMap(
-                    reader = reader,
-                    targetMap = targetMap,
-                    customCategoryMap = customCategoryMap,
-                    filterBuiltinRules = false,
-                    onlyRussianAllCategories = false,
-                    keepOriginalGroups = true
-                )
+                reader.use { br ->
+                    CoreEngines.parseM3uReaderIntoMap(
+                        reader = br,
+                        targetMap = targetMap,
+                        customCategoryMap = customCategoryMap,
+                        filterBuiltinRules = false,
+                        onlyRussianAllCategories = false,
+                        keepOriginalGroups = true
+                    )
+                }
                 val finalChannels = targetMap.values.toList()
                 if (myGen != playlistLoadGeneration) return@thread
                 runOnUiThread {
@@ -4012,7 +4177,14 @@ class MainActivity : AppCompatActivity() {
                         playChannelObj(targetCh, immediate = true, updateSavedUrl = true)
                     } else selectCategory(1)
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                CoreEngines.appendDiagLog("PLAYLIST_ERR", "Ошибка чтения '${entry.title}': ${e.message}")
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        Toast.makeText(this@MainActivity, "Не удалось прочитать плейлист: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
         }
     }
 
@@ -4529,6 +4701,9 @@ class MainActivity : AppCompatActivity() {
             player?.play()
         }
         if (allChannels.isEmpty()) loadActivePlaylist(autoPlayLast = true)
+        if (menuHistory.lastOrNull() == "FILE_BROWSER" && subModalOverlay.visibility == View.VISIBLE) {
+            openFolderExplorerModal(currentBrowseDir)
+        }
     }
 
     override fun onStop() {
