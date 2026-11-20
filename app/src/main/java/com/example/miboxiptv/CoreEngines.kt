@@ -648,9 +648,14 @@ object CoreEngines {
                         if (isArabicOrIndianChannel(currentName, currentGroup, l) || isRegionalTimeShiftDuplicate(currentName)) {
                             skip = true
                         } else {
-                            val mappedCat = mapCategory(currentGroup, currentName, currentRawInfLine, l)
+                            val mappedCat = customCategoryMap[l] ?: mapCategory(currentGroup, currentName, currentRawInfLine, l)
+                            val isCatCastStream = l.contains("catcast", ignoreCase = true) ||
+                                currentName.contains("catcast", ignoreCase = true) ||
+                                currentGroup.contains("catcast", ignoreCase = true)
                             val isStrictRu = isStrictlyRussianChannel(currentName, l, currentGroup)
-                            if (onlyRussianAllCategories) {
+                            if (mappedCat == "Детские" && isCatCastStream) {
+                                skip = true
+                            } else if (onlyRussianAllCategories) {
                                 if (!isStrictRu) skip = true
                             } else {
                                 when (mappedCat) {
