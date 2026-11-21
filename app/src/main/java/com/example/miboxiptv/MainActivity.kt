@@ -365,8 +365,10 @@ class MainActivity : AppCompatActivity() {
     private var screenAspectMode = 0
 
     private var lowSignalStuckSeconds = 0
+    private var continuousBufferingTicks = 0
     private var lastChannelSwitchMs: Long = 0L
     private var consecutiveDropFailures = 0
+    private var streamRetriesExhausted = false
     private var lastRenderedFramePositionMs = -1L
 
     private var currentBrowseDir: File = Environment.getExternalStorageDirectory()
@@ -512,8 +514,6 @@ class MainActivity : AppCompatActivity() {
         "https://ngrch.github.io/iptv/ru.m3u",
         "https://ngrch.github.io/iptv/cartoons.m3u",
         "https://ngrch.github.io/iptv/music.m3u",
-        "https://raw.githubusercontent.com/smolnp/IPTVru/gh-pages/IPTVstable.m3u8",
-        "https://raw.githubusercontent.com/smolnp/IPTVru/gh-pages/IPTVru.m3u",
         "https://spirt007.github.io/Tvru/Rus.m3u",
         "https://cdn.jsdelivr.net/gh/Free-TV/IPTV@master/playlists/playlist_russia.m3u8",
         "https://iptv-org.github.io/iptv/countries/ru.m3u",
@@ -895,10 +895,13 @@ class MainActivity : AppCompatActivity() {
         }
         infoTextView.setTextColor(t.textPrimaryColor); infoTextView.typeface = t.normalFont
         infoTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f * scale)
-        for (rv in infoRowViews) {
+        val infoGapTop = (16 * scale).toInt().coerceAtLeast(12)
+        for (i in infoRowViews.indices) {
+            val rv = infoRowViews[i]
             rv.setTextColor(t.textPrimaryColor)
             rv.typeface = t.normalFont
             rv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f * scale)
+            rv.setPadding(4, if (i == 2) infoGapTop else 5, 4, 5)
         }
         currentChannelBanner.setTextColor(t.textPrimaryColor); currentChannelBanner.typeface = t.boldFont
         currentChannelBanner.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f * scale)
@@ -2180,18 +2183,18 @@ class MainActivity : AppCompatActivity() {
             setPadding(28, 22, 28, 22)
         }
         infoTitleView = TextView(this).apply {
-            text = "Параметры экрана"; setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 17.5f)
+            text = "Info"; setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 17.5f)
             typeface = themeBoldFont(); gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, 0, 0, 12)
             isSingleLine = true; maxLines = 1
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
         infoPanel.addView(infoTitleView)
         infoRowViews.clear()
-        for (rIdx in 0 until 6) {
+        for (rIdx in 0 until 5) {
             val rowTv = TextView(this).apply {
                 setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f); typeface = themeFont()
                 isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
-                setPadding(4, 5, 4, 5)
+                setPadding(4, if (rIdx == 2) 18 else 5, 4, 5)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             }
             infoRowViews.add(rowTv)
@@ -2558,7 +2561,7 @@ class MainActivity : AppCompatActivity() {
         applyBrightnessLevel()
 
         // 1. Адаптер и обработчики списка ГРУПП (categoryListView)
-        categoryAdapter = createRoundedSelectorAdapter(categoryDisplayItems, 16f, true, fixedRowHeight = true) { pos ->
+        categoryAdapter = createRoundedSelectorAdapter(categoryDisplayItems, 15.5f, true, fixedRowHeight = true) { pos ->
             !isSideShowingChannels && !isLeftRailVisible && pos == focusedCategoryPos
         }
         categoryListView.adapter = categoryAdapter
@@ -3086,7 +3089,7 @@ class MainActivity : AppCompatActivity() {
         return raw.uppercase().padEnd(2, 'T').take(2)
     }
 
-    internal fun fitSideListsExactRows() {
+    internal fun fitSideListsExactRows(repositionTiles: Boolean = true) {
         val rowH = exactModalRowHeightPx().coerceAtLeast(42)
         val divH = 4
         val stepH = rowH + divH
@@ -3104,10 +3107,18 @@ class MainActivity : AppCompatActivity() {
         categoryListView.isVerticalScrollBarEnabled = (!isSideShowingChannels && !isLeftRailVisible && activeCategoryList().size > exactRows)
         channelListView.isVerticalScrollBarEnabled = (isSideShowingChannels && displayedChannels.size > exactRows)
 
-        leftIconRail.layoutParams = FrameLayout.LayoutParams(railW, exactH, Gravity.START or Gravity.CENTER_VERTICAL)
-        categoryListView.layoutParams = FrameLayout.LayoutParams(groupsW, exactH, Gravity.START or Gravity.CENTER_VERTICAL)
-        channelListView.layoutParams = FrameLayout.LayoutParams(channelsW, exactH, Gravity.START or Gravity.CENTER_VERTICAL)
-        updateSideSlidingTiles(animate = false)
+        fun applySizeIfChanged(v: View, w: Int, h: Int) {
+            val lp = v.layoutParams as? FrameLayout.LayoutParams
+            if (lp == null || lp.width != w || lp.height != h) {
+                v.layoutParams = FrameLayout.LayoutParams(w, h, Gravity.START or Gravity.CENTER_VERTICAL)
+            }
+        }
+        applySizeIfChanged(leftIconRail, railW, exactH)
+        applySizeIfChanged(categoryListView, groupsW, exactH)
+        applySizeIfChanged(channelListView, channelsW, exactH)
+        if (repositionTiles) {
+            updateSideSlidingTiles(animate = false)
+        }
     }
 
     internal fun updateSideSlidingTiles(animate: Boolean) {
@@ -3184,19 +3195,20 @@ class MainActivity : AppCompatActivity() {
         val wasVisible = (sidePanel.visibility == View.VISIBLE && !isSideShowingChannels)
         isSideShowingChannels = true
         isLeftRailVisible = false
-        fitSideListsExactRows()
-        updateSideSlidingTiles(animate = wasVisible)
+        fitSideListsExactRows(repositionTiles = !wasVisible)
 
         val list = displayedChannels.toList()
         val activeIdx = if (focusCurrentChannelIfSameGroup) findActiveChannelIndex(list, currentChannel, focusedChannelPos) else focusedChannelPos
         val targetPos = if (activeIdx in list.indices) activeIdx else 0
         focusedChannelPos = targetPos
-        updateCategoriesList()
+
+        if (categoryDisplayItems.isEmpty()) updateCategoriesList()
+        refreshSimpleListHighlightInPlace(categoryListView, -1)
         refreshChannelAdapter()
+        updateSideSlidingTiles(animate = wasVisible)
 
         channelListView.post {
             try {
-                refreshSimpleListHighlightInPlace(categoryListView, -1)
                 val safeCount = channelListAdapter.count
                 if (safeCount > 0) {
                     val clampedPos = targetPos.coerceIn(0, safeCount - 1)
@@ -3213,17 +3225,19 @@ class MainActivity : AppCompatActivity() {
         val wasVisible = (sidePanel.visibility == View.VISIBLE && (isSideShowingChannels || isLeftRailVisible))
         isSideShowingChannels = false
         isLeftRailVisible = false
-        fitSideListsExactRows()
-        updateSideSlidingTiles(animate = wasVisible)
+        fitSideListsExactRows(repositionTiles = !wasVisible)
 
-        updateCategoriesList()
-        refreshChannelAdapter()
-        val targetPos = currentCategoryIndex.coerceIn(0, (categoryAdapter.count - 1).coerceAtLeast(0))
+        val catsCount = activeCategoryList().size
+        val targetPos = currentCategoryIndex.coerceIn(0, (catsCount - 1).coerceAtLeast(0))
         focusedCategoryPos = targetPos
+
+        if (categoryDisplayItems.isEmpty()) updateCategoriesList()
+        refreshSimpleListHighlightInPlace(channelListView, -1)
+        refreshSimpleListHighlightInPlace(categoryListView, targetPos)
+        updateSideSlidingTiles(animate = wasVisible)
 
         categoryListView.post {
             try {
-                refreshSimpleListHighlightInPlace(channelListView, -1)
                 val safeCount = categoryAdapter.count
                 if (safeCount > 0) {
                     val clampedPos = targetPos.coerceIn(0, safeCount - 1)
@@ -3514,7 +3528,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val p = player
-                if (p != null && currentChannel != null) {
+                if (p != null && currentChannel != null && !streamRetriesExhausted) {
                     val state = p.playbackState
                     val curPos = p.currentPosition
                     val bufMs = p.totalBufferedDuration
@@ -3522,23 +3536,40 @@ class MainActivity : AppCompatActivity() {
                     lastRenderedFramePositionMs = curPos
 
                     val sinceSwitchMs = System.currentTimeMillis() - lastChannelSwitchMs
-                    // Даём новому каналу 9 секунд на первичный старт без вмешательства Watchdog
-                    val isTrulyStalled = sinceSwitchMs >= 9000L && (state == Player.STATE_IDLE ||
-                        (state == Player.STATE_BUFFERING && (curPos == prevPos || bufMs < 1500L)) ||
-                        (state == Player.STATE_READY && p.isPlaying && curPos == prevPos && bufMs < 1500L))
+                    if (state == Player.STATE_BUFFERING && sinceSwitchMs >= 9000L) {
+                        continuousBufferingTicks++
+                    } else {
+                        continuousBufferingTicks = 0
+                    }
+
+                    // Даём новому каналу 9 секунд на первичный старт; в STATE_BUFFERING ловим также
+                    // зависание с уезжающим в минус curPos при полном буфере (HLS sliding window stall)
+                    val isBufferingStalled = (state == Player.STATE_BUFFERING && (curPos == prevPos || curPos <= 0L || bufMs < 1500L || continuousBufferingTicks >= 4))
+                    val isReadyStalled = (state == Player.STATE_READY && p.isPlaying && curPos == prevPos && bufMs < 1500L)
+                    val isTrulyStalled = sinceSwitchMs >= 9000L && (state == Player.STATE_IDLE || isBufferingStalled || isReadyStalled)
 
                     if (isTrulyStalled) {
                         lowSignalStuckSeconds += 2
-                        if (lowSignalStuckSeconds == 6 || lowSignalStuckSeconds >= 16) {
+                        if (lowSignalStuckSeconds == 6 || lowSignalStuckSeconds >= 12) {
                             CoreEngines.appendDiagLog(
                                 "WATCHDOG_STALL",
                                 "ch='${currentChannel?.name}' state=$state bufMs=$bufMs curPos=$curPos prevPos=$prevPos stuckSec=$lowSignalStuckSeconds drops=$consecutiveDropFailures"
                             )
                         }
-                        if (lowSignalStuckSeconds >= 16) {
+                        if (lowSignalStuckSeconds >= 12) {
                             lowSignalStuckSeconds = 0
+                            continuousBufferingTicks = 0
                             consecutiveDropFailures++
-                            if (onDropBehavior == 1 && consecutiveDropFailures >= 3) {
+                            val mirrorsCount = currentChannel?.let { collectMirrorsForChannel(it).size } ?: 0
+                            val maxRetries = (mirrorsCount + 2).coerceIn(3, 5)
+                            if (consecutiveDropFailures > maxRetries) {
+                                streamRetriesExhausted = true
+                                CoreEngines.appendDiagLog("RECONNECT_STOP", "ch='${currentChannel?.name}' watchdog остановлен после $consecutiveDropFailures попыток")
+                                if (onDropBehavior == 1) {
+                                    consecutiveDropFailures = 0
+                                    switchChannelByOffset(+1)
+                                }
+                            } else if (onDropBehavior == 1 && consecutiveDropFailures >= 3) {
                                 consecutiveDropFailures = 0
                                 switchChannelByOffset(+1)
                             } else {
@@ -3548,13 +3579,14 @@ class MainActivity : AppCompatActivity() {
                                 }
                                 reloadIconIndicator.visibility = View.VISIBLE
                                 uiHandler.postDelayed({ reloadIconIndicator.visibility = View.GONE }, 2200L)
-                                reconnectCurrentStreamSilently()
+                                reconnectCurrentStreamSilently(forceMirror = (consecutiveDropFailures >= 2))
                             }
                         }
                     } else {
                         lowSignalStuckSeconds = 0
-                        if (state == Player.STATE_READY && p.isPlaying && curPos != prevPos) {
+                        if (state == Player.STATE_READY && p.isPlaying && curPos > 0L && curPos != prevPos) {
                             consecutiveDropFailures = 0
+                            streamRetriesExhausted = false
                         }
                     }
                 }
@@ -3602,24 +3634,29 @@ class MainActivity : AppCompatActivity() {
         reconnectCurrentStreamSilently(forceMirror = useMirrorNow)
     }
 
+    internal fun collectMirrorsForChannel(ch: Channel): List<String> {
+        val cleanUrl = ch.url.substringBefore("#")
+        val normTarget = CoreEngines.normalizeName(ch.name.replace(Regex("\\s+orig$", RegexOption.IGNORE_CASE), "").trim())
+        return LinkedHashSet<String>().apply {
+            backupMirrorsMap[normTarget]?.forEach { m ->
+                if (m != cleanUrl && !autoDisabledUrls.contains(m)) add(m)
+            }
+            allChannels.forEach { cand ->
+                val u = cand.url.substringBefore("#")
+                if (u != cleanUrl && !autoDisabledUrls.contains(cand.url) && CoreEngines.normalizeName(cand.name) == normTarget) {
+                    add(u)
+                }
+            }
+        }.toList()
+    }
+
     internal fun reconnectCurrentStreamSilently(forceMirror: Boolean = false) {
         val ch = currentChannel ?: return
         val p = player ?: return
         try {
             uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
             val cleanUrl = ch.url.substringBefore("#")
-            val normTarget = CoreEngines.normalizeName(ch.name.replace(Regex("\\s+orig$", RegexOption.IGNORE_CASE), "").trim())
-            val allMirrors = LinkedHashSet<String>().apply {
-                backupMirrorsMap[normTarget]?.forEach { m ->
-                    if (m != cleanUrl && !autoDisabledUrls.contains(m)) add(m)
-                }
-                allChannels.forEach { cand ->
-                    val u = cand.url.substringBefore("#")
-                    if (u != cleanUrl && !autoDisabledUrls.contains(cand.url) && CoreEngines.normalizeName(cand.name) == normTarget) {
-                        add(u)
-                    }
-                }
-            }.toList()
+            val allMirrors = collectMirrorsForChannel(ch)
             val useMirror = (forceMirror || consecutiveDropFailures >= 2) && allMirrors.isNotEmpty()
             val targetUrl = if (useMirror) {
                 silentFallbackAttemptedForUrl = ch.url
@@ -3814,21 +3851,49 @@ class MainActivity : AppCompatActivity() {
                     }
                     return
                 }
-                val isDecoderOr404 = (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
-                    error.errorCode == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED ||
-                    error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)
+                val isDecoderError = (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED)
+                val isBadHttpStatus = (error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS)
                 consecutiveDropFailures++
-                val errUrl = currentChannel?.url ?: ""
+                val chNow = currentChannel
+                val errUrl = chNow?.url ?: ""
                 if (antiBlockEnabled && !CoreEngines.isSingleSessionTokenUrl(errUrl)) {
                     userAgentIndex = (userAgentIndex + 1) % CoreEngines.russianSmartTvAgents.size
                 }
-                if (isDecoderOr404 && silentFallbackAttemptedForUrl == currentChannel?.url) {
-                    CoreEngines.appendDiagLog("DECODER_STOP", "Поток '${currentChannel?.name}' требует FFmpeg-кодек MP2/AC3 (нет AAC-зеркала)")
+                if (isDecoderError && silentFallbackAttemptedForUrl == errUrl) {
+                    streamRetriesExhausted = true
+                    CoreEngines.appendDiagLog("DECODER_STOP", "Поток '${chNow?.name}' требует FFmpeg-кодек MP2/AC3 (нет AAC-зеркала)")
                     return
                 }
-                pendingForceMirror = isDecoderOr404
+                val mirrorsCount = chNow?.let { collectMirrorsForChannel(it).size } ?: 0
+                val maxAttempts = if (isBadHttpStatus) {
+                    (mirrorsCount + 1).coerceIn(2, 4)
+                } else {
+                    (mirrorsCount + 2).coerceIn(3, 5)
+                }
+                if (consecutiveDropFailures > maxAttempts) {
+                    streamRetriesExhausted = true
+                    uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
+                    CoreEngines.appendDiagLog(
+                        "RECONNECT_STOP",
+                        "ch='${chNow?.name}' drops=$consecutiveDropFailures code=${error.errorCodeName} — лимит попыток ($maxAttempts) исчерпан"
+                    )
+                    if (onDropBehavior == 1) {
+                        consecutiveDropFailures = 0
+                        switchChannelByOffset(+1)
+                    }
+                    return
+                }
+                val tryMirrorNow = (isDecoderError || isBadHttpStatus) && mirrorsCount > 0
+                val delayMs = when {
+                    tryMirrorNow && consecutiveDropFailures == 1 -> 350L
+                    consecutiveDropFailures == 1 -> 650L
+                    consecutiveDropFailures == 2 -> 1800L
+                    else -> 3200L
+                }
+                pendingForceMirror = (isDecoderError || isBadHttpStatus)
                 uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
-                uiHandler.postDelayed(pendingErrorReconnectRunnable, if (isDecoderOr404) 250L else 900L)
+                uiHandler.postDelayed(pendingErrorReconnectRunnable, delayMs)
             }
         })
 
@@ -4117,21 +4182,16 @@ class MainActivity : AppCompatActivity() {
         val width = vFormat?.width ?: p.videoSize.width
         val height = vFormat?.height ?: p.videoSize.height
         val fps = if (vFormat != null && vFormat.frameRate > 0) String.format(Locale.US, " %.0f fps", vFormat.frameRate) else ""
-        val vCodec = vFormat?.sampleMimeType?.substringAfter("/")?.uppercase() ?: "Анализ..."
+        val resText = if (width > 0 && height > 0) "${width}x${height}$fps" else "Анализ..."
         val vBitrate = if (vFormat != null && vFormat.bitrate > 0) String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f) else "Адаптивный HLS"
         val bufSec = String.format(Locale.US, "%.1f", (p.totalBufferedDuration / 1000f))
-
-        val (epg, _) = getCurrentAndNextEpg(ch)
-        val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val epgText = if (epg != null) "Сейчас: ${timeFmt.format(Date(epg.startMs))}–${timeFmt.format(Date(epg.stopMs))} • ${epg.title}" else ""
 
         val lines = listOf(
             "Канал: " + (ch?.name ?: "-"),
             "Группа: " + (if (ch != null) effectiveCategory(ch) else "-"),
-            "Разрешение: ${width}x${height}$fps ($vCodec)",
+            "Разрешение: $resText",
             "Поток: $vBitrate",
-            "Буфер: $bufSec сек",
-            epgText
+            "Буфер: $bufSec сек"
         )
         for (i in infoRowViews.indices) {
             val txt = lines.getOrElse(i) { "" }
@@ -4612,7 +4672,9 @@ class MainActivity : AppCompatActivity() {
         silentFallbackAttemptedForUrl = ""
         mirrorCycleIndex = 0
         lowSignalStuckSeconds = 0
+        continuousBufferingTicks = 0
         consecutiveDropFailures = 0
+        streamRetriesExhausted = false
 
         refreshChannelAdapter()
 
