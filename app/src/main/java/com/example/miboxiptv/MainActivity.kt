@@ -2,6 +2,10 @@ package com.example.miboxiptv
 
 import android.animation.ValueAnimator
 import android.app.Activity
+import android.app.DownloadManager
+import android.content.ContentValues
+import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
@@ -81,6 +85,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.FileReader
 import java.io.InputStream
+import java.io.StringReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.Collator
@@ -1342,7 +1347,7 @@ class MainActivity : AppCompatActivity() {
             "[>]   Машина времени   •   Отмотать эфир на -30 сек",
             sleepRow,
             "[>]   Телепрограмма EPG   •   Обновить расписание сейчас",
-            "[>]   Диагностический лог (${CoreEngines.getDiagLogStatusText()})   •   Просмотр и экспорт",
+            "[>]   Диагностический файл (${formatDiagFileSize()})",
             "[>]   Обновление TiViLook   •   Проверить и установить с GitHub"
         )
         updateSubModalListItems(items, smoothToggle = inPlace, preservePositionIndex = keepIndex)
@@ -1366,7 +1371,7 @@ class MainActivity : AppCompatActivity() {
                 11 -> { rewindLiveBufferSeconds(30); closeAllMenus() }
                 12 -> navigateToMenu("POWER_AND_SLEEP_MENU")
                 13 -> { loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu() }
-                14 -> navigateToMenu("DIAG_LOG_VIEW")
+                14 -> openDiagLogInSystemFileManager()
                 15 -> checkAndInstallAppUpdateFromGithub()
             }
         }
@@ -1376,48 +1381,267 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun formatByteSizeRu(bytes: Long): String {
+        if (bytes <= 0L) return "0 КБ"
+        return when {
+            bytes < 1024L -> "$bytes Б"
+            bytes < 1024L * 1024L -> "${(bytes / 1024L).coerceAtLeast(1L)} КБ"
+            else -> String.format(Locale.US, "%.1f МБ", bytes / (1024.0 * 1024.0))
+        }
+    }
+
+    private fun formatDiagFileSize(): String {
+        try {
+            val dirs = listOfNotNull(filesDir, getExternalFilesDir(null), cacheDir, externalCacheDir)
+            var bestBytes = 0L
+            for (d in dirs) {
+                val exact = File(d, "TiViLook_diag.txt")
+                if (exact.exists() && exact.length() > bestBytes) bestBytes = exact.length()
+                d.listFiles()?.forEach { f ->
+                    if (f.isFile && f.name.contains("diag", ignoreCase = true) && f.length() > bestBytes) {
+                        bestBytes = f.length()
+                    }
+                }
+            }
+            if (bestBytes > 0L) return formatByteSizeRu(bestBytes)
+        } catch (_: Exception) {}
+        val status = CoreEngines.getDiagLogStatusText()
+        val m = Regex("\\d+(?:[.,]\\d+)?\\s*(?:КБ|МБ|ГБ|Б|KB|MB|B)", RegexOption.IGNORE_CASE).find(status)
+        return m?.value?.trim() ?: "0 КБ"
+    }
+
+    private fun openDiagLogInSystemFileManager() {
+        val exportedInfo = try {
+            CoreEngines.exportDiagLogToPublicDownloads(this)
+        } catch (_: Exception) {
+            ""
+        }
+        val toastMsg = if (exportedInfo.isNotBlank()) {
+            "Файл сохранён: $exportedInfo"
+        } else {
+            "Открытие папки Download..."
+        }
+        Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
+
+        val downloadDocUri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload")
+
+        // 1. Системный файловый менеджер (DocumentsUI) прямо в папке Download
+        try {
+            val dirIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(downloadDocUri, "vnd.android.document/directory")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(dirIntent)
+            return
+        } catch (_: Exception) {}
+
+        // 2. Системное приложение «Загрузки / Файлы»
+        try {
+            val dlIntent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(dlIntent)
+            return
+        } catch (_: Exception) {}
+
+        // 3. Системный выбор документов, открытый на папке Download
+        try {
+            val docIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "text/plain"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    putExtra(DocumentsContract.EXTRA_INITIAL_URI, downloadDocUri)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(docIntent)
+            return
+        } catch (_: Exception) {}
+
+        // 4. Запасной вариант (для ТВ-приставок без системного файлового менеджера)
+        navigateToMenu("DIAG_LOG_VIEW")
+    }
+
+    private fun findLatestApkFromReleaseJson(rel: JSONObject): Pair<String, String>? {
+        val tagName = rel.optString("tag_name", "").trim()
+        val assets = rel.optJSONArray("assets") ?: return null
+        for (i in 0 until assets.length()) {
+            val asset = assets.optJSONObject(i) ?: continue
+            val url = asset.optString("browser_download_url", "").trim()
+            val name = asset.optString("name", "").trim()
+            if (url.endsWith(".apk", true) || name.endsWith(".apk", true)) {
+                val cleanTag = tagName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                val safeName = name.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifBlank {
+                    if (cleanTag.isNotEmpty()) "TiViLook_$cleanTag.apk" else "TiViLook_update.apk"
+                }
+                return Pair(url, if (safeName.endsWith(".apk", true)) safeName else "$safeName.apk")
+            }
+        }
+        return null
+    }
+
+    private fun downloadApkFallbackDirect(apkUrl: String, fileName: String): Boolean {
+        return try {
+            val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
+                setRequestProperty("User-Agent", "TiViLook-Updater")
+                instanceFollowRedirects = true
+                connectTimeout = 12000
+                readTimeout = 30000
+            }
+            if (conn.responseCode !in 200..299) {
+                conn.disconnect()
+                return false
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
+                conn.inputStream.use { input ->
+                    contentResolver.openOutputStream(uri)?.use { output ->
+                        input.copyTo(output)
+                    } ?: return false
+                }
+                values.clear()
+                values.put(MediaStore.Downloads.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+                true
+            } else {
+                val dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+                val outFile = File(dir, fileName)
+                conn.inputStream.use { input ->
+                    FileOutputStream(outFile).use { output -> input.copyTo(output) }
+                }
+                outFile.exists() && outFile.length() > 0L
+            }
+        } catch (e: Exception) {
+            CoreEngines.appendDiagLog("UPDATE_ERR", "Direct download fail: ${e.message}")
+            false
+        }
+    }
+
     private fun checkAndInstallAppUpdateFromGithub() {
         Toast.makeText(this, "Поиск новой сборки TiViLook...", Toast.LENGTH_SHORT).show()
         thread {
             try {
-                val apiConn = URL("https://api.github.com/repos/pskovland007/IPtv/releases/latest").openConnection() as HttpURLConnection
-                apiConn.setRequestProperty("Accept", "application/vnd.github+json")
-                apiConn.connectTimeout = 8000; apiConn.readTimeout = 8000
-                if (apiConn.responseCode == 200) {
-                    val json = JSONObject(apiConn.inputStream.bufferedReader().readText())
-                    val tagName = json.optString("tag_name", "")
-                    val htmlUrl = json.optString("html_url", "https://github.com/pskovland007/IPtv/releases/latest")
-                    val assets = json.optJSONArray("assets")
-                    var apkUrl = ""
-                    if (assets != null) {
-                        for (i in 0 until assets.length()) {
-                            val asset = assets.getJSONObject(i)
-                            val url = asset.optString("browser_download_url", "")
-                            if (url.endsWith(".apk", true)) {
-                                apkUrl = url
+                var found: Pair<String, String>? = null
+                // 1. Проверяем последний стабильный релиз
+                try {
+                    val latestConn = (URL("https://api.github.com/repos/pskovland007/IPtv/releases/latest").openConnection() as HttpURLConnection).apply {
+                        setRequestProperty("Accept", "application/vnd.github+json")
+                        setRequestProperty("User-Agent", "TiViLook-Updater")
+                        connectTimeout = 8000; readTimeout = 8000
+                    }
+                    if (latestConn.responseCode == 200) {
+                        val json = JSONObject(latestConn.inputStream.bufferedReader().readText())
+                        found = findLatestApkFromReleaseJson(json)
+                    }
+                    latestConn.disconnect()
+                } catch (_: Exception) {}
+
+                // 2. Если в /latest нет APK (например, pre-release) — ищем в последних 10 релизах
+                if (found == null) {
+                    val listConn = (URL("https://api.github.com/repos/pskovland007/IPtv/releases?per_page=10").openConnection() as HttpURLConnection).apply {
+                        setRequestProperty("Accept", "application/vnd.github+json")
+                        setRequestProperty("User-Agent", "TiViLook-Updater")
+                        connectTimeout = 8000; readTimeout = 8000
+                    }
+                    if (listConn.responseCode == 200) {
+                        val arr = JSONArray(listConn.inputStream.bufferedReader().readText())
+                        for (i in 0 until arr.length()) {
+                            val rel = arr.optJSONObject(i) ?: continue
+                            val hit = findLatestApkFromReleaseJson(rel)
+                            if (hit != null) {
+                                found = hit
                                 break
                             }
                         }
                     }
-                    val targetUrl = if (apkUrl.isNotEmpty()) apkUrl else htmlUrl
+                    listConn.disconnect()
+                }
+
+                val target = found
+                if (target == null) {
+                    CoreEngines.appendDiagLog("UPDATE", "APK не найден в релизах GitHub")
                     runOnUiThread {
-                        try {
-                            val msg = if (apkUrl.isNotEmpty()) {
-                                "Загрузка APK${if (tagName.isNotEmpty()) " ($tagName)" else ""}..."
-                            } else {
-                                "Открытие страницы релиза..."
+                        Toast.makeText(this, "В релизах GitHub пока нет готового APK", Toast.LENGTH_LONG).show()
+                    }
+                    return@thread
+                }
+
+                val (apkUrl, apkFileName) = target
+                CoreEngines.appendDiagLog("UPDATE", "Старт автозагрузки APK: $apkFileName ($apkUrl)")
+
+                // Скачиваем напрямую через системный DownloadManager (без открытия сайта GitHub)
+                var queuedId = -1L
+                val dm = getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                if (dm != null) {
+                    try {
+                        val req = DownloadManager.Request(Uri.parse(apkUrl)).apply {
+                            setTitle(apkFileName)
+                            setDescription("Загрузка обновления TiViLook")
+                            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                            setAllowedOverMetered(true)
+                            setAllowedOverRoaming(true)
+                            addRequestHeader("User-Agent", "TiViLook-Updater")
+                            try {
+                                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, apkFileName)
+                            } catch (_: Exception) {
+                                setDestinationInExternalFilesDir(this@MainActivity, Environment.DIRECTORY_DOWNLOADS, apkFileName)
                             }
-                            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)))
-                        } catch (_: Exception) {
-                            Toast.makeText(this, "Не удалось открыть загрузку обновления", Toast.LENGTH_SHORT).show()
+                        }
+                        queuedId = dm.enqueue(req)
+                    } catch (e: Exception) {
+                        CoreEngines.appendDiagLog("UPDATE_ERR", "DownloadManager error: ${e.message}")
+                        queuedId = -1L
+                    }
+                }
+
+                if (queuedId > 0L && dm != null) {
+                    runOnUiThread {
+                        Toast.makeText(this, "Скачивание $apkFileName в папку Download...", Toast.LENGTH_LONG).show()
+                    }
+                    // Отслеживаем завершение загрузки в фоне (до 2 минут)
+                    val deadline = System.currentTimeMillis() + 120_000L
+                    while (System.currentTimeMillis() < deadline) {
+                        try { Thread.sleep(1500L) } catch (_: Exception) { break }
+                        val q = DownloadManager.Query().setFilterById(queuedId)
+                        var status = -1
+                        dm.query(q)?.use { c ->
+                            if (c.moveToFirst()) {
+                                val col = c.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                                if (col >= 0) status = c.getInt(col)
+                            }
+                        }
+                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                            runOnUiThread {
+                                Toast.makeText(this, "Обновление скачано в Download: $apkFileName", Toast.LENGTH_LONG).show()
+                            }
+                            break
+                        } else if (status == DownloadManager.STATUS_FAILED) {
+                            val directOk = downloadApkFallbackDirect(apkUrl, apkFileName)
+                            runOnUiThread {
+                                val msg = if (directOk) "Обновление скачано в Download: $apkFileName" else "Ошибка скачивания обновления"
+                                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                            }
+                            break
                         }
                     }
                 } else {
-                    runOnUiThread { Toast.makeText(this, "У вас установлена актуальная версия", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread {
+                        Toast.makeText(this, "Скачивание $apkFileName...", Toast.LENGTH_LONG).show()
+                    }
+                    val directOk = downloadApkFallbackDirect(apkUrl, apkFileName)
+                    runOnUiThread {
+                        val msg = if (directOk) "Обновление скачано в Download: $apkFileName" else "Не удалось скачать APK обновления"
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                    }
                 }
-            } catch (_: Exception) {
-                runOnUiThread { Toast.makeText(this, "Проверка завершена: установлена актуальная версия", Toast.LENGTH_SHORT).show() }
+            } catch (e: Exception) {
+                CoreEngines.appendDiagLog("UPDATE_ERR", "Exception: ${e.message}")
+                runOnUiThread { Toast.makeText(this, "Ошибка проверки обновлений", Toast.LENGTH_SHORT).show() }
             }
         }
     }
@@ -3761,7 +3985,7 @@ class MainActivity : AppCompatActivity() {
             }
             allChannels.forEach { cand ->
                 val u = cand.url.substringBefore("#")
-                if (u != cleanUrl && !autoDisabledUrls.contains(cand.url) && !isBlockedCastChannel(cand.name, u, cand.category) &&
+                if (u != cleanUrl && !autoDisabledUrls.contains(cand.url) && !isBlockedCastChannel(cand.name, u, cand.category, cand.tvgId) &&
                     (canonicalDedupKey(cand.name) == canonTarget || CoreEngines.normalizeName(cand.name) == normTarget)
                 ) {
                     add(u)
@@ -4325,10 +4549,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val regexSafeCastWords = Regex(
-        "(broad|pod|multi|uni|simul|news|sports|tele|fore|out|over|type|re|down|up)cast[a-z]*",
-        RegexOption.IGNORE_CASE
-    )
+    private val regexSafeCastWords = Regex("broadcast[a-z]*", RegexOption.IGNORE_CASE)
     private val regexBracketQualityOrDup = Regex(
         "[\\(\\[]\\s*(?:\\d{1,2}|2160p?|1440p?|1080[pi]?|720p?|576p?|540p?|480p?|360p?|240p?|4k|2k|uhd|fhd|full\\s*hd|hd|хд|hq|sd|orig|ориг(?:инал)?|резерв|основн\\w*|прямой(?:\\s+cdn)?|geo[- ]?blocked|not\\s*24/7)\\s*[\\)\\]]",
         RegexOption.IGNORE_CASE
@@ -4339,11 +4560,66 @@ class MainActivity : AppCompatActivity() {
     )
     private val regexTrailingDupNumber = Regex("\\s*[\\(\\[]\\s*\\d{1,2}\\s*[\\)\\]]\\s*$")
 
-    internal fun isBlockedCastChannel(name: String, url: String, group: String = ""): Boolean {
-        val combined = "$name $url $group".lowercase(Locale.getDefault())
-        if (combined.contains("catcast") || combined.contains("кэткаст") || combined.contains("каткаст")) return true
+    private fun normalizeCastHomoglyphs(text: String): String {
+        val sb = StringBuilder(text.length)
+        for (ch in text) {
+            sb.append(
+                when (ch) {
+                    'с' -> 'c'
+                    'а' -> 'a'
+                    'е' -> 'e'
+                    'о' -> 'o'
+                    'т' -> 't'
+                    'к' -> 'k'
+                    else -> ch
+                }
+            )
+        }
+        return sb.toString()
+    }
+
+    internal fun isBlockedCastChannel(name: String, url: String, group: String = "", tvgId: String = ""): Boolean {
+        val combined = "$name $url $group $tvgId".lowercase(Locale.getDefault())
+        if (combined.contains("catcast") || combined.contains("cat-cast") || combined.contains("cat_cast") ||
+            combined.contains("каст") || combined.contains("кэст") || combined.contains("kast")
+        ) {
+            return true
+        }
         val cleaned = regexSafeCastWords.replace(combined, " ")
-        return cleaned.contains("cast")
+        if (cleaned.contains("cast")) return true
+        val homoglyphCleaned = regexSafeCastWords.replace(normalizeCastHomoglyphs(combined), " ")
+        return homoglyphCleaned.contains("cast")
+    }
+
+    private fun stripCastEntriesFromM3uReader(reader: BufferedReader): BufferedReader {
+        val out = StringBuilder(16384)
+        out.append("#EXTM3U\n")
+        var pendingInf = ""
+        var pendingGrp = ""
+        var line = reader.readLine()
+        while (line != null) {
+            val l = line.trim()
+            when {
+                l.startsWith("#EXTINF", ignoreCase = true) -> {
+                    pendingInf = l
+                    pendingGrp = ""
+                }
+                l.startsWith("#EXTGRP:", ignoreCase = true) -> {
+                    pendingGrp = l
+                }
+                l.startsWith("http://", ignoreCase = true) || l.startsWith("https://", ignoreCase = true) || l.startsWith("rtmp://", ignoreCase = true) -> {
+                    if (!isBlockedCastChannel(pendingInf, l, pendingGrp, "")) {
+                        if (pendingInf.isNotEmpty()) out.append(pendingInf).append('\n')
+                        if (pendingGrp.isNotEmpty()) out.append(pendingGrp).append('\n')
+                        out.append(l).append('\n')
+                    }
+                    pendingInf = ""
+                    pendingGrp = ""
+                }
+            }
+            line = reader.readLine()
+        }
+        return BufferedReader(StringReader(out.toString()))
     }
 
     internal fun canonicalDedupKey(rawName: String): String {
@@ -4399,7 +4675,7 @@ class MainActivity : AppCompatActivity() {
         var orderCounter = 0
 
         for ((rawCh, isCurated) in candidates) {
-            if (isBlockedCastChannel(rawCh.name, rawCh.url, rawCh.category)) continue
+            if (isBlockedCastChannel(rawCh.name, rawCh.url, rawCh.category, rawCh.tvgId)) continue
             val cleanMirrorUrl = rawCh.url.substringBefore("#").trim()
             val cleanUrlKey = cleanMirrorUrl.lowercase(Locale.getDefault())
             if (cleanUrlKey.isEmpty() || !seenUrls.add(cleanUrlKey)) continue
@@ -4454,6 +4730,12 @@ class MainActivity : AppCompatActivity() {
         if (manualDisabledUrls.contains(ch.url)) return false
         if (disabledCategories.contains(effectiveCategory(ch))) return false
         if (autoDisabledUrls.contains(ch.url)) return false
+        val activeSrc = playlists.getOrNull(activePlaylistIndex)?.source
+        if ((activeSrc == "BUILTIN_OPEN_RU" || activeSrc == "BUILTIN_STRICT_RU_ONLY") &&
+            isBlockedCastChannel(ch.name, ch.url, ch.category, ch.tvgId)
+        ) {
+            return false
+        }
         return true
     }
 
@@ -4478,34 +4760,37 @@ class MainActivity : AppCompatActivity() {
                 if (strictRuOnly && !CoreEngines.isStrictlyRussianChannel(extra.name, extra.url, extra.category)) continue
                 val cleanTitle = CoreEngines.cleanChannelDisplayName(extra.name)
                 val cat = customCategoryMap[extra.url] ?: extra.category
-                if (isBlockedCastChannel(cleanTitle, extra.url, cat)) continue
+                if (isBlockedCastChannel(cleanTitle, extra.url, cat, extra.tvgId)) continue
                 curatedRaw.add(Pair(Channel(cleanTitle, extra.url, cat, extra.tvgId), true))
             }
 
-            // Чистим устаревший кэш v16 (мог содержать дубликаты и cast-потоки) и используем v17
+            // Чистим устаревшие кэши v16/v17 и используем v18 (полностью без cast и дублей)
             try { File(filesDir, "open_catalog_cache_v16.m3u").delete() } catch (_: Exception) {}
-            val cacheFile = File(filesDir, "open_catalog_cache_v17.m3u")
+            try { File(filesDir, "open_catalog_cache_v17.m3u").delete() } catch (_: Exception) {}
+            val cacheFile = File(filesDir, "open_catalog_cache_v18.m3u")
             val startupCandidates = ArrayList<Pair<Channel, Boolean>>(curatedRaw)
             var cachedRawCount = 0
             if (cacheFile.exists() && cacheFile.length() > 100L) {
                 try {
                     val cachedMap = LinkedHashMap<String, Channel>()
-                    cacheFile.bufferedReader().use { br ->
-                        CoreEngines.parseM3uReaderIntoMap(
-                            reader = br,
-                            targetMap = cachedMap,
-                            customCategoryMap = customCategoryMap,
-                            filterBuiltinRules = true,
-                            onlyRussianAllCategories = strictRuOnly,
-                            keepOriginalGroups = false
-                        )
+                    cacheFile.bufferedReader().use { rawBr ->
+                        stripCastEntriesFromM3uReader(rawBr).use { br ->
+                            CoreEngines.parseM3uReaderIntoMap(
+                                reader = br,
+                                targetMap = cachedMap,
+                                customCategoryMap = customCategoryMap,
+                                filterBuiltinRules = true,
+                                onlyRussianAllCategories = strictRuOnly,
+                                keepOriginalGroups = false
+                            )
+                        }
                     }
                     for (ch in cachedMap.values) {
-                        if (isBlockedCastChannel(ch.name, ch.url, ch.category)) continue
+                        if (isBlockedCastChannel(ch.name, ch.url, ch.category, ch.tvgId)) continue
                         startupCandidates.add(Pair(ch, false))
                         cachedRawCount++
                     }
-                    CoreEngines.appendDiagLog("CACHE_LOAD", "Из кэша v17 загружено кандидатов: $cachedRawCount")
+                    CoreEngines.appendDiagLog("CACHE_LOAD", "Из кэша v18 загружено кандидатов: $cachedRawCount")
                 } catch (_: Exception) {}
             }
 
@@ -4555,15 +4840,17 @@ class MainActivity : AppCompatActivity() {
                         val shortName = srcUrl.substringAfter("://").take(44)
                         try {
                             val localMap = LinkedHashMap<String, Channel>()
-                            CoreEngines.openStreamWithBypass(srcUrl, userAgentIndex, dohEnabled, 7500).bufferedReader().use { reader ->
-                                CoreEngines.parseM3uReaderIntoMap(
-                                    reader = reader,
-                                    targetMap = localMap,
-                                    customCategoryMap = customCategoryMap,
-                                    filterBuiltinRules = true,
-                                    onlyRussianAllCategories = strictRuOnly,
-                                    keepOriginalGroups = false
-                                )
+                            CoreEngines.openStreamWithBypass(srcUrl, userAgentIndex, dohEnabled, 7500).bufferedReader().use { rawReader ->
+                                stripCastEntriesFromM3uReader(rawReader).use { reader ->
+                                    CoreEngines.parseM3uReaderIntoMap(
+                                        reader = reader,
+                                        targetMap = localMap,
+                                        customCategoryMap = customCategoryMap,
+                                        filterBuiltinRules = true,
+                                        onlyRussianAllCategories = strictRuOnly,
+                                        keepOriginalGroups = false
+                                    )
+                                }
                             }
                             perSourceResults[srcIdx] = localMap.values.toList()
                             CoreEngines.appendDiagLog("SRC_LOAD", "OK $shortName -> ${localMap.size} кан.")
@@ -4585,7 +4872,7 @@ class MainActivity : AppCompatActivity() {
                     if (list == null) continue
                     for (ch in list) {
                         fetchedTotal++
-                        if (isBlockedCastChannel(ch.name, ch.url, ch.category)) {
+                        if (isBlockedCastChannel(ch.name, ch.url, ch.category, ch.tvgId)) {
                             castBlockedTotal++
                             continue
                         }
@@ -4604,7 +4891,7 @@ class MainActivity : AppCompatActivity() {
 
                 // Сохраняем свежий очищенный каталог в локальный кэш v17
                 try {
-                    val tmp = File(filesDir, "open_catalog_cache_v17.tmp")
+                    val tmp = File(filesDir, "open_catalog_cache_v18.tmp")
                     tmp.bufferedWriter().use { bw ->
                         bw.write("#EXTM3U\n")
                         for (c in cacheChannels) {
