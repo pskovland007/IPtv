@@ -1,86 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="320dp"
     android:height="180dp"
     android:viewportWidth="320"
     android:viewportHeight="180">
-
-    <!-- Глубокий градиентный фон на весь широкоформатный баннер 16:9 -->
-    <path android:pathData="M0,0 L320,0 L320,180 L0,180 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:startX="0"
-                android:startY="0"
-                android:endX="320"
-                android:endY="180"
-                android:type="linear">
-                <item android:offset="0.0" android:color="#FF0E1B3A" />
-                <item android:offset="0.52" android:color="#FF152952" />
-                <item android:offset="1.0" android:color="#FF0B142B" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Декоративная световая волна на фоне -->
-    <path
-        android:fillColor="#1800E5FF"
-        android:pathData="M0,122 C85,95 210,152 320,108 L320,180 L0,180 Z" />
-    <path
-        android:fillColor="#167C4DFF"
-        android:pathData="M0,148 C115,120 225,168 320,136 L320,180 L0,180 Z" />
-
-    <!-- Крупный фирменный глаз TiViLook слева -->
-    <group android:translateX="10" android:translateY="26">
-        <path
-            android:fillColor="#FF070C17"
-            android:strokeColor="#FF00E5FF"
-            android:strokeWidth="3.5"
-            android:pathData="M10,64 C32,24 88,24 110,64 C88,104 32,104 10,64 Z" />
-        <path
-            android:fillColor="#FFF0F7FA"
-            android:pathData="M18,64 C37,32 83,32 102,64 C83,96 37,96 18,64 Z" />
-        <path
-            android:fillColor="#FF00E5FF"
-            android:pathData="M60,39 A25,25 0 0,1 85,64 L60,64 Z" />
-        <path
-            android:fillColor="#FF00BFA5"
-            android:pathData="M85,64 A25,25 0 0,1 60,89 L60,64 Z" />
-        <path
-            android:fillColor="#FFFFB300"
-            android:pathData="M60,89 A25,25 0 0,1 35,64 L60,64 Z" />
-        <path
-            android:fillColor="#FF7C4DFF"
-            android:pathData="M35,64 A25,25 0 0,1 60,39 L60,64 Z" />
-        <path
-            android:fillColor="#FF05080F"
-            android:pathData="M60,51 A13,13 0 1,1 59.99,51 Z" />
-        <path
-            android:fillColor="#FFFFFFFF"
-            android:pathData="M66,55 A4.2,4.2 0 1,1 65.99,55 Z" />
+    <path android:pathData="M0,0 L320,0 L320,180 L0,180 Z" android:fillColor="#0A3F52" />
+    <path android:pathData="M160.00,96.00 L411.14,28.71 L411.14,163.29 Z" android:fillColor="#0A3F52" />
+    <path android:pathData="M160.00,96.00 L411.14,163.29 L343.85,279.85 Z" android:fillColor="#E6C87A" />
+    <path android:pathData="M160.00,96.00 L343.85,279.85 L227.29,347.14 Z" android:fillColor="#0A3F52" />
+    <path android:pathData="M160.00,96.00 L227.29,347.14 L92.71,347.14 Z" android:fillColor="#009688" />
+    <path android:pathData="M160.00,96.00 L92.71,347.14 L-23.85,279.85 Z" android:fillColor="#0A3F52" />
+    <path android:pathData="M160.00,96.00 L-23.85,279.85 L-91.14,163.29 Z" android:fillColor="#009688" />
+    <path android:pathData="M160.00,96.00 L-91.14,163.29 L-91.14,28.71 Z" android:fillColor="#0A3F52" />
+    <path android:pathData="M160.00,96.00 L-91.14,28.71 L-23.85,-87.85 Z" android:fillColor="#009688" />
+    <path android:pathData="M160.00,96.00 L-23.85,-87.85 L92.71,-155.14 Z" android:fillColor="#0A3F52" />
+    <path android:pathData="M160.00,96.00 L92.71,-155.14 L227.29,-155.14 Z" android:fillColor="#009688" />
+    <path android:pathData="M160.00,96.00 L227.29,-155.14 L343.85,-87.85 Z" android:fillColor="#0A3F52" />
+    <path android:pathData="M160.00,96.00 L343.85,-87.85 L411.14,28.71 Z" android:fillColor="#E6C87A" />
+    <path android:pathData="M167.80,60.72 C174.04,40.14 169.36,25.44 160.00,31.32" android:strokeColor="#0B1320" android:strokeWidth="4.31" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M186.52,66.60 C197.44,48.96 197.44,34.26 187.30,38.18" android:strokeColor="#0B1320" android:strokeWidth="4.31" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M203.68,75.42 C217.72,62.68 220.84,49.94 211.48,52.88" android:strokeColor="#0B1320" android:strokeWidth="4.31" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <group>
+        <clip-path android:pathData="M82.00,96.00 Q160.00,23.48 238.00,96.00 Q160.00,168.52 82.00,96.00 Z" />
+        <path android:pathData="M82.00,96.00 Q160.00,23.48 238.00,96.00 Q160.00,168.52 82.00,96.00 Z" android:fillColor="#F7F9FC" />
+        <path android:pathData="M160.00,96.00 L126.85,83.93 A35.28,35.28 0 0,1 160.00,60.72 Z" android:fillColor="#1E88E5" />
+        <path android:pathData="M160.00,96.00 L160.00,60.72 A35.28,35.28 0 0,1 190.55,78.36 Z" android:fillColor="#00B8D4" />
+        <path android:pathData="M160.00,96.00 L190.55,78.36 A35.28,35.28 0 0,1 188.90,116.24 Z" android:fillColor="#7C4DFF" />
+        <path android:pathData="M160.00,96.00 L188.90,116.24 A35.28,35.28 0 0,1 160.00,131.28 Z" android:fillColor="#FFD54F" />
+        <path android:pathData="M160.00,96.00 L160.00,131.28 A35.28,35.28 0 0,1 126.85,83.93 Z" android:fillColor="#00BFA5" />
+        <path android:pathData="M124.72,96.00 a35.28,35.28 0 1,0 70.56,0 a35.28,35.28 0 1,0 -70.56,0" android:fillColor="#00000000" android:strokeColor="#0B1320" android:strokeWidth="4.17" />
+        <path android:pathData="M143.07,96.00 a16.93,16.93 0 1,0 33.87,0 a16.93,16.93 0 1,0 -33.87,0" android:fillColor="#0B1320" />
+        <path android:pathData="M160.34,90.24 a5.76,5.76 0 1,0 11.52,0 a5.76,5.76 0 1,0 -11.52,0" android:fillColor="#FFFFFF" />
     </group>
-
-    <!-- Крупная чистая типографика TiViLook справа -->
-    <group android:translateX="136" android:translateY="64">
-        <!-- T -->
-        <path android:fillColor="#FFFFFFFF" android:pathData="M0,4 L20,4 L20,10.5 L13,10.5 L13,42 L7,42 L7,10.5 L0,10.5 Z" />
-        <!-- i -->
-        <path android:fillColor="#FF00E5FF" android:pathData="M24,4 L30,4 L30,10 L24,10 Z" />
-        <path android:fillColor="#FFFFFFFF" android:pathData="M24,14.5 L30,14.5 L30,42 L24,42 Z" />
-        <!-- V -->
-        <path android:fillColor="#FFFFFFFF" android:pathData="M34,4 L40.5,4 L46.5,31 L52.5,4 L59,4 L49.5,42 L43.5,42 Z" />
-        <!-- i -->
-        <path android:fillColor="#FF00E5FF" android:pathData="M62.5,4 L68.5,4 L68.5,10 L62.5,10 Z" />
-        <path android:fillColor="#FFFFFFFF" android:pathData="M62.5,14.5 L68.5,14.5 L68.5,42 L62.5,42 Z" />
-        <!-- L -->
-        <path android:fillColor="#FF00E5FF" android:pathData="M74,4 L80.5,4 L80.5,35.5 L93,35.5 L93,42 L74,42 Z" />
-        <!-- o #1 -->
-        <path android:fillColor="#FF00E5FF" android:pathData="M106,14 C113,14 117.5,19.5 117.5,28 C117.5,36.5 113,42 106,42 C99,42 94.5,36.5 94.5,28 C94.5,19.5 99,14 106,14 Z M106,20 C102.3,20 100.3,23 100.3,28 C100.3,33 102.3,36 106,36 C109.7,36 111.7,33 111.7,28 C111.7,23 109.7,20 106,20 Z" />
-        <!-- o #2 -->
-        <path android:fillColor="#FF00E5FF" android:pathData="M132,14 C139,14 143.5,19.5 143.5,28 C143.5,36.5 139,42 132,42 C125,42 120.5,36.5 120.5,28 C120.5,19.5 125,14 132,14 Z M132,20 C128.3,20 126.3,23 126.3,28 C126.3,33 128.3,36 132,36 C135.7,36 137.7,33 137.7,28 C137.7,23 135.7,20 132,20 Z" />
-        <!-- k -->
-        <path android:fillColor="#FF00E5FF" android:pathData="M148,4 L154,4 L154,25 L162,14.5 L169.5,14.5 L159.5,27 L170,42 L162.5,42 L154,29.5 L154,42 L148,42 Z" />
-        <!-- Подчёркивание-акцент -->
-        <path android:fillColor="#FF00E5FF" android:pathData="M0,49 L169,49 L169,53 L0,53 Z" />
-    </group>
+    <path android:pathData="M82.00,96.00 Q160.00,23.48 238.00,96.00 Q160.00,168.52 82.00,96.00 Z" android:fillColor="#00000000" android:strokeColor="#0B1320" android:strokeWidth="8.09" android:strokeLineJoin="round" />
 </vector>
