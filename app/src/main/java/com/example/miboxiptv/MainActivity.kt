@@ -1062,123 +1062,163 @@ class MainActivity : AppCompatActivity() {
         subModalTopButtons.removeAllViews()
         subModalThemesGrid.removeAllViews()
         subModalThemesGrid.visibility = View.VISIBLE
+        subModalThemesGrid.orientation = LinearLayout.HORIZONTAL
+        subModalThemesGrid.gravity = Gravity.CENTER_VERTICAL
+        subModalThemesGrid.setBackgroundDrawable(makeThemedSubBg())
+        subModalThemesGrid.setPadding(16, 14, 18, 14)
 
         val curTheme = currentTheme()
         val scale = uiScaleFactor()
         val dm = resources.displayMetrics
-        val cols = 3
-        val totalRows = ((themes.size + cols - 1) / cols).coerceAtLeast(2)
-        val previewH = ((dm.heightPixels * 0.21f).toInt()).coerceIn(112, 210)
-        val cards = mutableListOf<LinearLayout>()
+        var previewedIdx = themeIndex.coerceIn(0, themes.lastIndex)
 
-        for (r in 0 until totalRows) {
-            val rowLayout = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-                weightSum = cols.toFloat()
-                clipChildren = false; clipToPadding = false
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { setMargins(0, 6, 0, 12) }
+        // Left column: tidy single-line list of themes
+        val leftScroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = (themes.size > 7)
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.44f).apply {
+                rightMargin = 18
             }
-            for (c in 0 until cols) {
-                val idx = r * cols + c
-                if (idx < themes.size) {
-                    val th = themes[idx]
-                    val isSelected = (idx == themeIndex)
-                    val cardId = 8400 + idx
+        }
+        val leftList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(4, 4, 4, 4)
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER_VERTICAL
+            )
+        }
+        leftScroll.addView(leftList)
 
-                    val previewView = ThemePreviewIconView(this, th).apply {
-                        layoutParams = LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            previewH
-                        )
-                    }
-                    val captionTv = TextView(this).apply {
-                        text = th.name
-                        setTextColor(if (isSelected) curTheme.accentColor else curTheme.textPrimaryColor)
-                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f * scale)
-                        typeface = if (isSelected) curTheme.boldFont else curTheme.normalFont
-                        gravity = Gravity.CENTER
-                        isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
-                        setPadding(6, 10, 6, 4)
-                        layoutParams = LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT
-                        )
-                    }
+        // Right column: live framed 16:9 TV preview
+        val rightContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            clipChildren = false; clipToPadding = false
+            setPadding(12, 8, 12, 8)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.56f)
+        }
+        val maxPrevH = (dm.heightPixels * 0.48f).toInt().coerceIn(210, 440)
+        val livePreview = ThemeLivePreviewView(this, themes[previewedIdx]).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, maxPrevH)
+            setOnClickListener {
+                resetMenuInactivityTimer()
+                themeIndex = previewedIdx
+                saveState()
+                applyCurrentThemeToAllPanels()
+                navigateBackInMenu()
+            }
+        }
+        val previewCaption = TextView(this).apply {
+            text = themes[previewedIdx].name
+            setTextColor(curTheme.textPrimaryColor)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f * scale)
+            typeface = curTheme.boldFont
+            gravity = Gravity.CENTER
+            alpha = 0.85f
+            setPadding(0, 12, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        rightContainer.addView(livePreview)
+        rightContainer.addView(previewCaption)
 
-                    fun styleThemeCard(box: LinearLayout, focused: Boolean) {
-                        val activeAccent = currentTheme().accentColor
-                        val borderCol = when {
-                            focused -> activeAccent
-                            isSelected -> Color.argb(210, Color.red(activeAccent), Color.green(activeAccent), Color.blue(activeAccent))
-                            else -> Color.argb(95, Color.red(currentTheme().strokeColor), Color.green(currentTheme().strokeColor), Color.blue(currentTheme().strokeColor))
-                        }
-                        val fillCol = if (focused) {
-                            Color.argb(55, Color.red(activeAccent), Color.green(activeAccent), Color.blue(activeAccent))
-                        } else {
-                            Color.argb(145, Color.red(currentTheme().cardBgColor), Color.green(currentTheme().cardBgColor), Color.blue(currentTheme().cardBgColor))
-                        }
-                        box.setBackgroundDrawable(GradientDrawable().apply {
-                            setColor(fillCol)
-                            cornerRadius = 20f
-                            setStroke(if (focused) 4 else if (isSelected) 3 else 1, borderCol)
-                        })
-                        captionTv.setTextColor(if (focused || isSelected) activeAccent else currentTheme().textPrimaryColor)
-                        captionTv.typeface = if (focused || isSelected) currentTheme().boldFont else currentTheme().normalFont
-                        box.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(140L).start()
-                    }
+        val rowViews = mutableListOf<LinearLayout>()
+        val rowTexts = mutableListOf<TextView>()
+        val rowDots = mutableListOf<ThemeColorDotView>()
+        val rowH = exactModalRowHeightPx().coerceAtLeast(48)
+        val dotSize = (24 * scale).toInt().coerceIn(20, 34)
 
-                    val card = LinearLayout(this).apply {
-                        id = cardId
-                        orientation = LinearLayout.VERTICAL
-                        gravity = Gravity.CENTER_HORIZONTAL
-                        isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-                        setPadding(12, 12, 12, 10)
-                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                            setMargins(10, 6, 10, 6)
-                        }
-                        addView(previewView)
-                        addView(captionTv)
-                        styleThemeCard(this, false)
-                        setOnFocusChangeListener { _, hasFocus ->
-                            styleThemeCard(this, hasFocus)
-                            if (hasFocus) resetMenuInactivityTimer()
-                        }
-                        setOnClickListener {
-                            resetMenuInactivityTimer()
-                            themeIndex = idx
-                            saveState()
-                            applyCurrentThemeToAllPanels()
-                            navigateBackInMenu()
-                        }
-                    }
-                    cards.add(card)
-                    rowLayout.addView(card)
+        fun refreshThemeRows(activeIdx: Int) {
+            val ct = currentTheme()
+            for (i in rowViews.indices) {
+                val isHighlight = (i == activeIdx)
+                val isCurrent = (i == themeIndex)
+                val row = rowViews[i]
+                val tv = rowTexts[i]
+                val dot = rowDots[i]
+                dot.showCheck = isCurrent
+                dot.isOnAccentBg = isHighlight
+                if (isHighlight) {
+                    row.setBackgroundDrawable(GradientDrawable().apply {
+                        setColor(ct.accentColor)
+                        cornerRadius = 16f * scale
+                        setStroke(2, Color.WHITE)
+                    })
+                    tv.setTextColor(ct.textOnAccent)
+                    tv.typeface = ct.boldFont
                 } else {
-                    val spacer = View(this).apply {
-                        layoutParams = LinearLayout.LayoutParams(0, 1, 1f).apply { setMargins(10, 6, 10, 6) }
-                    }
-                    rowLayout.addView(spacer)
+                    row.setBackgroundDrawable(null)
+                    tv.setTextColor(ct.textPrimaryColor)
+                    tv.typeface = if (isCurrent) ct.boldFont else ct.normalFont
                 }
             }
-            subModalThemesGrid.addView(rowLayout)
+            livePreview.themeStyle = themes[activeIdx]
+            previewCaption.text = if (activeIdx == themeIndex) "${themes[activeIdx].name}  •  Активна" else themes[activeIdx].name
         }
 
-        for (i in cards.indices) {
-            val cur = cards[i]
-            val r = i / cols
-            val c = i % cols
-            if (c > 0) cur.nextFocusLeftId = cards[i - 1].id
-            if (c + 1 < cols && i + 1 < cards.size) cur.nextFocusRightId = cards[i + 1].id
-            if (r > 0 && i - cols >= 0) cur.nextFocusUpId = cards[i - cols].id
-            if (i + cols < cards.size) cur.nextFocusDownId = cards[i + cols].id
+        for (idx in themes.indices) {
+            val th = themes[idx]
+            val dotView = ThemeColorDotView(this, th).apply {
+                layoutParams = LinearLayout.LayoutParams(dotSize, dotSize).apply {
+                    rightMargin = (14 * scale).toInt().coerceAtLeast(10)
+                }
+            }
+            val nameTv = TextView(this).apply {
+                text = th.name
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f * scale)
+                isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val row = LinearLayout(this).apply {
+                id = 8400 + idx
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+                setPadding((16 * scale).toInt(), 0, (16 * scale).toInt(), 0)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, rowH).apply {
+                    setMargins(2, 4, 2, 4)
+                }
+                addView(dotView)
+                addView(nameTv)
+                setOnFocusChangeListener { _, hasFocus ->
+                    if (hasFocus) {
+                        resetMenuInactivityTimer()
+                        previewedIdx = idx
+                        refreshThemeRows(idx)
+                    }
+                }
+                setOnClickListener {
+                    resetMenuInactivityTimer()
+                    if (controlMode == 1 && previewedIdx != idx) {
+                        previewedIdx = idx
+                        refreshThemeRows(idx)
+                    } else {
+                        themeIndex = idx
+                        saveState()
+                        applyCurrentThemeToAllPanels()
+                        navigateBackInMenu()
+                    }
+                }
+            }
+            rowViews.add(row)
+            rowTexts.add(nameTv)
+            rowDots.add(dotView)
+            leftList.addView(row)
         }
+
+        for (i in rowViews.indices) {
+            rowViews[i].nextFocusUpId = rowViews[(i - 1 + rowViews.size) % rowViews.size].id
+            rowViews[i].nextFocusDownId = rowViews[(i + 1) % rowViews.size].id
+        }
+
+        subModalThemesGrid.addView(leftScroll)
+        subModalThemesGrid.addView(rightContainer)
+        refreshThemeRows(previewedIdx)
 
         animateMenuAppear(subModalOverlay)
-        (cards.getOrNull(themeIndex) ?: cards.firstOrNull())?.requestFocus()
+        (rowViews.getOrNull(previewedIdx) ?: rowViews.firstOrNull())?.requestFocus()
     }
 
     private fun openTopManagerSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
@@ -1337,7 +1377,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkAndInstallAppUpdateFromGithub() {
-        Toast.makeText(this, "Проверка обновлений TiViLook на GitHub...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Поиск новой сборки TiViLook...", Toast.LENGTH_SHORT).show()
         thread {
             try {
                 val apiConn = URL("https://api.github.com/repos/pskovland007/IPtv/releases/latest").openConnection() as HttpURLConnection
@@ -1345,12 +1385,32 @@ class MainActivity : AppCompatActivity() {
                 apiConn.connectTimeout = 8000; apiConn.readTimeout = 8000
                 if (apiConn.responseCode == 200) {
                     val json = JSONObject(apiConn.inputStream.bufferedReader().readText())
+                    val tagName = json.optString("tag_name", "")
                     val htmlUrl = json.optString("html_url", "https://github.com/pskovland007/IPtv/releases/latest")
+                    val assets = json.optJSONArray("assets")
+                    var apkUrl = ""
+                    if (assets != null) {
+                        for (i in 0 until assets.length()) {
+                            val asset = assets.getJSONObject(i)
+                            val url = asset.optString("browser_download_url", "")
+                            if (url.endsWith(".apk", true)) {
+                                apkUrl = url
+                                break
+                            }
+                        }
+                    }
+                    val targetUrl = if (apkUrl.isNotEmpty()) apkUrl else htmlUrl
                     runOnUiThread {
                         try {
-                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(htmlUrl)))
+                            val msg = if (apkUrl.isNotEmpty()) {
+                                "Загрузка APK${if (tagName.isNotEmpty()) " ($tagName)" else ""}..."
+                            } else {
+                                "Открытие страницы релиза..."
+                            }
+                            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)))
                         } catch (_: Exception) {
-                            Toast.makeText(this, "Откройте релизы GitHub в браузере", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, "Не удалось открыть загрузку обновления", Toast.LENGTH_SHORT).show()
                         }
                     }
                 } else {
@@ -2531,7 +2591,7 @@ class MainActivity : AppCompatActivity() {
         rootFrame.addView(firstRunModeOverlay)
 
         splashOverlay = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#0A3F52"))
+            setBackgroundColor(Color.parseColor("#0B2742"))
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         splashEyeView = SunbeamEyeSplashView(this).apply {
@@ -5074,19 +5134,20 @@ class SunbeamEyeSplashView(context: Context) : View(context) {
     private val lashPath = Path()
     private val irisRect = RectF()
 
-    private val colTealDark = Color.parseColor("#0A3F52")
-    private val colTealLight = Color.parseColor("#009688")
-    private val colSand = Color.parseColor("#E6C87A")
+    private val colNavy = Color.parseColor("#0B2742")
+    private val colCobalt = Color.parseColor("#2B6ED2")
+    private val colCoral = Color.parseColor("#EF7540")
+    private val colBerry = Color.parseColor("#B82A6B")
+    private val colEmerald = Color.parseColor("#18A086")
+    private val colGold = Color.parseColor("#E5BC62")
     private val colOutline = Color.parseColor("#0B1320")
     private val colSclera = Color.parseColor("#F7F9FC")
 
-    private val rayAngles = floatArrayOf(
-        -15f, 15f, 45f, 75f, 105f, 135f, 165f, 195f, 225f, 255f, 285f, 315f
-    )
     private val rayColors = intArrayOf(
-        colTealDark, colSand, colTealDark, colTealLight,
-        colTealDark, colTealLight, colTealDark, colTealLight,
-        colTealDark, colTealLight, colTealDark, colSand
+        colCobalt, colNavy, colCoral, colNavy,
+        colCobalt, colNavy, colBerry, colNavy,
+        colEmerald, colNavy, colGold, colNavy,
+        colCoral, colNavy, colBerry, colNavy
     )
     private val irisStarts = floatArrayOf(200f, 270f, 330f, 35f, 90f)
     private val irisSweeps = floatArrayOf(70f, 60f, 65f, 55f, 110f)
@@ -5105,13 +5166,15 @@ class SunbeamEyeSplashView(context: Context) : View(context) {
         if (w <= 0f || h <= 0f) return
 
         val cx = w * 0.5f
-        val cy = h * 0.52f
+        val cy = h * 0.55f
         val maxR = Math.hypot(w.toDouble(), h.toDouble()).toFloat()
 
-        canvas.drawColor(colTealDark)
-        for (i in rayAngles.indices) {
-            val a1 = Math.toRadians(rayAngles[i].toDouble())
-            val a2 = Math.toRadians((rayAngles[i] + 30f).toDouble())
+        canvas.drawColor(colNavy)
+        val stepDeg = 360f / rayColors.size
+        val startOffset = -stepDeg * 0.5f
+        for (i in rayColors.indices) {
+            val a1 = Math.toRadians((startOffset + i * stepDeg).toDouble())
+            val a2 = Math.toRadians((startOffset + (i + 1) * stepDeg).toDouble())
             rayPath.reset()
             rayPath.moveTo(cx, cy)
             rayPath.lineTo(cx + (maxR * Math.cos(a1)).toFloat(), cy + (maxR * Math.sin(a1)).toFloat())
@@ -5121,9 +5184,9 @@ class SunbeamEyeSplashView(context: Context) : View(context) {
             canvas.drawPath(rayPath, fillPaint)
         }
 
-        val baseDim = minOf(w * 0.56f, h * 0.72f)
-        val eyeRx = baseDim * 0.44f
-        val fullEyeRy = baseDim * 0.275f
+        // Larger, commanding eye proportion (~52% of 16:9 width) with safe headroom for lashes
+        val fullEyeRy = minOf(w * 0.165f, h * 0.305f)
+        val eyeRx = fullEyeRy * 1.60f
         val curEyeRy = fullEyeRy * eyeOpenFraction
 
         val outlineW = fullEyeRy * 0.165f
@@ -5252,7 +5315,12 @@ class DeviceGlyphIconView(context: Context, private val isTv: Boolean) : View(co
     }
 }
 
-class ThemePreviewIconView(context: Context, private val themeStyle: AppThemeStyle) : View(context) {
+class ThemeColorDotView(context: Context, private val themeStyle: AppThemeStyle) : View(context) {
+    var showCheck: Boolean = false
+        set(value) { field = value; invalidate() }
+    var isOnAccentBg: Boolean = false
+        set(value) { field = value; invalidate() }
+
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -5260,7 +5328,70 @@ class ThemePreviewIconView(context: Context, private val themeStyle: AppThemeSty
         strokeJoin = Paint.Join.ROUND
     }
     private val rect = RectF()
-    private val triPath = Path()
+    private val checkPath = Path()
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        val cx = w * 0.5f
+        val cy = h * 0.5f
+        val r = minOf(w, h) * 0.44f
+
+        if (showCheck && isOnAccentBg) {
+            strokePaint.color = themeStyle.textOnAccent
+            strokePaint.strokeWidth = (r * 0.24f).coerceAtLeast(2.6f)
+            checkPath.reset()
+            checkPath.moveTo(cx - r * 0.55f, cy + r * 0.02f)
+            checkPath.lineTo(cx - r * 0.12f, cy + r * 0.46f)
+            checkPath.lineTo(cx + r * 0.62f, cy - r * 0.40f)
+            canvas.drawPath(checkPath, strokePaint)
+            return
+        }
+
+        val bgCol = Color.rgb(
+            Color.red(themeStyle.panelBgColor),
+            Color.green(themeStyle.panelBgColor),
+            Color.blue(themeStyle.panelBgColor)
+        )
+        rect.set(cx - r, cy - r, cx + r, cy + r)
+        fillPaint.color = bgCol
+        canvas.drawArc(rect, 90f, 180f, true, fillPaint)
+        fillPaint.color = themeStyle.accentColor
+        canvas.drawArc(rect, -90f, 180f, true, fillPaint)
+
+        strokePaint.color = if (isOnAccentBg) Color.argb(220, 255, 255, 255) else Color.argb(140, 255, 255, 255)
+        strokePaint.strokeWidth = 2f
+        canvas.drawCircle(cx, cy, r, strokePaint)
+
+        if (showCheck) {
+            strokePaint.color = Color.WHITE
+            strokePaint.strokeWidth = (r * 0.22f).coerceAtLeast(2.2f)
+            checkPath.reset()
+            checkPath.moveTo(cx - r * 0.42f, cy + r * 0.04f)
+            checkPath.lineTo(cx - r * 0.08f, cy + r * 0.36f)
+            checkPath.lineTo(cx + r * 0.46f, cy - r * 0.30f)
+            canvas.drawPath(checkPath, strokePaint)
+        }
+    }
+}
+
+class ThemeLivePreviewView(context: Context, initialTheme: AppThemeStyle) : View(context) {
+    var themeStyle: AppThemeStyle = initialTheme
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val rect = RectF()
+    private val clipPath = Path()
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -5268,146 +5399,168 @@ class ThemePreviewIconView(context: Context, private val themeStyle: AppThemeSty
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        val r = (minOf(w, h) * 0.14f).coerceIn(10f, 22f)
-        val bgCol = Color.rgb(
+        val pad = 18f
+        val availW = (w - pad * 2f).coerceAtLeast(60f)
+        val availH = (h - pad * 2f).coerceAtLeast(40f)
+        val targetAspect = 16f / 9f
+        val frameW: Float
+        val frameH: Float
+        if (availW / availH > targetAspect) {
+            frameH = availH
+            frameW = frameH * targetAspect
+        } else {
+            frameW = availW
+            frameH = frameW / targetAspect
+        }
+        val left = (w - frameW) * 0.5f
+        val top = (h - frameH) * 0.5f
+        val right = left + frameW
+        val bottom = top + frameH
+        val frameR = (frameH * 0.075f).coerceIn(12f, 24f)
+
+        val accent = themeStyle.accentColor
+        val panelRgb = Color.rgb(
             Color.red(themeStyle.panelBgColor),
             Color.green(themeStyle.panelBgColor),
             Color.blue(themeStyle.panelBgColor)
         )
-        val cardCol = Color.rgb(
+        val cardRgb = Color.rgb(
             Color.red(themeStyle.cardBgColor),
             Color.green(themeStyle.cardBgColor),
             Color.blue(themeStyle.cardBgColor)
         )
-        val accentCol = themeStyle.accentColor
-        val strokeCol = themeStyle.strokeColor
         val textCol = themeStyle.textPrimaryColor
 
-        rect.set(2f, 2f, w - 2f, h - 2f)
-        fillPaint.color = bgCol
-        canvas.drawRoundRect(rect, r, r, fillPaint)
+        // 1. Soft evenly-fading Ambilight outer glow around miniature TV frame
+        val glowSteps = intArrayOf(12, 24, 42, 68, 104)
+        for (i in glowSteps.indices) {
+            val spread = (glowSteps.size - i) * 3f
+            strokePaint.color = Color.argb(glowSteps[i], Color.red(accent), Color.green(accent), Color.blue(accent))
+            strokePaint.strokeWidth = 3.5f
+            rect.set(left - spread, top - spread, right + spread, bottom + spread)
+            canvas.drawRoundRect(rect, frameR + spread * 0.6f, frameR + spread * 0.6f, strokePaint)
+        }
 
-        when (themeStyle.id) {
-            0 -> {
-                rect.set(w * 0.14f, h * 0.16f, w * 0.86f, h * 0.84f)
-                fillPaint.color = cardCol
-                canvas.drawRoundRect(rect, r * 0.65f, r * 0.65f, fillPaint)
-                rect.set(w * 0.14f, h * 0.16f, w * 0.36f, h * 0.84f)
-                fillPaint.color = Color.argb(90, 0, 0, 0)
-                canvas.drawRoundRect(rect, r * 0.65f, r * 0.65f, fillPaint)
-                fillPaint.color = Color.WHITE
-                canvas.drawCircle(w * 0.25f, h * 0.34f, h * 0.055f, fillPaint)
-                fillPaint.color = Color.parseColor("#94A3B8")
-                canvas.drawRoundRect(RectF(w * 0.19f, h * 0.50f, w * 0.31f, h * 0.56f), 4f, 4f, fillPaint)
-                canvas.drawRoundRect(RectF(w * 0.19f, h * 0.64f, w * 0.29f, h * 0.70f), 4f, 4f, fillPaint)
-                fillPaint.color = accentCol
-                canvas.drawRoundRect(RectF(w * 0.42f, h * 0.26f, w * 0.61f, h * 0.46f), 7f, 7f, fillPaint)
-                fillPaint.color = Color.parseColor("#FBBF24")
-                canvas.drawRoundRect(RectF(w * 0.65f, h * 0.26f, w * 0.80f, h * 0.46f), 7f, 7f, fillPaint)
-                fillPaint.color = Color.parseColor("#34D399")
-                canvas.drawRoundRect(RectF(w * 0.42f, h * 0.53f, w * 0.61f, h * 0.73f), 7f, 7f, fillPaint)
-                fillPaint.color = Color.parseColor("#38BDF8")
-                canvas.drawCircle(w * 0.725f, h * 0.63f, h * 0.10f, fillPaint)
-            }
-            1 -> {
-                rect.set(w * 0.16f, h * 0.18f, w * 0.84f, h * 0.82f)
-                strokePaint.color = Color.argb(95, 0, 229, 255)
-                strokePaint.strokeWidth = 9f
-                canvas.drawRoundRect(rect, r * 0.7f, r * 0.7f, strokePaint)
-                strokePaint.color = accentCol
-                strokePaint.strokeWidth = 3.5f
-                canvas.drawRoundRect(rect, r * 0.7f, r * 0.7f, strokePaint)
-                strokePaint.color = Color.parseColor("#FF7597")
-                strokePaint.strokeWidth = 3.5f
-                canvas.drawRoundRect(RectF(w * 0.24f, h * 0.30f, w * 0.46f, h * 0.68f), 8f, 8f, strokePaint)
-                fillPaint.color = accentCol
-                canvas.drawRoundRect(RectF(w * 0.52f, h * 0.32f, w * 0.76f, h * 0.40f), 4f, 4f, fillPaint)
-                fillPaint.color = Color.parseColor("#FF7597")
-                canvas.drawRoundRect(RectF(w * 0.52f, h * 0.47f, w * 0.70f, h * 0.54f), 4f, 4f, fillPaint)
-                fillPaint.color = Color.parseColor("#B388FF")
-                canvas.drawRoundRect(RectF(w * 0.52f, h * 0.60f, w * 0.64f, h * 0.67f), 4f, 4f, fillPaint)
-            }
-            2 -> {
-                strokePaint.color = Color.WHITE
-                strokePaint.strokeWidth = 3f
-                canvas.drawRoundRect(RectF(4f, 4f, w - 4f, h - 4f), r, r, strokePaint)
-                val boxS = minOf(w, h) * 0.54f
-                val bx = (w - boxS) / 2f
-                val by = (h - boxS) / 2f
-                strokePaint.strokeWidth = 3f
-                canvas.drawRoundRect(RectF(bx, by, bx + boxS, by + boxS), r * 0.8f, r * 0.8f, strokePaint)
-                val tvW = boxS * 0.56f
-                val tvH = boxS * 0.40f
-                val tx = (w - tvW) / 2f
-                val ty = (h - tvH) / 2f + 2f
-                strokePaint.strokeWidth = 2.6f
-                canvas.drawRoundRect(RectF(tx, ty, tx + tvW, ty + tvH), 5f, 5f, strokePaint)
-                fillPaint.color = Color.WHITE
-                triPath.reset()
-                triPath.moveTo(w * 0.47f, ty + tvH * 0.28f)
-                triPath.lineTo(w * 0.56f, ty + tvH * 0.50f)
-                triPath.lineTo(w * 0.47f, ty + tvH * 0.72f)
-                triPath.close()
-                canvas.drawPath(triPath, fillPaint)
-            }
-            3 -> {
-                rect.set(w * 0.22f, h * 0.18f, w * 0.78f, h * 0.82f)
-                fillPaint.color = cardCol
-                canvas.drawRoundRect(rect, r * 0.65f, r * 0.65f, fillPaint)
-                fillPaint.color = textCol
-                canvas.drawCircle(w * 0.36f, h * 0.37f, h * 0.075f, fillPaint)
-                canvas.drawRoundRect(RectF(w * 0.47f, h * 0.33f, w * 0.68f, h * 0.41f), 4f, 4f, fillPaint)
-                fillPaint.color = accentCol
-                canvas.drawRoundRect(RectF(w * 0.31f, h * 0.53f, w * 0.66f, h * 0.60f), 4f, 4f, fillPaint)
-                canvas.drawRoundRect(RectF(w * 0.31f, h * 0.66f, w * 0.54f, h * 0.73f), 4f, 4f, fillPaint)
-            }
-            4 -> {
-                val boxS = minOf(w, h) * 0.64f
-                val bx = (w - boxS) / 2f
-                val by = (h - boxS) / 2f
-                fillPaint.color = cardCol
-                canvas.drawRoundRect(RectF(bx, by, bx + boxS, by + boxS), r * 0.8f, r * 0.8f, fillPaint)
-                val tvW = boxS * 0.66f
-                val tvH = boxS * 0.50f
-                val tx = (w - tvW) / 2f
-                val ty = by + boxS * 0.32f
-                strokePaint.color = accentCol
-                strokePaint.strokeWidth = 3.5f
-                canvas.drawLine(w * 0.5f, ty, w * 0.43f, ty - boxS * 0.16f, strokePaint)
-                canvas.drawLine(w * 0.5f, ty, w * 0.57f, ty - boxS * 0.16f, strokePaint)
-                fillPaint.color = accentCol
-                canvas.drawRoundRect(RectF(tx, ty, tx + tvW, ty + tvH), 8f, 8f, fillPaint)
-                fillPaint.color = bgCol
-                canvas.drawRoundRect(RectF(tx + tvW * 0.09f, ty + tvH * 0.14f, tx + tvW * 0.72f, ty + tvH * 0.86f), 5f, 5f, fillPaint)
-                canvas.drawCircle(tx + tvW * 0.85f, ty + tvH * 0.36f, tvH * 0.08f, fillPaint)
-                canvas.drawCircle(tx + tvW * 0.85f, ty + tvH * 0.64f, tvH * 0.08f, fillPaint)
-                fillPaint.color = accentCol
-                triPath.reset()
-                triPath.moveTo(tx + tvW * 0.34f, ty + tvH * 0.32f)
-                triPath.lineTo(tx + tvW * 0.52f, ty + tvH * 0.50f)
-                triPath.lineTo(tx + tvW * 0.34f, ty + tvH * 0.68f)
-                triPath.close()
-                canvas.drawPath(triPath, fillPaint)
-            }
-            else -> {
-                fillPaint.color = Color.argb(140, Color.red(cardCol), Color.green(cardCol), Color.blue(cardCol))
-                canvas.drawRoundRect(RectF(w * 0.06f, h * 0.30f, w * 0.27f, h * 0.70f), 8f, 8f, fillPaint)
-                canvas.drawRoundRect(RectF(w * 0.73f, h * 0.30f, w * 0.94f, h * 0.70f), 8f, 8f, fillPaint)
-                rect.set(w * 0.31f, h * 0.20f, w * 0.69f, h * 0.80f)
-                fillPaint.color = cardCol
-                canvas.drawRoundRect(rect, 11f, 11f, fillPaint)
-                strokePaint.color = accentCol
-                strokePaint.strokeWidth = 3f
-                canvas.drawRoundRect(rect, 11f, 11f, strokePaint)
-                fillPaint.color = accentCol
-                canvas.drawRoundRect(RectF(w * 0.38f, h * 0.56f, w * 0.62f, h * 0.63f), 4f, 4f, fillPaint)
-                fillPaint.color = Color.argb(180, Color.red(textCol), Color.green(textCol), Color.blue(textCol))
-                canvas.drawRoundRect(RectF(w * 0.42f, h * 0.68f, w * 0.58f, h * 0.73f), 3f, 3f, fillPaint)
+        // 2. Clipped TV screen interior
+        clipPath.reset()
+        rect.set(left, top, right, bottom)
+        clipPath.addRoundRect(rect, frameR, frameR, Path.Direction.CW)
+        canvas.save()
+        canvas.clipPath(clipPath)
+
+        // Screen backdrop simulating video ambiance matched to theme
+        val screenTopCol = when (themeStyle.id) {
+            3 -> Color.parseColor("#D4D4D8")
+            2 -> Color.parseColor("#050507")
+            1 -> Color.parseColor("#110D1F")
+            4 -> Color.parseColor("#2A221A")
+            else -> Color.parseColor("#121926")
+        }
+        val screenBotCol = when (themeStyle.id) {
+            3 -> Color.parseColor("#A1A1AA")
+            2 -> Color.parseColor("#0E0E12")
+            1 -> Color.parseColor("#1B1433")
+            4 -> Color.parseColor("#4A3620")
+            else -> Color.parseColor("#1E2C42")
+        }
+        fillPaint.shader = LinearGradient(left, top, right, bottom, screenTopCol, screenBotCol, Shader.TileMode.CLAMP)
+        canvas.drawRect(left, top, right, bottom, fillPaint)
+        fillPaint.shader = null
+
+        // Subtle soft cinema glow on video right side
+        fillPaint.shader = RadialGradient(
+            left + frameW * 0.72f, top + frameH * 0.45f, frameW * 0.42f,
+            Color.argb(72, Color.red(accent), Color.green(accent), Color.blue(accent)),
+            Color.TRANSPARENT,
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawRect(left, top, right, bottom, fillPaint)
+        fillPaint.shader = null
+
+        // 3. Top-right mini signal bars & top-left mini clock pill
+        fillPaint.color = Color.argb(140, Color.red(panelRgb), Color.green(panelRgb), Color.blue(panelRgb))
+        canvas.drawRoundRect(RectF(left + frameW * 0.04f, top + frameH * 0.05f, left + frameW * 0.16f, top + frameH * 0.13f), 6f, 6f, fillPaint)
+        fillPaint.color = Color.argb(190, Color.red(textCol), Color.green(textCol), Color.blue(textCol))
+        canvas.drawRoundRect(RectF(left + frameW * 0.06f, top + frameH * 0.08f, left + frameW * 0.14f, top + frameH * 0.10f), 2f, 2f, fillPaint)
+
+        for (b in 0..3) {
+            val bx = right - frameW * 0.09f + b * (frameW * 0.014f)
+            val bh = frameH * (0.025f + b * 0.012f)
+            fillPaint.color = Color.parseColor("#4CAF50")
+            canvas.drawRoundRect(RectF(bx, top + frameH * 0.11f - bh, bx + frameW * 0.009f, top + frameH * 0.11f), 2f, 2f, fillPaint)
+        }
+
+        val miniR = (themeStyle.cornerRadiusDp * 0.35f).coerceIn(5f, 12f)
+
+        if (themeStyle.isCarouselMenu) {
+            // Carousel theme preview: horizontal sliding cards centered
+            val cardY1 = top + frameH * 0.24f
+            val cardY2 = top + frameH * 0.72f
+            fillPaint.color = Color.argb(175, Color.red(cardRgb), Color.green(cardRgb), Color.blue(cardRgb))
+            canvas.drawRoundRect(RectF(left + frameW * 0.07f, cardY1 + 10f, left + frameW * 0.29f, cardY2 - 10f), miniR, miniR, fillPaint)
+            canvas.drawRoundRect(RectF(left + frameW * 0.71f, cardY1 + 10f, left + frameW * 0.93f, cardY2 - 10f), miniR, miniR, fillPaint)
+            // Center highlighted carousel tile
+            val cRect = RectF(left + frameW * 0.33f, cardY1, left + frameW * 0.67f, cardY2)
+            fillPaint.color = Color.argb(235, Color.red(panelRgb), Color.green(panelRgb), Color.blue(panelRgb))
+            canvas.drawRoundRect(cRect, miniR + 2f, miniR + 2f, fillPaint)
+            strokePaint.color = accent
+            strokePaint.strokeWidth = 2.6f
+            canvas.drawRoundRect(cRect, miniR + 2f, miniR + 2f, strokePaint)
+            fillPaint.color = accent
+            canvas.drawRoundRect(RectF(left + frameW * 0.40f, top + frameH * 0.56f, left + frameW * 0.60f, top + frameH * 0.62f), 4f, 4f, fillPaint)
+        } else {
+            // Standard themes preview: mini sidebar + active pill + mini OSD bar
+            val sbLeft = left + frameW * 0.04f
+            val sbTop = top + frameH * 0.17f
+            val sbRight = left + frameW * 0.39f
+            val sbBot = bottom - frameH * 0.19f
+            fillPaint.color = Color.argb(232, Color.red(panelRgb), Color.green(panelRgb), Color.blue(panelRgb))
+            canvas.drawRoundRect(RectF(sbLeft, sbTop, sbRight, sbBot), miniR, miniR, fillPaint)
+            strokePaint.color = Color.argb(145, Color.red(accent), Color.green(accent), Color.blue(accent))
+            strokePaint.strokeWidth = 1.8f
+            canvas.drawRoundRect(RectF(sbLeft, sbTop, sbRight, sbBot), miniR, miniR, strokePaint)
+
+            // 4 channel rows inside mini sidebar (2nd row active)
+            val sbInnerH = sbBot - sbTop - 16f
+            val rowStep = sbInnerH / 4f
+            for (r in 0 until 4) {
+                val ry1 = sbTop + 8f + r * rowStep + 2f
+                val ry2 = ry1 + rowStep - 5f
+                if (r == 1) {
+                    fillPaint.color = accent
+                    canvas.drawRoundRect(RectF(sbLeft + 7f, ry1, sbRight - 7f, ry2), 6f, 6f, fillPaint)
+                    fillPaint.color = themeStyle.textOnAccent
+                    canvas.drawRoundRect(RectF(sbLeft + 14f, (ry1 + ry2) * 0.5f - 2.5f, sbRight - 22f, (ry1 + ry2) * 0.5f + 2.5f), 2f, 2f, fillPaint)
+                } else {
+                    fillPaint.color = Color.argb(120, Color.red(textCol), Color.green(textCol), Color.blue(textCol))
+                    val barEnd = sbRight - if (r == 2) 30f else 18f
+                    canvas.drawRoundRect(RectF(sbLeft + 14f, (ry1 + ry2) * 0.5f - 2f, barEnd, (ry1 + ry2) * 0.5f + 2f), 2f, 2f, fillPaint)
+                }
             }
         }
 
-        strokePaint.color = Color.argb(90, Color.red(strokeCol), Color.green(strokeCol), Color.blue(strokeCol))
-        strokePaint.strokeWidth = 2f
-        canvas.drawRoundRect(RectF(2f, 2f, w - 2f, h - 2f), r, r, strokePaint)
+        // 4. Miniature bottom OSD bar with EPG progress
+        val osdLeft = left + frameW * 0.08f
+        val osdRight = right - frameW * 0.08f
+        val osdTop = bottom - frameH * 0.14f
+        val osdBot = bottom - frameH * 0.045f
+        fillPaint.color = Color.argb(220, Color.red(panelRgb), Color.green(panelRgb), Color.blue(panelRgb))
+        canvas.drawRoundRect(RectF(osdLeft, osdTop, osdRight, osdBot), miniR * 0.7f, miniR * 0.7f, fillPaint)
+        val barY = (osdTop + osdBot) * 0.5f
+        val barL = osdLeft + frameW * 0.06f
+        val barR = osdRight - frameW * 0.06f
+        fillPaint.color = Color.argb(80, Color.red(textCol), Color.green(textCol), Color.blue(textCol))
+        canvas.drawRoundRect(RectF(barL, barY - 2.5f, barR, barY + 2.5f), 2.5f, 2.5f, fillPaint)
+        fillPaint.color = accent
+        canvas.drawRoundRect(RectF(barL, barY - 2.5f, barL + (barR - barL) * 0.58f, barY + 2.5f), 2.5f, 2.5f, fillPaint)
+        canvas.drawCircle(barL + (barR - barL) * 0.58f, barY, 4.5f, fillPaint)
+
+        canvas.restore()
+
+        // 5. Crisp TV frame border
+        strokePaint.color = Color.argb(200, Color.red(accent), Color.green(accent), Color.blue(accent))
+        strokePaint.strokeWidth = 2.4f
+        rect.set(left, top, right, bottom)
+        canvas.drawRoundRect(rect, frameR, frameR, strokePaint)
     }
 }
