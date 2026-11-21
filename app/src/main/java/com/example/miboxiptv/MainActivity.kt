@@ -1,10 +1,8 @@
 package com.example.miboxiptv
 
-import android.Manifest
 import android.animation.ValueAnimator
 import android.app.Activity
 import android.provider.OpenableColumns
-import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
 import android.content.Intent
@@ -112,6 +110,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val systemEpgPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.data
+            if (uri != null) {
+                importEpgFromUri(uri)
+            }
+        }
+    }
+
     private var player: ExoPlayer? = null
     private var dualPipPlayer: ExoPlayer? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
@@ -175,7 +184,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fullEpgOverlay: LinearLayout
     private lateinit var firstRunModeOverlay: FrameLayout
     private lateinit var splashOverlay: FrameLayout
-    private lateinit var splashEyeView: RealisticEyeSplashView
+    private lateinit var splashEyeView: SunbeamEyeSplashView
 
     private val allGridTiles = mutableListOf<ThemedTileView>()
     private val allGridCaptions = mutableListOf<TextView>()
@@ -263,7 +272,9 @@ class MainActivity : AppCompatActivity() {
     private var userAgentIndex = 0
     private var silentFallbackAttemptedForUrl: String = ""
 
+    private lateinit var infoTitleView: TextView
     private lateinit var infoTextView: TextView
+    private val infoRowViews = mutableListOf<TextView>()
     private lateinit var clockTextView: TextView
     private lateinit var analyzerStatusBanner: TextView
     private lateinit var signalContainer: LinearLayout
@@ -298,6 +309,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var subModalTopButtons: LinearLayout
     private lateinit var subModalList: ListView
     private lateinit var subModalInputContainer: LinearLayout
+    private lateinit var subModalThemesGrid: LinearLayout
     private lateinit var subModalAdapter: ArrayAdapter<String>
     private val subModalItems = mutableListOf<String>()
     private var animateNextSubModalChange = false
@@ -470,6 +482,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun leftSafeMarginPx(): Int = if (cameraCutoutSafeOffset) 68 else 16
 
+    private fun sidePanelWidthPx(): Int {
+        val dm = resources.displayMetrics
+        return 720.coerceAtMost((dm.widthPixels * 0.48f).toInt()).coerceAtLeast(420)
+    }
+
     private val defaultTenCategories = listOf(
         "★ Избранное", "Все каналы", "2K", "Кино и сериалы", "Спорт",
         "Детские", "Познавательные", "Музыка", "Новости и общие", "Развлечения", "Прочее"
@@ -512,6 +529,7 @@ class MainActivity : AppCompatActivity() {
         "https://teleguide.info/download/new3/xmltv.xml.gz"
     )
     private var epgUrl = epgUrls[0]
+    private var localEpgFilePath = ""
 
     private val autoHideMenuRunnable = Runnable {
         if (menuHistory.isNotEmpty()) {
@@ -545,7 +563,7 @@ class MainActivity : AppCompatActivity() {
 
         if (mini) {
             val curMenu = menuHistory.lastOrNull()
-            val sideWidthPx = 680.coerceAtMost((dm.widthPixels * 0.46f).toInt())
+            val sideWidthPx = sidePanelWidthPx()
             val leftMenuEdgePx = if (curMenu == "SIDE") {
                 sideWidthPx + leftSafeMarginPx() + 12
             } else {
@@ -586,9 +604,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun adjustInfoPanelMarginForDualStream() {
+        val dm = resources.displayMetrics
         val topMarginPx = if (isDualStreamActive) 320 else 68
-        infoPanel.layoutParams = FrameLayout.LayoutParams((540 * uiScaleFactor()).toInt(), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
-            setMargins(0, topMarginPx, 22, 0)
+        val panelW = (620 * uiScaleFactor()).toInt().coerceIn(500, (dm.widthPixels * 0.56f).toInt().coerceAtLeast(500))
+        infoPanel.layoutParams = FrameLayout.LayoutParams(panelW, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply {
+            setMargins(0, topMarginPx, 24, 0)
         }
     }
 
@@ -654,19 +674,34 @@ class MainActivity : AppCompatActivity() {
         val t = currentTheme()
         val a = uiPanelAlphaInt()
         val panelColorWithAlpha = Color.argb(a, Color.red(t.panelBgColor), Color.green(t.panelBgColor), Color.blue(t.panelBgColor))
-        val outerGlow = GradientDrawable().apply {
-            setColor(Color.TRANSPARENT)
-            cornerRadius = t.cornerRadiusDp + 7f
-            setStroke(11, ambilightColor(if (ambilightMode == 0) 55 else 140))
+        val glowAlphas = if (ambilightMode == 0) {
+            intArrayOf(8, 16, 26, 38, 52, 70)
+        } else {
+            intArrayOf(12, 24, 42, 66, 98, 138)
+        }
+        val layers = ArrayList<GradientDrawable>(glowAlphas.size + 1)
+        val totalAura = glowAlphas.size * 2
+        for (i in glowAlphas.indices) {
+            val inset = i * 2
+            val layer = GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                cornerRadius = t.cornerRadiusDp + (totalAura - inset).toFloat()
+                setStroke(3, ambilightColor(glowAlphas[i]))
+            }
+            layers.add(layer)
         }
         val mainCard = GradientDrawable().apply {
             setColor(panelColorWithAlpha)
             cornerRadius = t.cornerRadiusDp
-            setStroke(4, ambilightColor(if (ambilightMode == 0) 130 else 235))
+            setStroke(2, ambilightColor(if (ambilightMode == 0) 110 else 205))
         }
-        return LayerDrawable(arrayOf(outerGlow, mainCard)).apply {
-            setLayerInset(0, 0, 0, 0, 0)
-            setLayerInset(1, 6, 6, 6, 6)
+        layers.add(mainCard)
+        return LayerDrawable(layers.toTypedArray()).apply {
+            for (i in glowAlphas.indices) {
+                val inset = i * 2
+                setLayerInset(i, inset, inset, inset, inset)
+            }
+            setLayerInset(glowAlphas.size, totalAura, totalAura, totalAura, totalAura)
         }
     }
 
@@ -815,7 +850,7 @@ class MainActivity : AppCompatActivity() {
         val leftMargin = leftSafeMarginPx()
 
         sidePanel.layoutParams = FrameLayout.LayoutParams(
-            680.coerceAtMost((dm.widthPixels * 0.46f).toInt()),
+            sidePanelWidthPx(),
             FrameLayout.LayoutParams.MATCH_PARENT,
             Gravity.START
         ).apply { setMargins(leftMargin, 16, 0, 16) }
@@ -853,8 +888,18 @@ class MainActivity : AppCompatActivity() {
         fullEpgTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f * scale)
         clockTextView.typeface = t.boldFont
         clockTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f * scale)
+        if (::infoTitleView.isInitialized) {
+            infoTitleView.setTextColor(t.accentColor)
+            infoTitleView.typeface = t.boldFont
+            infoTitleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17.5f * scale)
+        }
         infoTextView.setTextColor(t.textPrimaryColor); infoTextView.typeface = t.normalFont
         infoTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f * scale)
+        for (rv in infoRowViews) {
+            rv.setTextColor(t.textPrimaryColor)
+            rv.typeface = t.normalFont
+            rv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f * scale)
+        }
         currentChannelBanner.setTextColor(t.textPrimaryColor); currentChannelBanner.typeface = t.boldFont
         currentChannelBanner.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f * scale)
 
@@ -892,16 +937,16 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun openPowerAndSleepSubModal() {
-        setSubModalHeaderTitle("Выключение и Таймер сна")
+        setSubModalHeaderTitle("Таймер сна")
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.VISIBLE
 
         val sleepOpts = listOf(0, 30, 60, 90, 120)
-        val items = mutableListOf("[-]   Выключить телевизор TiViLook прямо сейчас")
+        val items = mutableListOf("[-]   Выключить сейчас")
         for (m in sleepOpts) {
             val sel = if (sleepTimerMinutesLeft == m) "[+]   " else "[-]   "
-            if (m == 0) items.add("${sel}Таймер сна   •   Выключен")
-            else items.add("${sel}Таймер сна   •   Выключить через $m минут")
+            if (m == 0) items.add("${sel}Таймер выключен")
+            else items.add("${sel}Через $m минут")
         }
         updateSubModalListItems(items)
 
@@ -940,14 +985,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openBrightnessSubModal() {
-        setSubModalHeaderTitle("Уровень яркости экрана")
+        setSubModalHeaderTitle("Яркость")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val levels = listOf(100, 75, 50, 25)
         val descriptions = listOf(
-            "Яркость экрана: 100%   •   Дневной режим",
-            "Яркость экрана: 75%     •   Вечерний режим",
-            "Яркость экрана: 50%     •   Ночной режим",
-            "Яркость экрана: 25%     •   Глубокая ночь (защита плазмы)"
+            "100%   •   Дневной режим",
+            "75%   •   Вечерний режим",
+            "50%   •   Ночной режим",
+            "25%   •   Глубокая ночь"
         )
         val curIdx = levels.indexOf(brightnessPercent).coerceAtLeast(0)
         updateSubModalListItems(levels.mapIndexed { idx, lvl -> (if (brightnessPercent == lvl) "[+]   " else "[-]   ") + descriptions[idx] }, preservePositionIndex = curIdx)
@@ -961,12 +1006,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun openChannelActionsSubModal() {
         val ch = currentChannel ?: return
-        setSubModalHeaderTitle("Управление каналом: ${ch.name}")
+        setSubModalHeaderTitle("Канал")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val items = listOf(
-            "[-]   Исключить этот канал из списка   •   Возврат через Редактор",
-            "[>]   Переместить в другую категорию   •   Сейчас: ${effectiveCategory(ch)}",
-            if (isDualStreamActive) "[ON]   Двойной эфир (2-й экран)   •   Активен" else "[OFF]   Двойной эфир (2-й экран)   •   Выключен"
+            "[-]   Скрыть канал из списка",
+            "[>]   Переместить в группу   •   ${effectiveCategory(ch)}",
+            if (isDualStreamActive) "[ON]   Двойной эфир   •   Вкл" else "[OFF]   Двойной эфир   •   Выкл"
         )
         updateSubModalListItems(items)
         subModalList.setOnItemClickListener { _, _, which, _ ->
@@ -989,7 +1034,7 @@ class MainActivity : AppCompatActivity() {
         val ch = currentChannel ?: return
         val targetCats = activeCategoryList().drop(2)
         val curCat = effectiveCategory(ch)
-        setSubModalHeaderTitle("Переместить «${ch.name}» в категорию")
+        setSubModalHeaderTitle("Выбор группы")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val curIdx = targetCats.indexOf(curCat).coerceAtLeast(0)
         updateSubModalListItems(targetCats.map { c -> (if (c == curCat) "[+]   " else "[-]   ") + c }, preservePositionIndex = curIdx)
@@ -1007,37 +1052,144 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openThemesSubModal() {
-        setSubModalHeaderTitle("Темы оформления")
+        setSubModalHeaderTitle("Темы")
         subModalInputContainer.visibility = View.GONE
-        subModalList.visibility = View.VISIBLE
+        subModalList.visibility = View.GONE
         subModalTopButtons.visibility = View.GONE
         subModalTopButtons.removeAllViews()
+        subModalThemesGrid.removeAllViews()
+        subModalThemesGrid.visibility = View.VISIBLE
 
-        val items = themes.mapIndexed { idx, t ->
-            if (idx == themeIndex) "[+]   ${t.name}   •   Активна"
-            else "[-]   ${t.name}"
-        }
-        updateSubModalListItems(items, preservePositionIndex = themeIndex)
+        val curTheme = currentTheme()
+        val scale = uiScaleFactor()
+        val dm = resources.displayMetrics
+        val cols = 3
+        val totalRows = ((themes.size + cols - 1) / cols).coerceAtLeast(2)
+        val previewH = ((dm.heightPixels * 0.21f).toInt()).coerceIn(112, 210)
+        val cards = mutableListOf<LinearLayout>()
 
-        subModalList.setOnItemClickListener { _, _, which, _ ->
-            themeIndex = which; saveState(); applyCurrentThemeToAllPanels(); navigateBackInMenu()
+        for (r in 0 until totalRows) {
+            val rowLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                weightSum = cols.toFloat()
+                clipChildren = false; clipToPadding = false
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 6, 0, 12) }
+            }
+            for (c in 0 until cols) {
+                val idx = r * cols + c
+                if (idx < themes.size) {
+                    val th = themes[idx]
+                    val isSelected = (idx == themeIndex)
+                    val cardId = 8400 + idx
+
+                    val previewView = ThemePreviewIconView(this, th).apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            previewH
+                        )
+                    }
+                    val captionTv = TextView(this).apply {
+                        text = th.name
+                        setTextColor(if (isSelected) curTheme.accentColor else curTheme.textPrimaryColor)
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f * scale)
+                        typeface = if (isSelected) curTheme.boldFont else curTheme.normalFont
+                        gravity = Gravity.CENTER
+                        isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                        setPadding(6, 10, 6, 4)
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        )
+                    }
+
+                    fun styleThemeCard(box: LinearLayout, focused: Boolean) {
+                        val activeAccent = currentTheme().accentColor
+                        val borderCol = when {
+                            focused -> activeAccent
+                            isSelected -> Color.argb(210, Color.red(activeAccent), Color.green(activeAccent), Color.blue(activeAccent))
+                            else -> Color.argb(95, Color.red(currentTheme().strokeColor), Color.green(currentTheme().strokeColor), Color.blue(currentTheme().strokeColor))
+                        }
+                        val fillCol = if (focused) {
+                            Color.argb(55, Color.red(activeAccent), Color.green(activeAccent), Color.blue(activeAccent))
+                        } else {
+                            Color.argb(145, Color.red(currentTheme().cardBgColor), Color.green(currentTheme().cardBgColor), Color.blue(currentTheme().cardBgColor))
+                        }
+                        box.setBackgroundDrawable(GradientDrawable().apply {
+                            setColor(fillCol)
+                            cornerRadius = 20f
+                            setStroke(if (focused) 4 else if (isSelected) 3 else 1, borderCol)
+                        })
+                        captionTv.setTextColor(if (focused || isSelected) activeAccent else currentTheme().textPrimaryColor)
+                        captionTv.typeface = if (focused || isSelected) currentTheme().boldFont else currentTheme().normalFont
+                        box.animate().scaleX(if (focused) 1.035f else 1f).scaleY(if (focused) 1.035f else 1f).setDuration(140L).start()
+                    }
+
+                    val card = LinearLayout(this).apply {
+                        id = cardId
+                        orientation = LinearLayout.VERTICAL
+                        gravity = Gravity.CENTER_HORIZONTAL
+                        isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+                        setPadding(12, 12, 12, 10)
+                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                            setMargins(10, 6, 10, 6)
+                        }
+                        addView(previewView)
+                        addView(captionTv)
+                        styleThemeCard(this, false)
+                        setOnFocusChangeListener { _, hasFocus ->
+                            styleThemeCard(this, hasFocus)
+                            if (hasFocus) resetMenuInactivityTimer()
+                        }
+                        setOnClickListener {
+                            resetMenuInactivityTimer()
+                            themeIndex = idx
+                            saveState()
+                            applyCurrentThemeToAllPanels()
+                            navigateBackInMenu()
+                        }
+                    }
+                    cards.add(card)
+                    rowLayout.addView(card)
+                } else {
+                    val spacer = View(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, 1, 1f).apply { setMargins(10, 6, 10, 6) }
+                    }
+                    rowLayout.addView(spacer)
+                }
+            }
+            subModalThemesGrid.addView(rowLayout)
         }
+
+        for (i in cards.indices) {
+            val cur = cards[i]
+            val r = i / cols
+            val c = i % cols
+            if (c > 0) cur.nextFocusLeftId = cards[i - 1].id
+            if (c + 1 < cols && i + 1 < cards.size) cur.nextFocusRightId = cards[i + 1].id
+            if (r > 0 && i - cols >= 0) cur.nextFocusUpId = cards[i - cols].id
+            if (i + cols < cards.size) cur.nextFocusDownId = cards[i + cols].id
+        }
+
         animateMenuAppear(subModalOverlay)
-        subModalList.requestFocus()
+        (cards.getOrNull(themeIndex) ?: cards.firstOrNull())?.requestFocus()
     }
 
     private fun openTopManagerSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        setSubModalHeaderTitle("Каналы в ТОПе групп (${topUrls.size})")
+        setSubModalHeaderTitle("ТОП каналы")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
         if (topUrls.isNotEmpty()) {
-            subModalTopButtons.addView(makeModernButton("Очистить весь ТОП") {
+            subModalTopButtons.addView(makeModernButton("Очистить ТОП") {
                 topUrls.clear(); saveState(); selectCategory(currentCategoryIndex); openTopManagerSubModal(inPlace = true, keepIndex = 0)
             })
         }
         val topChans = allChannels.filter { topUrls.contains(it.url) }
         updateSubModalListItems(
-            if (topChans.isEmpty()) listOf("[-]   В ТОПе пока нет закреплённых каналов")
+            if (topChans.isEmpty()) listOf("[-]   Нет закреплённых каналов")
             else topChans.map { "[+]   ${it.name}   •   ${effectiveCategory(it)}" },
             smoothToggle = inPlace,
             preservePositionIndex = keepIndex
@@ -1053,29 +1205,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openFullScreenChannelEpg() {
-        setPlayerMiniPreviewMode(true)
+        setPlayerMiniPreviewMode(false)
+        val dm = resources.displayMetrics
+        val epgW = (dm.widthPixels * 0.84f).toInt().coerceIn(860, 1640)
+        val epgH = (dm.heightPixels * 0.80f).toInt().coerceAtLeast(420)
+        fullEpgOverlay.layoutParams = FrameLayout.LayoutParams(epgW, epgH, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply {
+            setMargins(28, 72, 28, 24)
+        }
         val ch = currentChannel
         val progs = getChannelEpgList(ch)
-        val dateFmt = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault())
+        val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
         val now = System.currentTimeMillis()
 
-        fullEpgTitle.text = "Программа передач: " + (ch?.name ?: "Канал не выбран")
+        fullEpgTitle.text = "Телегид"
         val items = mutableListOf<String>()
         var activeIndex = 0
 
         if (progs.isEmpty()) {
-            items.add("[?]   Расписание для канала «${ch?.name ?: ""}» обновляется в фоне...")
+            items.add("[?]   Программа передач обновляется...")
         } else {
             progs.forEachIndexed { idx, p ->
                 val isNow = now in p.startMs..p.stopMs
                 if (isNow) activeIndex = idx
                 val prefix = when {
-                    isNow -> "[+]   Сейчас   •   "
-                    p.stopMs < now -> "[-]   Прошло   •   "
-                    else -> "[>]   Далее     •   "
+                    isNow -> "[+]   "
+                    p.stopMs < now -> "[-]   "
+                    else -> "[>]   "
                 }
-                val timeRange = dateFmt.format(Date(p.startMs)) + " – " + dateFmt.format(Date(p.stopMs))
-                items.add("$prefix$timeRange   •   ${p.title}")
+                val startTime = timeFmt.format(Date(p.startMs))
+                items.add("$prefix$startTime   ${p.title}")
             }
         }
 
@@ -1184,74 +1342,20 @@ class MainActivity : AppCompatActivity() {
                 apiConn.connectTimeout = 8000; apiConn.readTimeout = 8000
                 if (apiConn.responseCode == 200) {
                     val json = JSONObject(apiConn.inputStream.bufferedReader().readText())
-                    val tagName = json.optString("tag_name", "")
-                    val assets = json.optJSONArray("assets")
-                    var apkUrl = ""
-                    if (assets != null) {
-                        for (i in 0 until assets.length()) {
-                            val asset = assets.getJSONObject(i)
-                            val url = asset.optString("browser_download_url", "")
-                            if (url.endsWith(".apk", true)) { apkUrl = url; break }
+                    val htmlUrl = json.optString("html_url", "https://github.com/pskovland007/IPtv/releases/latest")
+                    runOnUiThread {
+                        try {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(htmlUrl)))
+                        } catch (_: Exception) {
+                            Toast.makeText(this, "Откройте релизы GitHub в браузере", Toast.LENGTH_SHORT).show()
                         }
-                    }
-                    if (apkUrl.isNotEmpty()) {
-                        runOnUiThread {
-                            Toast.makeText(this, "Скачивание новой версии $tagName...", Toast.LENGTH_LONG).show()
-                        }
-                        val apkFile = File(externalCacheDir ?: cacheDir, "TiViLook-update.apk")
-                        if (apkFile.exists()) apkFile.delete()
-                        val dlConn = URL(apkUrl).openConnection() as HttpURLConnection
-                        dlConn.instanceFollowRedirects = true
-                        dlConn.inputStream.use { input ->
-                            FileOutputStream(apkFile).use { output -> input.copyTo(output) }
-                        }
-                        runOnUiThread {
-                            val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                                FileProvider.getUriForFile(this, "com.example.miboxiptv.fileprovider", apkFile)
-                            } else Uri.fromFile(apkFile)
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, "application/vnd.android.package-archive")
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            startActivity(intent)
-                        }
-                    } else {
-                        runOnUiThread { Toast.makeText(this, "У вас установлена актуальная версия!", Toast.LENGTH_SHORT).show() }
                     }
                 } else {
-                    runOnUiThread { Toast.makeText(this, "У вас установлена последняя сборка v2.7!", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { Toast.makeText(this, "У вас установлена актуальная версия", Toast.LENGTH_SHORT).show() }
                 }
             } catch (_: Exception) {
                 runOnUiThread { Toast.makeText(this, "Проверка завершена: установлена актуальная версия", Toast.LENGTH_SHORT).show() }
             }
-        }
-    }
-
-    private fun hasAllFilesAccess(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            true
-        }
-    }
-
-    private fun requestAllFilesAccessPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-                startActivity(intent)
-                return
-            } catch (_: Exception) {}
-            try {
-                startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-                return
-            } catch (_: Exception) {}
-            Toast.makeText(this, "Откройте Настройки → Приложения → TiViLook → Доступ ко всем файлам", Toast.LENGTH_LONG).show()
-        } else {
-            requestStoragePermissionsIfNeeded()
         }
     }
 
@@ -1271,7 +1375,27 @@ class MainActivity : AppCompatActivity() {
         try {
             systemPlaylistPickerLauncher.launch(getContent)
         } catch (_: Exception) {
-            Toast.makeText(this, "Системный проводник недоступен на этом устройстве — используйте встроенный проводник", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Системный выбор файла недоступен на этом устройстве", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun launchSystemEpgPicker() {
+        val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        try {
+            systemEpgPickerLauncher.launch(openDoc)
+            return
+        } catch (_: Exception) {}
+        val getContent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        try {
+            systemEpgPickerLauncher.launch(getContent)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Системный выбор файла недоступен на этом устройстве", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -1323,16 +1447,48 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun importEpgFromUri(uri: Uri) {
+        try {
+            val displayName = resolveUriDisplayName(uri)
+            val safeName = displayName.replace(Regex("[^a-zA-Zа-яА-Я0-9._ -]"), "_").ifBlank { "epg.xml" }
+            val destDir = File(filesDir, "user_epg").apply { mkdirs() }
+            destDir.listFiles()?.forEach { try { it.delete() } catch (_: Exception) {} }
+            val destFile = File(destDir, safeName)
+            val input = contentResolver.openInputStream(uri)
+            if (input == null) {
+                Toast.makeText(this, "Не удалось открыть файл ТВ программы", Toast.LENGTH_LONG).show()
+                return
+            }
+            input.use { src ->
+                FileOutputStream(destFile).use { dst ->
+                    src.copyTo(dst)
+                }
+            }
+            if (!destFile.exists() || destFile.length() == 0L) {
+                try { destFile.delete() } catch (_: Exception) {}
+                Toast.makeText(this, "Выбранный файл ТВ программы пуст", Toast.LENGTH_LONG).show()
+                return
+            }
+            localEpgFilePath = destFile.absolutePath
+            saveState()
+            closeAllMenus()
+            Toast.makeText(this, "Загрузка ТВ программы: $displayName", Toast.LENGTH_SHORT).show()
+            loadEpgOncePerDayInBackground(forceRefresh = true)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка импорта ТВ программы: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun openPlaylistsSubModal() {
         ensureDefaultPlaylists()
-        setSubModalHeaderTitle("Плейлисты (2 встроенных + ваши списки)")
+        setSubModalHeaderTitle("Плейлисты")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val snapshot = playlists.toList()
         val items = snapshot.mapIndexed { idx, p -> (if (idx == activePlaylistIndex) "[+]   " else "[-]   ") + p.title }.toMutableList()
-        items.add("[>]   Добавить свой плейлист по ссылке   •   Сохранение групп")
-        items.add("[>]   Выбрать файл .m3u/.m3u8 (Система)   •   Android 11–16")
-        items.add("[>]   Встроенный проводник   •   Память устройства / USB")
-        if (snapshot.size > 2 && activePlaylistIndex >= 2) items.add("[-]   Удалить выбранный пользовательский плейлист")
+        items.add("[>]   Добавить плейлист по ссылке")
+        items.add("[>]   Выбрать файл плейлиста")
+        items.add("[>]   Добавить файл ТВ программы")
+        if (snapshot.size > 1 && activePlaylistIndex >= 1) items.add("[-]   Удалить выбранный плейлист")
         updateSubModalListItems(items, preservePositionIndex = activePlaylistIndex)
 
         subModalList.setOnItemClickListener { _, _, which, _ ->
@@ -1340,13 +1496,9 @@ class MainActivity : AppCompatActivity() {
                 which < snapshot.size -> { activePlaylistIndex = which; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false) }
                 which == snapshot.size -> navigateToMenu("ADD_URL")
                 which == snapshot.size + 1 -> launchSystemPlaylistPicker()
-                which == snapshot.size + 2 -> {
-                    currentBrowseDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    if (!currentBrowseDir.exists()) currentBrowseDir = Environment.getExternalStorageDirectory()
-                    navigateToMenu("FILE_BROWSER")
-                }
+                which == snapshot.size + 2 -> launchSystemEpgPicker()
                 else -> {
-                    if (activePlaylistIndex >= 2 && activePlaylistIndex < playlists.size) {
+                    if (activePlaylistIndex >= 1 && activePlaylistIndex < playlists.size) {
                         val removed = playlists.removeAt(activePlaylistIndex)
                         try {
                             val internalDir = File(filesDir, "user_playlists").absolutePath
@@ -1362,92 +1514,11 @@ class MainActivity : AppCompatActivity() {
         animateMenuAppear(subModalOverlay); subModalList.requestFocus()
     }
 
-    private fun openFolderExplorerModal(dir: File) {
-        requestStoragePermissionsIfNeeded()
-        currentBrowseDir = dir
-        setSubModalHeaderTitle("Проводник: " + dir.absolutePath)
-        subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
-
-        subModalTopButtons.addView(makeModernButton("📂 Система") { launchSystemPlaylistPicker() })
-        subModalTopButtons.addView(makeModernButton("📥 Download") { openFolderExplorerModal(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)) })
-        subModalTopButtons.addView(makeModernButton("🏠 Память") { openFolderExplorerModal(Environment.getExternalStorageDirectory()) })
-        subModalTopButtons.addView(makeModernButton("🔌 USB") { openFolderExplorerModal(File("/storage")) })
-        subModalTopButtons.addView(makeModernButton("⌨ Путь") {
-            openInputSubModal("Путь к файлу .m3u / .m3u8", "/sdcard/Download/playlist.m3u8") { path -> addLocalPlaylistFile(File(path.trim())) }
-        })
-
-        val entries = mutableListOf<Triple<String, String, File?>>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !hasAllFilesAccess()) {
-            entries.add(Triple("[!]   Выдать доступ ко всем файлам (чтобы видеть .m3u/.m3u8 в папках)", "GRANT_ALL_FILES", null))
-        }
-        val parent = dir.parentFile
-        if (parent != null && parent.canRead()) entries.add(Triple("[>]   .. [На уровень вверх]", "FILE", parent))
-        val rawChildren = try { dir.listFiles()?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
-        for (d in rawChildren.filter { it.isDirectory && !it.name.startsWith(".") }.sortedBy { it.name.lowercase() }) {
-            entries.add(Triple("[>]   Папка: " + d.name, "FILE", d))
-        }
-        val playlistFiles = rawChildren.filter {
-            it.isFile && (it.name.endsWith(".m3u", true) || it.name.endsWith(".m3u8", true) || it.name.endsWith(".txt", true) || it.name.endsWith(".pls", true))
-        }.sortedBy { it.name.lowercase() }
-        for (f in playlistFiles) {
-            entries.add(Triple("[+]   Файл: " + f.name + "   •   " + ((f.length() / 1024L).coerceAtLeast(1L)) + " КБ", "FILE", f))
-        }
-        if (playlistFiles.isEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !hasAllFilesAccess()) {
-            entries.add(Triple("[>]   Открыть системный выбор файла (.m3u / .m3u8 без спецправ)", "SYSTEM_PICKER", null))
-        } else if (entries.isEmpty()) {
-            entries.add(Triple("[-]   Папка пуста или нет доступа", "NONE", null))
-        }
-
-        updateSubModalListItems(entries.map { it.first }, preservePositionIndex = 0)
-        subModalList.setOnItemClickListener { _, _, idx, _ ->
-            val item = entries.getOrNull(idx) ?: return@setOnItemClickListener
-            when (item.second) {
-                "GRANT_ALL_FILES" -> requestAllFilesAccessPermission()
-                "SYSTEM_PICKER" -> launchSystemPlaylistPicker()
-                "FILE" -> {
-                    val target = item.third ?: return@setOnItemClickListener
-                    if (target.isDirectory) openFolderExplorerModal(target) else if (target.isFile) addLocalPlaylistFile(target)
-                }
-            }
-        }
-        animateMenuAppear(subModalOverlay); subModalList.requestFocus()
-    }
-
-    private fun addLocalPlaylistFile(file: File) {
-        if (!file.exists()) {
-            Toast.makeText(this, "Файл не найден: ${file.absolutePath}", Toast.LENGTH_LONG).show()
-            return
-        }
-        if (!file.canRead()) {
-            Toast.makeText(this, "Нет доступа к файлу. Нажмите «📂 Система» или выдайте «Доступ ко всем файлам»", Toast.LENGTH_LONG).show()
-            return
-        }
-        var targetPath = file.absolutePath
-        try {
-            val safeName = file.name.replace(Regex("[^a-zA-Zа-яА-Я0-9._ -]"), "_").ifBlank { "playlist.m3u8" }
-            val destDir = File(filesDir, "user_playlists").apply { mkdirs() }
-            val destFile = File(destDir, "${System.currentTimeMillis()}_$safeName")
-            file.inputStream().use { src ->
-                FileOutputStream(destFile).use { dst -> src.copyTo(dst) }
-            }
-            if (destFile.exists() && destFile.length() > 0L) {
-                targetPath = destFile.absolutePath
-            }
-        } catch (_: Exception) {}
-        playlists.add(PlaylistEntry(file.name, targetPath, true))
-        activePlaylistIndex = playlists.size - 1
-        saveState()
-        closeAllMenus()
-        Toast.makeText(this, "Плейлист добавлен: ${file.name}", Toast.LENGTH_SHORT).show()
-        loadActivePlaylist(autoPlayLast = false)
-    }
-
     private fun openChannelEditorGroupsModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        setSubModalHeaderTitle("Редактор каналов: выберите группу")
+        setSubModalHeaderTitle("Редактор")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
-        subModalTopButtons.addView(makeModernButton("Включить все группы и каналы") {
+        subModalTopButtons.addView(makeModernButton("Включить все") {
             disabledCategories.clear(); manualDisabledUrls.clear(); autoDisabledUrls.clear()
             saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorGroupsModal(inPlace = true, keepIndex = subModalHighlightedPos)
         })
@@ -1458,7 +1529,7 @@ class MainActivity : AppCompatActivity() {
                 val isCatEnabled = !disabledCategories.contains(cat)
                 val totalInCat = snapshot.count { effectiveCategory(it) == cat }
                 val activeInCat = snapshot.count { effectiveCategory(it) == cat && isChannelActive(it) }
-                "${if (isCatEnabled) "[+]" else "[-]"}   $cat   •   Активно: $activeInCat из $totalInCat"
+                "${if (isCatEnabled) "[+]" else "[-]"}   $cat   •   $activeInCat из $totalInCat"
             },
             smoothToggle = inPlace,
             preservePositionIndex = keepIndex
@@ -1470,14 +1541,14 @@ class MainActivity : AppCompatActivity() {
     private fun openChannelEditorItemsModal(catName: String, inPlace: Boolean = false, keepIndex: Int = -1) {
         val catChannels = allChannels.filter { effectiveCategory(it) == catName }.sortedWith(safeChannelComparator)
         val isCatDisabled = disabledCategories.contains(catName)
-        setSubModalHeaderTitle("Группа: $catName (${catChannels.size} кан.)")
+        setSubModalHeaderTitle(catName)
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
-        subModalTopButtons.addView(makeModernButton(if (isCatDisabled) "[+] Включить всю группу" else "[-] Отключить всю группу") {
+        subModalTopButtons.addView(makeModernButton(if (isCatDisabled) "Включить группу" else "Отключить группу") {
             if (disabledCategories.contains(catName)) disabledCategories.remove(catName) else disabledCategories.add(catName)
             saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = subModalHighlightedPos)
         })
-        subModalTopButtons.addView(makeModernButton("Включить все в группе") {
+        subModalTopButtons.addView(makeModernButton("Включить все") {
             catChannels.forEach { manualDisabledUrls.remove(it.url); autoDisabledUrls.remove(it.url) }
             disabledCategories.remove(catName); saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = subModalHighlightedPos)
         })
@@ -1486,7 +1557,7 @@ class MainActivity : AppCompatActivity() {
                 val isManualOff = manualDisabledUrls.contains(ch.url)
                 val isAutoOff = autoDisabledUrls.contains(ch.url)
                 val enabled = !isManualOff && !isAutoOff && !isCatDisabled
-                val note = if (isManualOff) "   •   Исключён вручную" else if (isAutoOff) "   •   Скрыт тестом" else ""
+                val note = if (isManualOff) "   •   Скрыт" else if (isAutoOff) "   •   Тест" else ""
                 "${if (enabled) "[+]" else "[-]"}   ${ch.name}$note"
             },
             smoothToggle = inPlace,
@@ -1506,19 +1577,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun openAnalyzerGroupsModal(firstOpen: Boolean = false) {
         val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
-        val aliveTotal = aliveChannelsAtomic.get()
-        val deadTotal = deadChannelsAtomic.get()
-        setSubModalHeaderTitle("Быстрый тест   •   [+] $aliveTotal   [-] $deadTotal")
+        setSubModalHeaderTitle("Тест каналов")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
             subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
-            subModalTopButtons.addView(makeModernButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Быстрый тест всех групп") {
+            subModalTopButtons.addView(makeModernButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Запустить тест") {
                 if (isAnalyzerRunning) { isAnalyzerRunning = false; analyzerStatusBanner.visibility = View.GONE; openAnalyzerGroupsModal(firstOpen = true) }
                 else { selectedAnalyzerCategory = "Все каналы"; startBackgroundChannelAnalyzer(snapshot); openAnalyzerGroupsModal(firstOpen = true) }
             })
-            if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ Свернуть в фон") { collapseAnalyzerToTopBar() })
+            if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ В фон") { collapseAnalyzerToTopBar() })
             if (autoDisabledUrls.isNotEmpty()) {
-                subModalTopButtons.addView(makeModernButton("↺ Вернуть скрытые (${autoDisabledUrls.size})") {
+                subModalTopButtons.addView(makeModernButton("↺ Вернуть скрытые") {
                     autoDisabledUrls.clear(); saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openAnalyzerGroupsModal(firstOpen = false)
                 })
             }
@@ -1526,7 +1595,7 @@ class MainActivity : AppCompatActivity() {
         val groupNames = listOf("Все каналы") + activeCategoryList().drop(2)
         updateSubModalListItems(groupNames.map { gName ->
             val groupChans = if (gName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == gName }
-            "[>]   $gName (${groupChans.size} кан.)   •   [+] ${groupChans.count { channelHealthMap[it.url] == true }}    [-] ${groupChans.count { channelHealthMap[it.url] == false }}"
+            "[>]   $gName   •   [+] ${groupChans.count { channelHealthMap[it.url] == true }}   [-] ${groupChans.count { channelHealthMap[it.url] == false }}"
         }, preservePositionIndex = subModalHighlightedPos)
         subModalList.setOnItemClickListener { _, _, idx, _ ->
             if (idx in groupNames.indices) { selectedAnalyzerCategory = groupNames[idx]; navigateToMenu("ANALYZER_GROUP_VIEW") }
@@ -1537,21 +1606,19 @@ class MainActivity : AppCompatActivity() {
     private fun openAnalyzerGroupChannelsModal(catName: String, firstOpen: Boolean = false) {
         val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
         val groupChans = (if (catName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == catName }).sortedWith(safeChannelComparator)
-        val alive = groupChans.count { channelHealthMap[it.url] == true }
-        val dead = groupChans.count { channelHealthMap[it.url] == false }
-        setSubModalHeaderTitle("Группа: $catName ([+] $alive  •  [-] $dead)")
+        setSubModalHeaderTitle(catName)
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
             subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
-            subModalTopButtons.addView(makeModernButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Быстрый тест группы") {
+            subModalTopButtons.addView(makeModernButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Тест группы") {
                 if (isAnalyzerRunning) { isAnalyzerRunning = false; analyzerStatusBanner.visibility = View.GONE; openAnalyzerGroupChannelsModal(catName, firstOpen = true) }
                 else { startBackgroundChannelAnalyzer(groupChans); openAnalyzerGroupChannelsModal(catName, firstOpen = true) }
             })
-            if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ Свернуть в фон") { collapseAnalyzerToTopBar() })
+            if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ В фон") { collapseAnalyzerToTopBar() })
         }
-        updateSubModalListItems(groupChans.mapIndexed { i, ch ->
+        updateSubModalListItems(groupChans.map { ch ->
             val status = when (channelHealthMap[ch.url]) { true -> "[+]   Работает"; false -> "[-]   Скрыт"; null -> "[?]   Очередь" }
-            "$status   •   ${i + 1}. ${ch.name}"
+            "$status   •   ${ch.name}"
         }, preservePositionIndex = subModalHighlightedPos)
         subModalList.setOnItemClickListener { _, _, idx, _ -> if (idx in groupChans.indices) { playChannelObj(groupChans[idx], immediate = true); closeAllMenus() } }
         if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
@@ -1670,7 +1737,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openDiagLogViewerModal(firstOpen: Boolean = false) {
-        setSubModalHeaderTitle("Диагностический лог (${CoreEngines.getDiagLogStatusText()})")
+        setSubModalHeaderTitle("Лог ошибок")
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.VISIBLE
         subModalTopButtons.visibility = View.VISIBLE
@@ -1700,17 +1767,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openBufferSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        setSubModalHeaderTitle("Буфер удержания потока и Диагностика")
+        setSubModalHeaderTitle("Буфер")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val opts = listOf(
-            "Стандартный буфер (10–20 сек)   •   Быстрый отклик (24 МБ)",
-            "Оптимальный буфер (15–28 сек)   •   Рекомендуется для ТВ (32 МБ)",
-            "Усиленный анти-фриз (22–38 сек)   •   Запас под окно CDN (44 МБ)",
-            "Максимальное удержание (30–50 сек)   •   Защита от помех Wi-Fi (56 МБ)"
+            "Стандартный   •   10–20 сек",
+            "Оптимальный   •   15–28 сек",
+            "Анти-фриз   •   22–38 сек",
+            "Максимальный   •   30–50 сек"
         ).mapIndexed { i, t -> (if (i == bufferLevel) "[+]   " else "[-]   ") + t }.toMutableList()
-        opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -20 сек")
-        opts.add("[>]   Машина времени   •   Отмотать прямой эфир на -45 сек")
-        opts.add("[>]   Лог ошибок (${CoreEngines.getDiagLogStatusText()})   •   Просмотр на экране и Download")
+        opts.add("[>]   Отмотать эфир -20 сек")
+        opts.add("[>]   Отмотать эфир -45 сек")
+        opts.add("[>]   Лог ошибок")
         val targetIdx = if (keepIndex >= 0) keepIndex else bufferLevel
         updateSubModalListItems(opts, smoothToggle = inPlace, preservePositionIndex = targetIdx)
         subModalList.setOnItemClickListener { _, _, which, _ ->
@@ -1729,15 +1796,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openDecoderSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        setSubModalHeaderTitle("Декодер и Защита Плазмы")
+        setSubModalHeaderTitle("Декодер")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val opts = listOf(
-            "Аппаратный декодер (MediaCodec HW)   •   Минимальная нагрузка",
-            "Автоматический декодер (HW + FFmpeg)   •   Рекомендуется",
-            "Программный декодер (Приоритет SW)   •   Совместимость"
+            "Аппаратный HW",
+            "Автоматический HW + FFmpeg",
+            "Программный SW"
         ).mapIndexed { i, t -> (if (i == decoderMode) "[+]   " else "[-]   ") + t }.toMutableList()
-        opts.add(if (pixelOrbiterEnabled) "[ON]   Сдвиг пикселей часов, антенны и экрана (Pixel Orbiter)   •   Включён" else "[OFF]   Сдвиг пикселей часов, антенны и экрана (Pixel Orbiter)   •   Выключен")
-        opts.add(if (afrEnabled) "[ON]   Авточастота кадров AFR (50/60 Гц)   •   Включена" else "[OFF]   Авточастота кадров AFR (50/60 Гц)   •   Выключена")
+        opts.add(if (pixelOrbiterEnabled) "[ON]   Сдвиг пикселей   •   Вкл" else "[OFF]   Сдвиг пикселей   •   Выкл")
+        opts.add(if (afrEnabled) "[ON]   Авточастота AFR   •   Вкл" else "[OFF]   Авточастота AFR   •   Выкл")
         val targetIdx = if (keepIndex >= 0) keepIndex else decoderMode
         updateSubModalListItems(opts, smoothToggle = inPlace, preservePositionIndex = targetIdx)
         subModalList.setOnItemClickListener { _, _, which, _ ->
@@ -1752,17 +1819,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun openAudioSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
         val p = player ?: return
-        setSubModalHeaderTitle("Звук, Выравнивание (DRC) и Усиление")
+        setSubModalHeaderTitle("Звук")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val labels = mutableListOf<String>()
-        labels.add(if (drcNightAudioEnabled) "[ON]   Выравнивание громкости (Night Audio / DRC)   •   Включено" else "[OFF]   Выравнивание громкости (Night Audio / DRC)   •   Выключено")
-        val boostText = when (audioBoostPercent) {
-            100 -> "100% (Штатный уровень)"
-            130 -> "130% (+3.5 дБ)"
-            160 -> "160% (+7.0 дБ)"
-            else -> "200% (+11 дБ Максимум)"
-        }
-        labels.add("[+]   Усиление громкости (Audio Boost)   •   $boostText")
+        labels.add(if (drcNightAudioEnabled) "[ON]   Выравнивание DRC   •   Вкл" else "[OFF]   Выравнивание DRC   •   Выкл")
+        labels.add("[+]   Усиление громкости   •   ${audioBoostPercent}%")
 
         val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
         val overrides = mutableListOf<TrackSelectionOverride>()
@@ -1809,7 +1870,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openAddUrlSubModal() {
-        setSubModalHeaderTitle("Новый плейлист по ссылке"); subModalList.visibility = View.GONE
+        setSubModalHeaderTitle("Плейлист по ссылке"); subModalList.visibility = View.GONE
         subModalInputContainer.removeAllViews(); subModalInputContainer.visibility = View.VISIBLE
         val nameInput = EditText(this).apply { hint = "Название плейлиста"; setTextColor(currentTheme().textPrimaryColor); setSingleLine() }
         val urlInput = EditText(this).apply { hint = "http://... (.m3u8)"; setTextColor(currentTheme().textPrimaryColor); setSingleLine() }
@@ -1836,7 +1897,14 @@ class MainActivity : AppCompatActivity() {
                 v.animate().scaleX(if (hasFocus) 1.12f else 1.0f).scaleY(if (hasFocus) 1.12f else 1.0f).setDuration(160L).start()
                 if (hasFocus) resetMenuInactivityTimer()
             }
-            setOnClickListener { resetMenuInactivityTimer(); onClick() }
+            setOnClickListener {
+                resetMenuInactivityTimer()
+                if (!isLeftRailVisible) {
+                    showLeftIconRailFromGroups()
+                } else {
+                    onClick()
+                }
+            }
             setOnKeyListener { _, keyCode, event ->
                 if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     resetMenuInactivityTimer()
@@ -1947,7 +2015,6 @@ class MainActivity : AppCompatActivity() {
         CoreEngines.diagAppContext = applicationContext
         CoreEngines.installTrustAllSsl()
         CoreEngines.appendDiagLog("APP_START", "Запуск TiViLook v2.7 (SDK=${Build.VERSION.SDK_INT}, Device=${Build.MODEL})")
-        requestStoragePermissionsIfNeeded()
         loadSavedState()
         currentAnimatedAlphaInt = targetPanelAlphaInt()
         initTouchGestureDetector()
@@ -2043,17 +2110,27 @@ class MainActivity : AppCompatActivity() {
 
         sidePanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            clipChildren = true; clipToPadding = true
             setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(680, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START).apply { setMargins(leftSafeMarginPx(), 16, 0, 16) }
+            layoutParams = FrameLayout.LayoutParams(sidePanelWidthPx(), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START).apply { setMargins(leftSafeMarginPx(), 16, 0, 16) }
             setPadding(18, 16, 18, 16)
         }
 
         allGridTiles.clear(); allGridCaptions.clear()
 
+        singleColumnFrame = FrameLayout(this).apply {
+            clipChildren = true; clipToPadding = true
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+
         leftIconRail = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setBackgroundDrawable(makeThemedSubBg()); visibility = View.GONE; setPadding(10, 16, 10, 16)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT).apply { rightMargin = 14 }
+            setBackgroundDrawable(makeThemedSubBg()); visibility = View.VISIBLE; setPadding(10, 16, 10, 16)
+            layoutParams = FrameLayout.LayoutParams(108, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START or Gravity.CENTER_VERTICAL)
+            setOnClickListener {
+                resetMenuInactivityTimer()
+                if (!isLeftRailVisible) showLeftIconRailFromGroups()
+            }
         }
 
         railTilePlaylists = makeVerticalRail3DIconButton("PLAYLISTS", "#1B8A6B", "#FFB300") { navigateToMenu("PLAYLISTS") }.apply { id = 7101 }
@@ -2070,11 +2147,6 @@ class MainActivity : AppCompatActivity() {
             cur.nextFocusDownId = railButtons[(i + 1) % railButtons.size].id
             leftIconRail.addView(cur)
         }
-        sidePanel.addView(leftIconRail)
-
-        singleColumnFrame = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
-        }
 
         categoryListView = ListView(this).apply {
             choiceMode = ListView.CHOICE_MODE_NONE; divider = null; dividerHeight = 0
@@ -2082,8 +2154,8 @@ class MainActivity : AppCompatActivity() {
             isVerticalScrollBarEnabled = true
             isScrollbarFadingEnabled = false
             selector = ColorDrawable(Color.TRANSPARENT); isSmoothScrollbarEnabled = false
-            setBackgroundDrawable(makeThemedSubBg()); setPadding(8, 8, 8, 8); visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            setBackgroundDrawable(makeThemedSubBg()); setPadding(8, 8, 8, 8); visibility = View.VISIBLE
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START or Gravity.CENTER_VERTICAL)
         }
 
         channelListView = ListView(this).apply {
@@ -2093,9 +2165,10 @@ class MainActivity : AppCompatActivity() {
             isScrollbarFadingEnabled = false
             selector = ColorDrawable(Color.TRANSPARENT); isSmoothScrollbarEnabled = false
             setBackgroundDrawable(makeThemedSubBg()); setPadding(8, 8, 8, 8); visibility = View.VISIBLE
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START or Gravity.CENTER_VERTICAL)
         }
 
+        singleColumnFrame.addView(leftIconRail)
         singleColumnFrame.addView(categoryListView)
         singleColumnFrame.addView(channelListView)
         sidePanel.addView(singleColumnFrame)
@@ -2103,18 +2176,28 @@ class MainActivity : AppCompatActivity() {
 
         infoPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
-            layoutParams = FrameLayout.LayoutParams(540, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, 68, 22, 0) }
-            setPadding(26, 22, 26, 22)
+            layoutParams = FrameLayout.LayoutParams(620, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, 68, 24, 0) }
+            setPadding(28, 22, 28, 22)
         }
-        val infoTitle = TextView(this).apply {
-            text = "Параметры канала"; setTextColor(Color.parseColor("#00E5FF")); setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-            typeface = themeBoldFont(); setPadding(0, 0, 0, 8)
+        infoTitleView = TextView(this).apply {
+            text = "Параметры экрана"; setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 17.5f)
+            typeface = themeBoldFont(); gravity = Gravity.CENTER_HORIZONTAL; setPadding(0, 0, 0, 12)
+            isSingleLine = true; maxLines = 1
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-        infoPanel.addView(infoTitle)
-        infoTextView = TextView(this).apply {
-            setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f); typeface = themeFont(); setLineSpacing(5f, 1f)
+        infoPanel.addView(infoTitleView)
+        infoRowViews.clear()
+        for (rIdx in 0 until 6) {
+            val rowTv = TextView(this).apply {
+                setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f); typeface = themeFont()
+                isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                setPadding(4, 5, 4, 5)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
+            infoRowViews.add(rowTv)
+            infoPanel.addView(rowTv)
         }
-        infoPanel.addView(infoTextView)
+        infoTextView = infoRowViews[0]
         rootFrame.addView(infoPanel)
 
         centerOsdPanel = LinearLayout(this).apply {
@@ -2200,14 +2283,15 @@ class MainActivity : AppCompatActivity() {
 
         fullEpgOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
-            setPadding(28, 22, 28, 22)
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START or Gravity.BOTTOM).apply {
-                setMargins(28, 40, 560, 28)
+            setPadding(30, 22, 30, 22)
+            layoutParams = FrameLayout.LayoutParams(1200, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply {
+                setMargins(28, 72, 28, 24)
             }
         }
         fullEpgTitle = TextView(this).apply {
-            setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
-            typeface = themeBoldFont(); setPadding(0, 0, 0, 12)
+            setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 19.5f)
+            typeface = themeBoldFont(); gravity = Gravity.CENTER_HORIZONTAL; setPadding(4, 2, 4, 14)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
         fullEpgOverlay.addView(fullEpgTitle)
 
@@ -2394,6 +2478,16 @@ class MainActivity : AppCompatActivity() {
         subModalInputContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         subModalOverlay.addView(subModalInputContainer)
 
+        subModalThemesGrid = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            clipChildren = false; clipToPadding = false
+            visibility = View.GONE
+            setPadding(4, 4, 4, 4)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+        subModalOverlay.addView(subModalThemesGrid)
+
         subModalList = ListView(this).apply {
             choiceMode = ListView.CHOICE_MODE_NONE
             divider = ColorDrawable(Color.TRANSPARENT)
@@ -2434,10 +2528,10 @@ class MainActivity : AppCompatActivity() {
         rootFrame.addView(firstRunModeOverlay)
 
         splashOverlay = FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(Color.parseColor("#0A3F52"))
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
-        splashEyeView = RealisticEyeSplashView(this).apply {
+        splashEyeView = SunbeamEyeSplashView(this).apply {
             alpha = 0f; eyeOpenFraction = 0.03f
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
         }
@@ -2471,6 +2565,14 @@ class MainActivity : AppCompatActivity() {
 
         categoryListView.setOnItemClickListener { _, _, position, _ ->
             resetMenuInactivityTimer()
+            if (isSideShowingChannels) {
+                showSideGroupsMode()
+                return@setOnItemClickListener
+            }
+            if (isLeftRailVisible) {
+                hideLeftIconRailToGroups()
+                return@setOnItemClickListener
+            }
             focusedCategoryPos = position
             selectCategory(position)
             showSideChannelsMode(focusCurrentChannelIfSameGroup = false)
@@ -2517,6 +2619,10 @@ class MainActivity : AppCompatActivity() {
 
         channelListView.setOnItemClickListener { _, _, position, _ ->
             resetMenuInactivityTimer()
+            if (!isSideShowingChannels) {
+                showSideChannelsMode(focusCurrentChannelIfSameGroup = false)
+                return@setOnItemClickListener
+            }
             val list = displayedChannels.toList()
             if (position in list.indices) {
                 focusedChannelPos = position
@@ -2599,18 +2705,20 @@ class MainActivity : AppCompatActivity() {
 
     internal fun showLeftIconRailFromGroups() {
         isLeftRailVisible = true
-        leftIconRail.visibility = View.VISIBLE
-        leftIconRail.alpha = 0f; leftIconRail.translationX = -36f
-        leftIconRail.animate().alpha(1f).translationX(0f).setDuration(220L).start()
+        isSideShowingChannels = false
+        updateSideSlidingTiles(animate = true)
         refreshSimpleListHighlightInPlace(categoryListView, -1)
+        refreshSimpleListHighlightInPlace(channelListView, -1)
         railTilePlaylists.requestFocus()
     }
 
     internal fun hideLeftIconRailToGroups() {
         isLeftRailVisible = false
-        leftIconRail.visibility = View.GONE
+        isSideShowingChannels = false
+        updateSideSlidingTiles(animate = true)
         categoryListView.requestFocus()
         refreshSimpleListHighlightInPlace(categoryListView, focusedCategoryPos)
+        refreshSimpleListHighlightInPlace(channelListView, -1)
     }
 
     internal fun refreshSimpleListHighlightInPlace(listView: ListView, activeAdapterPos: Int) {
@@ -2758,37 +2866,89 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private fun makeSymmetricDeviceButton(isTv: Boolean, labelText: String, onSelect: () -> Unit): LinearLayout {
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val iconSize = (76 * scale).toInt().coerceIn(60, 108)
+        val cardH = (210 * scale).toInt().coerceIn(170, 270)
+        val iconView = DeviceGlyphIconView(this, isTv).apply {
+            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply { bottomMargin = (14 * scale).toInt() }
+        }
+        val labelView = TextView(this).apply {
+            text = labelText
+            setTextColor(t.textPrimaryColor)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17.5f * scale)
+            typeface = t.boldFont
+            gravity = Gravity.CENTER
+            isSingleLine = true; maxLines = 1
+        }
+        fun applyCardStyle(container: LinearLayout, focused: Boolean) {
+            val curT = currentTheme()
+            val bgCol = if (focused) {
+                Color.argb(65, Color.red(curT.accentColor), Color.green(curT.accentColor), Color.blue(curT.accentColor))
+            } else {
+                curT.cardBgColor
+            }
+            val strokeCol = if (focused) curT.accentColor else curT.strokeColor
+            container.setBackgroundDrawable(GradientDrawable().apply {
+                setColor(bgCol)
+                cornerRadius = 22f * scale
+                setStroke(if (focused) 4 else 2, strokeCol)
+            })
+            iconView.glyphColor = if (focused) Color.WHITE else curT.textPrimaryColor
+            labelView.setTextColor(if (focused) Color.WHITE else curT.textPrimaryColor)
+            container.animate().scaleX(if (focused) 1.03f else 1f).scaleY(if (focused) 1.03f else 1f).setDuration(140L).start()
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+            setPadding((24 * scale).toInt(), (24 * scale).toInt(), (24 * scale).toInt(), (24 * scale).toInt())
+            layoutParams = LinearLayout.LayoutParams(0, cardH, 1f).apply {
+                val m = (14 * scale).toInt()
+                setMargins(m, 8, m, 8)
+            }
+            addView(iconView)
+            addView(labelView)
+            applyCardStyle(this, false)
+            setOnFocusChangeListener { _, hasFocus -> applyCardStyle(this, hasFocus) }
+            setOnClickListener { onSelect() }
+        }
+    }
+
     internal fun buildFirstRunControlPickerView() {
         firstRunModeOverlay.removeAllViews()
+        val dm = resources.displayMetrics
+        val scale = uiScaleFactor()
+        val cardW = (dm.widthPixels * 0.62f).toInt().coerceIn(660, 1080)
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setBackgroundDrawable(makeThemedPanelBg()); setPadding(48, 40, 48, 40)
-            layoutParams = FrameLayout.LayoutParams(880, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+            setBackgroundDrawable(makeThemedPanelBg()); setPadding(44, 34, 44, 38)
+            layoutParams = FrameLayout.LayoutParams(cardW, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         }
         val title = TextView(this).apply {
-            text = "TiViLook 2.7 — Выберите устройство"
-            setTextColor(currentTheme().textPrimaryColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            text = "Управление"
+            setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f * scale)
             typeface = themeBoldFont(); gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 24)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-        val subtitle = TextView(this).apply {
-            text = "Для смартфона автоматически включится отступ под вырез камеры и компактный шрифт"
-            setTextColor(Color.parseColor("#94A3B8")); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            typeface = themeFont(); gravity = Gravity.CENTER; setPadding(0, 8, 0, 28)
-        }
-        card.addView(title); card.addView(subtitle)
+        card.addView(title)
 
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        val btnTouchMode = makeModernButton("📱 Смартфон / Планшет\nОтступ под камеру + сенсор") {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; weightSum = 2f
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val btnTouchMode = makeSymmetricDeviceButton(isTv = false, labelText = "Смартфон") {
             controlMode = 1; uiScaleStep = 0; cameraCutoutSafeOffset = true; screenAspectMode = 0
             applyScreenAspectMode(); applyCurrentThemeToAllPanels(); saveState()
             enableTrueFullScreenImmersion(); firstRunModeOverlay.visibility = View.GONE
-        }.apply { setPadding(34, 28, 34, 28); isSingleLine = false; maxLines = 3; setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f) }
-
-        val btnRemoteMode = makeModernButton("📺 Телевизор / ТВ-приставка\nКрупный шрифт на весь экран") {
+        }
+        val btnRemoteMode = makeSymmetricDeviceButton(isTv = true, labelText = "Телевизор") {
             controlMode = 2; uiScaleStep = 1; cameraCutoutSafeOffset = false
             applyCurrentThemeToAllPanels(); saveState()
             enableTrueFullScreenImmersion(); firstRunModeOverlay.visibility = View.GONE
-        }.apply { setPadding(34, 28, 34, 28); isSingleLine = false; maxLines = 3; setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f) }
+        }
 
         row.addView(btnTouchMode); row.addView(btnRemoteMode)
         card.addView(row); firstRunModeOverlay.addView(card)
@@ -2799,7 +2959,7 @@ class MainActivity : AppCompatActivity() {
             closeAllMenus(); buildFirstRunControlPickerView()
             animateMenuAppear(firstRunModeOverlay, 0f, 20f)
             val card = firstRunModeOverlay.getChildAt(0) as? LinearLayout
-            val row = card?.getChildAt(2) as? LinearLayout
+            val row = card?.getChildAt(1) as? LinearLayout
             row?.getChildAt(if (controlMode == 1) 0 else 1)?.requestFocus()
         }
     }
@@ -2933,28 +3093,110 @@ class MainActivity : AppCompatActivity() {
         val maxH = (resources.displayMetrics.heightPixels - 64).coerceAtLeast(300)
         val exactRows = (maxH / stepH).coerceAtLeast(5)
         val exactH = exactRows * rowH + (exactRows - 1).coerceAtLeast(0) * divH + 20
-        categoryListView.isVerticalScrollBarEnabled = (activeCategoryList().size > exactRows)
-        channelListView.isVerticalScrollBarEnabled = (displayedChannels.size > exactRows)
-        categoryListView.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, exactH, Gravity.CENTER_VERTICAL)
-        channelListView.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, exactH, Gravity.CENTER_VERTICAL)
+
+        val innerW = (sidePanelWidthPx() - 36).coerceAtLeast(380)
+        val gap = 12
+        val peekW = (innerW * 0.08f).toInt().coerceIn(34, 52)
+        val railW = (108 * uiScaleFactor()).toInt().coerceIn(92, 132)
+        val groupsW = (innerW - 2 * peekW - 2 * gap).coerceAtLeast(240)
+        val channelsW = (innerW - peekW - gap).coerceAtLeast(260)
+
+        categoryListView.isVerticalScrollBarEnabled = (!isSideShowingChannels && !isLeftRailVisible && activeCategoryList().size > exactRows)
+        channelListView.isVerticalScrollBarEnabled = (isSideShowingChannels && displayedChannels.size > exactRows)
+
+        leftIconRail.layoutParams = FrameLayout.LayoutParams(railW, exactH, Gravity.START or Gravity.CENTER_VERTICAL)
+        categoryListView.layoutParams = FrameLayout.LayoutParams(groupsW, exactH, Gravity.START or Gravity.CENTER_VERTICAL)
+        channelListView.layoutParams = FrameLayout.LayoutParams(channelsW, exactH, Gravity.START or Gravity.CENTER_VERTICAL)
+        updateSideSlidingTiles(animate = false)
+    }
+
+    internal fun updateSideSlidingTiles(animate: Boolean) {
+        val innerW = (sidePanelWidthPx() - 36).coerceAtLeast(380)
+        val gap = 12
+        val peekW = (innerW * 0.08f).toInt().coerceIn(34, 52)
+        val railW = (108 * uiScaleFactor()).toInt().coerceIn(92, 132)
+        val groupsW = (innerW - 2 * peekW - 2 * gap).coerceAtLeast(240)
+
+        leftIconRail.visibility = View.VISIBLE
+        categoryListView.visibility = View.VISIBLE
+        channelListView.visibility = View.VISIBLE
+
+        val railX: Float; val railAlpha: Float; val railScaleY: Float
+        val groupsX: Float; val groupsAlpha: Float; val groupsScaleY: Float
+        val channelsX: Float; val channelsAlpha: Float; val channelsScaleY: Float
+
+        when {
+            isLeftRailVisible -> {
+                railX = 0f; railAlpha = 1f; railScaleY = 1f
+                groupsX = (railW + gap).toFloat(); groupsAlpha = 0.60f; groupsScaleY = 0.96f
+                channelsX = (railW + gap + groupsW + gap).toFloat(); channelsAlpha = 0f; channelsScaleY = 0.94f
+                leftIconRail.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+                categoryListView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                channelListView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                categoryListView.isFocusable = false
+                channelListView.isFocusable = false
+            }
+            !isSideShowingChannels -> {
+                railX = -(railW - peekW).toFloat(); railAlpha = 0.60f; railScaleY = 0.96f
+                groupsX = (peekW + gap).toFloat(); groupsAlpha = 1f; groupsScaleY = 1f
+                channelsX = (innerW - peekW).toFloat(); channelsAlpha = 0.56f; channelsScaleY = 0.96f
+                leftIconRail.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                categoryListView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+                channelListView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                categoryListView.isFocusable = true
+                channelListView.isFocusable = false
+            }
+            else -> {
+                railX = -(railW + groupsW).toFloat(); railAlpha = 0f; railScaleY = 0.94f
+                groupsX = -(groupsW - peekW).toFloat(); groupsAlpha = 0.56f; groupsScaleY = 0.96f
+                channelsX = (peekW + gap).toFloat(); channelsAlpha = 1f; channelsScaleY = 1f
+                leftIconRail.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                categoryListView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                channelListView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+                categoryListView.isFocusable = false
+                channelListView.isFocusable = true
+            }
+        }
+
+        fun applyTileTransform(v: View, tx: Float, al: Float, sy: Float) {
+            v.animate().cancel()
+            if (animate) {
+                v.animate()
+                    .translationX(tx)
+                    .alpha(al)
+                    .scaleY(sy)
+                    .setDuration(240L)
+                    .setInterpolator(DecelerateInterpolator(1.4f))
+                    .start()
+            } else {
+                v.translationX = tx
+                v.alpha = al
+                v.scaleY = sy
+            }
+        }
+
+        applyTileTransform(leftIconRail, railX, railAlpha, railScaleY)
+        applyTileTransform(categoryListView, groupsX, groupsAlpha, groupsScaleY)
+        applyTileTransform(channelListView, channelsX, channelsAlpha, channelsScaleY)
     }
 
     internal fun showSideChannelsMode(focusCurrentChannelIfSameGroup: Boolean = true) {
+        val wasVisible = (sidePanel.visibility == View.VISIBLE && !isSideShowingChannels)
         isSideShowingChannels = true
         isLeftRailVisible = false
-        leftIconRail.visibility = View.GONE
         fitSideListsExactRows()
-        categoryListView.visibility = View.GONE
-        channelListView.visibility = View.VISIBLE
+        updateSideSlidingTiles(animate = wasVisible)
 
         val list = displayedChannels.toList()
         val activeIdx = if (focusCurrentChannelIfSameGroup) findActiveChannelIndex(list, currentChannel, focusedChannelPos) else focusedChannelPos
         val targetPos = if (activeIdx in list.indices) activeIdx else 0
         focusedChannelPos = targetPos
+        updateCategoriesList()
         refreshChannelAdapter()
 
         channelListView.post {
             try {
+                refreshSimpleListHighlightInPlace(categoryListView, -1)
                 val safeCount = channelListAdapter.count
                 if (safeCount > 0) {
                     val clampedPos = targetPos.coerceIn(0, safeCount - 1)
@@ -2968,19 +3210,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun showSideGroupsMode() {
+        val wasVisible = (sidePanel.visibility == View.VISIBLE && (isSideShowingChannels || isLeftRailVisible))
         isSideShowingChannels = false
         isLeftRailVisible = false
-        leftIconRail.visibility = View.GONE
         fitSideListsExactRows()
-        channelListView.visibility = View.GONE
-        categoryListView.visibility = View.VISIBLE
+        updateSideSlidingTiles(animate = wasVisible)
 
         updateCategoriesList()
+        refreshChannelAdapter()
         val targetPos = currentCategoryIndex.coerceIn(0, (categoryAdapter.count - 1).coerceAtLeast(0))
         focusedCategoryPos = targetPos
 
         categoryListView.post {
             try {
+                refreshSimpleListHighlightInPlace(channelListView, -1)
                 val safeCount = categoryAdapter.count
                 if (safeCount > 0) {
                     val clampedPos = targetPos.coerceIn(0, safeCount - 1)
@@ -3038,26 +3281,11 @@ class MainActivity : AppCompatActivity() {
         uiHandler.post(animRunnable)
     }
 
-    internal fun requestStoragePermissionsIfNeeded() {
-        if (Build.VERSION.SDK_INT in Build.VERSION_CODES.M..Build.VERSION_CODES.S_V2) {
-            val needed = mutableListOf<String>()
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                needed.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                needed.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
-            if (needed.isNotEmpty()) {
-                ActivityCompat.requestPermissions(this, needed.toTypedArray(), 2002)
-            }
-        }
-    }
+
 
     internal fun hideAllMenuViews() {
         setPlayerMiniPreviewMode(false)
         sidePanel.visibility = View.GONE
-        leftIconRail.visibility = View.GONE
         isLeftRailVisible = false
         infoPanel.visibility = View.GONE
         centerOsdPanel.visibility = View.GONE
@@ -3119,15 +3347,16 @@ class MainActivity : AppCompatActivity() {
         currentChannelBanner.visibility = View.GONE
         subModalTopButtons.visibility = View.GONE
         subModalTopButtons.removeAllViews()
+        if (::subModalThemesGrid.isInitialized) subModalThemesGrid.visibility = View.GONE
 
         val dm = resources.displayMetrics
         val isCompactInput = (menuId == "EPG" || menuId == "ADD_URL")
         subModalOverlay.layoutParams = FrameLayout.LayoutParams(
-            (dm.widthPixels * 0.78f).toInt().coerceIn(820, 1380),
+            (dm.widthPixels * 0.84f).toInt().coerceIn(860, 1640),
             if (isCompactInput) FrameLayout.LayoutParams.WRAP_CONTENT else FrameLayout.LayoutParams.MATCH_PARENT,
             Gravity.CENTER
         ).apply {
-            setMargins(28, 20, 28, 20)
+            setMargins(28, 66, 28, 24)
         }
 
         when (menuId) {
@@ -3176,7 +3405,6 @@ class MainActivity : AppCompatActivity() {
             "TOP_MANAGER" -> openTopManagerSubModal(inPlace = false)
             "MORE_SETTINGS" -> openMoreSettingsSubModal(inPlace = false)
             "PLAYLISTS" -> openPlaylistsSubModal()
-            "FILE_BROWSER" -> openFolderExplorerModal(currentBrowseDir)
             "CHANNEL_EDITOR_GROUPS" -> openChannelEditorGroupsModal(inPlace = false)
             "CHANNEL_EDITOR_ITEMS" -> openChannelEditorItemsModal(selectedEditorCategory, inPlace = false)
             "ANALYZER_GROUPS" -> openAnalyzerGroupsModal(firstOpen = true)
@@ -3740,10 +3968,28 @@ class MainActivity : AppCompatActivity() {
             val mergedByName = HashMap<String, MutableList<EpgProgram>>()
             var totalProgramsCount = 0
 
-            for (candidateUrl in (listOf(epgUrl) + epgUrls).distinct()) {
+            val epgCandidates = mutableListOf<String>()
+            if (localEpgFilePath.isNotBlank() && File(localEpgFilePath).exists()) {
+                epgCandidates.add("LOCAL_FILE::$localEpgFilePath")
+            }
+            for (u in (listOf(epgUrl) + epgUrls).distinct()) {
+                if (u.isNotBlank()) epgCandidates.add(u)
+            }
+
+            for (candidateUrl in epgCandidates) {
                 try {
-                    val rawStream = CoreEngines.openStreamWithBypass(candidateUrl, userAgentIndex, dohEnabled, 25000)
-                    val stream: InputStream = if (candidateUrl.endsWith(".gz", true)) GZIPInputStream(rawStream) else rawStream
+                    val rawStream: InputStream = if (candidateUrl.startsWith("LOCAL_FILE::")) {
+                        File(candidateUrl.removePrefix("LOCAL_FILE::")).inputStream()
+                    } else {
+                        CoreEngines.openStreamWithBypass(candidateUrl, userAgentIndex, dohEnabled, 25000)
+                    }
+                    val buffered = rawStream.buffered()
+                    buffered.mark(4)
+                    val b0 = buffered.read()
+                    val b1 = buffered.read()
+                    buffered.reset()
+                    val isGzip = (b0 == 0x1f && b1 == 0x8b) || candidateUrl.endsWith(".gz", true)
+                    val stream: InputStream = if (isGzip) GZIPInputStream(buffered) else buffered
                     val tempById = HashMap<String, MutableList<EpgProgram>>()
                     val tempIdToNames = HashMap<String, MutableList<String>>()
 
@@ -3807,6 +4053,7 @@ class MainActivity : AppCompatActivity() {
                     if (mergedByName.isNotEmpty()) {
                         runOnUiThread {
                             if (isFinishing || isDestroyed) return@runOnUiThread
+                            if (forceRefresh) { epgById.clear(); epgByName.clear() }
                             epgById.putAll(mergedById); epgByName.putAll(mergedByName)
                             epgLoadedCount = totalProgramsCount
                             if (centerOsdPanel.visibility == View.VISIBLE) updateCenterOsdContent()
@@ -3869,41 +4116,42 @@ class MainActivity : AppCompatActivity() {
 
         val width = vFormat?.width ?: p.videoSize.width
         val height = vFormat?.height ?: p.videoSize.height
-        val fps = if (vFormat != null && vFormat.frameRate > 0) String.format(Locale.US, "%.0f fps", vFormat.frameRate) else ""
+        val fps = if (vFormat != null && vFormat.frameRate > 0) String.format(Locale.US, " %.0f fps", vFormat.frameRate) else ""
         val vCodec = vFormat?.sampleMimeType?.substringAfter("/")?.uppercase() ?: "Анализ..."
         val vBitrate = if (vFormat != null && vFormat.bitrate > 0) String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f) else "Адаптивный HLS"
-
         val bufSec = String.format(Locale.US, "%.1f", (p.totalBufferedDuration / 1000f))
-        val preloadNote = if (ch != null && CoreEngines.isSingleSessionTokenUrl(ch.url)) {
-            "Защита 1-сессионного ключа (активна)"
-        } else {
-            val preloadedCount = synchronized(preloadedLock) { preloadedNeighbors.size }
-            "$preloadedCount из 2 ⚡"
-        }
 
         val (epg, _) = getCurrentAndNextEpg(ch)
         val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val epgLine = if (epg != null) "\n\n🎬 Сейчас (${timeFmt.format(Date(epg.startMs))}–${timeFmt.format(Date(epg.stopMs))}):\n${epg.title}" else ""
+        val epgText = if (epg != null) "Сейчас: ${timeFmt.format(Date(epg.startMs))}–${timeFmt.format(Date(epg.stopMs))} • ${epg.title}" else ""
 
-        infoTextView.text = "Канал: " + (ch?.name ?: "-") + "\n" +
-            "Группа: " + (if (ch != null) effectiveCategory(ch) else "-") + "\n\n" +
-            "Разрешение: " + width + "x" + height + " " + fps + " (" + vCodec + ")\n" +
-            "Поток: " + vBitrate + "\n" +
-            "Буфер: " + bufSec + " сек\n" +
-            "Режим линии: " + preloadNote +
-            epgLine
+        val lines = listOf(
+            "Канал: " + (ch?.name ?: "-"),
+            "Группа: " + (if (ch != null) effectiveCategory(ch) else "-"),
+            "Разрешение: ${width}x${height}$fps ($vCodec)",
+            "Поток: $vBitrate",
+            "Буфер: $bufSec сек",
+            epgText
+        )
+        for (i in infoRowViews.indices) {
+            val txt = lines.getOrElse(i) { "" }
+            val rv = infoRowViews[i]
+            if (txt.isEmpty()) {
+                rv.visibility = View.GONE
+            } else {
+                rv.visibility = View.VISIBLE
+                rv.text = txt
+            }
+        }
     }
 
     internal fun ensureDefaultPlaylists() {
-        playlists.removeAll { it.source == "BUILTIN_VIP_PROVIDER" }
-        val hasMain = playlists.any { it.source == "BUILTIN_OPEN_RU" }
-        val hasStrictRu = playlists.any { it.source == "BUILTIN_STRICT_RU_ONLY" }
-        if (!hasMain) {
-            playlists.add(0, PlaylistEntry("1. Основной (RU + Кинозалы + Мир)", "BUILTIN_OPEN_RU", false))
-        }
-        if (!hasStrictRu) {
-            val insertIdx = if (playlists.isNotEmpty()) 1 else 0
-            playlists.add(insertIdx, PlaylistEntry("2. Только Русские (Строго RU во всех группах)", "BUILTIN_STRICT_RU_ONLY", false))
+        playlists.removeAll { it.source == "BUILTIN_VIP_PROVIDER" || it.source == "BUILTIN_STRICT_RU_ONLY" }
+        val mainIdx = playlists.indexOfFirst { it.source == "BUILTIN_OPEN_RU" }
+        if (mainIdx == -1) {
+            playlists.add(0, PlaylistEntry("Основной", "BUILTIN_OPEN_RU", false))
+        } else if (playlists[mainIdx].title != "Основной") {
+            playlists[mainIdx] = PlaylistEntry("Основной", "BUILTIN_OPEN_RU", false)
         }
         if (activePlaylistIndex !in playlists.indices) activePlaylistIndex = 0
     }
@@ -4276,9 +4524,9 @@ class MainActivity : AppCompatActivity() {
             channelDisplayItems.clear()
             channelDisplayItems.addAll(newItems)
             channelListAdapter.notifyDataSetChanged()
-            if (channelListView.visibility == View.VISIBLE) {
+            if (sidePanel.visibility == View.VISIBLE) {
                 channelListView.post {
-                    refreshSimpleListHighlightInPlace(channelListView, focusedChannelPos)
+                    refreshSimpleListHighlightInPlace(channelListView, if (isSideShowingChannels) focusedChannelPos else -1)
                 }
             }
         } catch (_: Exception) {}
@@ -4471,6 +4719,7 @@ class MainActivity : AppCompatActivity() {
             .putBoolean("anti_block_ru", antiBlockEnabled)
             .putInt("ua_index", userAgentIndex)
             .putString("epg_url", epgUrl)
+            .putString("local_epg_path", localEpgFilePath)
             .putString("last_channel_url", lastSavedChannelUrl)
             .putString("last_channel_name", lastSavedChannelName)
             .putString("last_channel_group", lastSavedChannelGroup)
@@ -4506,6 +4755,7 @@ class MainActivity : AppCompatActivity() {
         userAgentIndex = prefs.getInt("ua_index", 0)
         activePlaylistIndex = prefs.getInt("active_playlist", 0)
         epgUrl = prefs.getString("epg_url", epgUrl) ?: epgUrl
+        localEpgFilePath = prefs.getString("local_epg_path", "") ?: ""
         lastSavedChannelUrl = prefs.getString("last_channel_url", "") ?: ""
         lastSavedChannelName = prefs.getString("last_channel_name", "") ?: ""
         lastSavedChannelGroup = prefs.getString("last_channel_group", "") ?: ""
@@ -4536,7 +4786,7 @@ class MainActivity : AppCompatActivity() {
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
                     val src = o.getString("source")
-                    if (src != "BUILTIN_VIP_PROVIDER") playlists.add(PlaylistEntry(o.getString("title"), src, o.getBoolean("isLocal")))
+                    if (src != "BUILTIN_VIP_PROVIDER" && src != "BUILTIN_STRICT_RU_ONLY") playlists.add(PlaylistEntry(if (src == "BUILTIN_OPEN_RU") "Основной" else o.getString("title"), src, o.getBoolean("isLocal")))
                 }
             } catch (_: Exception) {}
         }
@@ -4594,14 +4844,14 @@ class MainActivity : AppCompatActivity() {
         }
         focusedChannelPos = targetIdx
         playChannelObj(list[targetIdx], immediate = false)
-        if (sidePanel.visibility == View.VISIBLE && channelListView.visibility == View.VISIBLE) {
+        if (sidePanel.visibility == View.VISIBLE) {
             channelListView.post {
                 val firstVis = channelListView.firstVisiblePosition
                 val lastVis = channelListView.lastVisiblePosition
                 if (targetIdx < firstVis || targetIdx > lastVis) {
                     channelListView.setSelection(targetIdx)
                 }
-                refreshSimpleListHighlightInPlace(channelListView, targetIdx)
+                refreshSimpleListHighlightInPlace(channelListView, if (isSideShowingChannels) targetIdx else -1)
             }
         }
     }
@@ -4701,9 +4951,6 @@ class MainActivity : AppCompatActivity() {
             player?.play()
         }
         if (allChannels.isEmpty()) loadActivePlaylist(autoPlayLast = true)
-        if (menuHistory.lastOrNull() == "FILE_BROWSER" && subModalOverlay.visibility == View.VISIBLE) {
-            openFolderExplorerModal(currentBrowseDir)
-        }
     }
 
     override fun onStop() {
@@ -4739,5 +4986,366 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release() } catch (_: Exception) {}
         try { dualPipPlayer?.stop(); dualPipPlayer?.release() } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
+    }
+}
+
+class SunbeamEyeSplashView(context: Context) : View(context) {
+    var eyeOpenFraction: Float = 0.05f
+        set(value) {
+            field = value.coerceIn(0.02f, 1f)
+            invalidate()
+        }
+    var lookOffsetX: Float = 0f
+        set(value) {
+            field = value.coerceIn(-1f, 1f)
+            invalidate()
+        }
+
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val rayPath = Path()
+    private val eyePath = Path()
+    private val lashPath = Path()
+    private val irisRect = RectF()
+
+    private val colTealDark = Color.parseColor("#0A3F52")
+    private val colTealLight = Color.parseColor("#009688")
+    private val colSand = Color.parseColor("#E6C87A")
+    private val colOutline = Color.parseColor("#0B1320")
+    private val colSclera = Color.parseColor("#F7F9FC")
+
+    private val rayAngles = floatArrayOf(
+        -15f, 15f, 45f, 75f, 105f, 135f, 165f, 195f, 225f, 255f, 285f, 315f
+    )
+    private val rayColors = intArrayOf(
+        colTealDark, colSand, colTealDark, colTealLight,
+        colTealDark, colTealLight, colTealDark, colTealLight,
+        colTealDark, colTealLight, colTealDark, colSand
+    )
+    private val irisStarts = floatArrayOf(200f, 270f, 330f, 35f, 90f)
+    private val irisSweeps = floatArrayOf(70f, 60f, 65f, 55f, 110f)
+    private val irisColors = intArrayOf(
+        Color.parseColor("#1E88E5"),
+        Color.parseColor("#00B8D4"),
+        Color.parseColor("#7C4DFF"),
+        Color.parseColor("#FFD54F"),
+        Color.parseColor("#00BFA5")
+    )
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+
+        val cx = w * 0.5f
+        val cy = h * 0.52f
+        val maxR = Math.hypot(w.toDouble(), h.toDouble()).toFloat()
+
+        canvas.drawColor(colTealDark)
+        for (i in rayAngles.indices) {
+            val a1 = Math.toRadians(rayAngles[i].toDouble())
+            val a2 = Math.toRadians((rayAngles[i] + 30f).toDouble())
+            rayPath.reset()
+            rayPath.moveTo(cx, cy)
+            rayPath.lineTo(cx + (maxR * Math.cos(a1)).toFloat(), cy + (maxR * Math.sin(a1)).toFloat())
+            rayPath.lineTo(cx + (maxR * Math.cos(a2)).toFloat(), cy + (maxR * Math.sin(a2)).toFloat())
+            rayPath.close()
+            fillPaint.color = rayColors[i]
+            canvas.drawPath(rayPath, fillPaint)
+        }
+
+        val baseDim = minOf(w * 0.56f, h * 0.72f)
+        val eyeRx = baseDim * 0.44f
+        val fullEyeRy = baseDim * 0.275f
+        val curEyeRy = fullEyeRy * eyeOpenFraction
+
+        val outlineW = fullEyeRy * 0.165f
+        val lashW = fullEyeRy * 0.095f
+
+        strokePaint.color = colOutline
+        strokePaint.strokeWidth = lashW
+        val lashLift = 0.35f + 0.65f * eyeOpenFraction
+
+        val l1x = cx + eyeRx * 0.10f
+        val l1y = cy - curEyeRy * 0.72f
+        lashPath.reset()
+        lashPath.moveTo(l1x, l1y)
+        lashPath.cubicTo(
+            l1x + eyeRx * 0.08f, l1y - fullEyeRy * 0.42f * lashLift,
+            l1x + eyeRx * 0.02f, l1y - fullEyeRy * 0.72f * lashLift,
+            l1x - eyeRx * 0.10f, l1y - fullEyeRy * 0.60f * lashLift
+        )
+        canvas.drawPath(lashPath, strokePaint)
+
+        val l2x = cx + eyeRx * 0.34f
+        val l2y = cy - curEyeRy * 0.60f
+        lashPath.reset()
+        lashPath.moveTo(l2x, l2y)
+        lashPath.cubicTo(
+            l2x + eyeRx * 0.14f, l2y - fullEyeRy * 0.36f * lashLift,
+            l2x + eyeRx * 0.14f, l2y - fullEyeRy * 0.66f * lashLift,
+            l2x + eyeRx * 0.01f, l2y - fullEyeRy * 0.58f * lashLift
+        )
+        canvas.drawPath(lashPath, strokePaint)
+
+        val l3x = cx + eyeRx * 0.56f
+        val l3y = cy - curEyeRy * 0.42f
+        lashPath.reset()
+        lashPath.moveTo(l3x, l3y)
+        lashPath.cubicTo(
+            l3x + eyeRx * 0.18f, l3y - fullEyeRy * 0.26f * lashLift,
+            l3x + eyeRx * 0.22f, l3y - fullEyeRy * 0.52f * lashLift,
+            l3x + eyeRx * 0.10f, l3y - fullEyeRy * 0.46f * lashLift
+        )
+        canvas.drawPath(lashPath, strokePaint)
+
+        eyePath.reset()
+        eyePath.moveTo(cx - eyeRx, cy)
+        eyePath.quadTo(cx, cy - curEyeRy * 1.48f, cx + eyeRx, cy)
+        eyePath.quadTo(cx, cy + curEyeRy * 1.48f, cx - eyeRx, cy)
+        eyePath.close()
+
+        canvas.save()
+        canvas.clipPath(eyePath)
+        fillPaint.color = colSclera
+        canvas.drawPath(eyePath, fillPaint)
+
+        val irisCx = cx + lookOffsetX * eyeRx * 0.28f
+        val irisCy = cy
+        val irisR = fullEyeRy * 0.72f
+        val pupilR = irisR * 0.48f
+        val hlR = pupilR * 0.34f
+
+        irisRect.set(irisCx - irisR, irisCy - irisR, irisCx + irisR, irisCy + irisR)
+        for (i in irisColors.indices) {
+            fillPaint.color = irisColors[i]
+            canvas.drawArc(irisRect, irisStarts[i], irisSweeps[i], true, fillPaint)
+        }
+        strokePaint.color = colOutline
+        strokePaint.strokeWidth = fullEyeRy * 0.085f
+        canvas.drawCircle(irisCx, irisCy, irisR, strokePaint)
+
+        fillPaint.color = colOutline
+        canvas.drawCircle(irisCx, irisCy, pupilR, fillPaint)
+
+        fillPaint.color = Color.WHITE
+        canvas.drawCircle(irisCx + pupilR * 0.36f, irisCy - pupilR * 0.34f, hlR, fillPaint)
+        canvas.restore()
+
+        strokePaint.color = colOutline
+        strokePaint.strokeWidth = outlineW
+        canvas.drawPath(eyePath, strokePaint)
+    }
+}
+
+class DeviceGlyphIconView(context: Context, private val isTv: Boolean) : View(context) {
+    var glyphColor: Int = Color.WHITE
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val rect = RectF()
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        val s = minOf(w, h)
+        val sw = (s * 0.068f).coerceAtLeast(3f)
+        strokePaint.color = glyphColor
+        strokePaint.strokeWidth = sw
+        fillPaint.color = glyphColor
+
+        if (isTv) {
+            val padX = w * 0.08f
+            val topY = h * 0.16f
+            val botY = h * 0.72f
+            rect.set(padX, topY, w - padX, botY)
+            canvas.drawRoundRect(rect, s * 0.10f, s * 0.10f, strokePaint)
+            canvas.drawLine(w * 0.5f, botY, w * 0.5f, h * 0.85f, strokePaint)
+            canvas.drawLine(w * 0.28f, h * 0.86f, w * 0.72f, h * 0.86f, strokePaint)
+        } else {
+            val bodyW = s * 0.54f
+            val bodyH = s * 0.84f
+            val left = (w - bodyW) / 2f
+            val top = (h - bodyH) / 2f
+            rect.set(left, top, left + bodyW, top + bodyH)
+            canvas.drawRoundRect(rect, s * 0.11f, s * 0.11f, strokePaint)
+            canvas.drawLine(w * 0.43f, top + bodyH * 0.11f, w * 0.57f, top + bodyH * 0.11f, strokePaint)
+            canvas.drawCircle(w * 0.5f, top + bodyH * 0.87f, sw * 0.65f, fillPaint)
+        }
+    }
+}
+
+class ThemePreviewIconView(context: Context, private val themeStyle: AppThemeStyle) : View(context) {
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val rect = RectF()
+    private val triPath = Path()
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+
+        val r = (minOf(w, h) * 0.14f).coerceIn(10f, 22f)
+        val bgCol = Color.rgb(
+            Color.red(themeStyle.panelBgColor),
+            Color.green(themeStyle.panelBgColor),
+            Color.blue(themeStyle.panelBgColor)
+        )
+        val cardCol = Color.rgb(
+            Color.red(themeStyle.cardBgColor),
+            Color.green(themeStyle.cardBgColor),
+            Color.blue(themeStyle.cardBgColor)
+        )
+        val accentCol = themeStyle.accentColor
+        val strokeCol = themeStyle.strokeColor
+        val textCol = themeStyle.textPrimaryColor
+
+        rect.set(2f, 2f, w - 2f, h - 2f)
+        fillPaint.color = bgCol
+        canvas.drawRoundRect(rect, r, r, fillPaint)
+
+        when (themeStyle.id) {
+            0 -> {
+                rect.set(w * 0.14f, h * 0.16f, w * 0.86f, h * 0.84f)
+                fillPaint.color = cardCol
+                canvas.drawRoundRect(rect, r * 0.65f, r * 0.65f, fillPaint)
+                rect.set(w * 0.14f, h * 0.16f, w * 0.36f, h * 0.84f)
+                fillPaint.color = Color.argb(90, 0, 0, 0)
+                canvas.drawRoundRect(rect, r * 0.65f, r * 0.65f, fillPaint)
+                fillPaint.color = Color.WHITE
+                canvas.drawCircle(w * 0.25f, h * 0.34f, h * 0.055f, fillPaint)
+                fillPaint.color = Color.parseColor("#94A3B8")
+                canvas.drawRoundRect(RectF(w * 0.19f, h * 0.50f, w * 0.31f, h * 0.56f), 4f, 4f, fillPaint)
+                canvas.drawRoundRect(RectF(w * 0.19f, h * 0.64f, w * 0.29f, h * 0.70f), 4f, 4f, fillPaint)
+                fillPaint.color = accentCol
+                canvas.drawRoundRect(RectF(w * 0.42f, h * 0.26f, w * 0.61f, h * 0.46f), 7f, 7f, fillPaint)
+                fillPaint.color = Color.parseColor("#FBBF24")
+                canvas.drawRoundRect(RectF(w * 0.65f, h * 0.26f, w * 0.80f, h * 0.46f), 7f, 7f, fillPaint)
+                fillPaint.color = Color.parseColor("#34D399")
+                canvas.drawRoundRect(RectF(w * 0.42f, h * 0.53f, w * 0.61f, h * 0.73f), 7f, 7f, fillPaint)
+                fillPaint.color = Color.parseColor("#38BDF8")
+                canvas.drawCircle(w * 0.725f, h * 0.63f, h * 0.10f, fillPaint)
+            }
+            1 -> {
+                rect.set(w * 0.16f, h * 0.18f, w * 0.84f, h * 0.82f)
+                strokePaint.color = Color.argb(95, 0, 229, 255)
+                strokePaint.strokeWidth = 9f
+                canvas.drawRoundRect(rect, r * 0.7f, r * 0.7f, strokePaint)
+                strokePaint.color = accentCol
+                strokePaint.strokeWidth = 3.5f
+                canvas.drawRoundRect(rect, r * 0.7f, r * 0.7f, strokePaint)
+                strokePaint.color = Color.parseColor("#FF7597")
+                strokePaint.strokeWidth = 3.5f
+                canvas.drawRoundRect(RectF(w * 0.24f, h * 0.30f, w * 0.46f, h * 0.68f), 8f, 8f, strokePaint)
+                fillPaint.color = accentCol
+                canvas.drawRoundRect(RectF(w * 0.52f, h * 0.32f, w * 0.76f, h * 0.40f), 4f, 4f, fillPaint)
+                fillPaint.color = Color.parseColor("#FF7597")
+                canvas.drawRoundRect(RectF(w * 0.52f, h * 0.47f, w * 0.70f, h * 0.54f), 4f, 4f, fillPaint)
+                fillPaint.color = Color.parseColor("#B388FF")
+                canvas.drawRoundRect(RectF(w * 0.52f, h * 0.60f, w * 0.64f, h * 0.67f), 4f, 4f, fillPaint)
+            }
+            2 -> {
+                strokePaint.color = Color.WHITE
+                strokePaint.strokeWidth = 3f
+                canvas.drawRoundRect(RectF(4f, 4f, w - 4f, h - 4f), r, r, strokePaint)
+                val boxS = minOf(w, h) * 0.54f
+                val bx = (w - boxS) / 2f
+                val by = (h - boxS) / 2f
+                strokePaint.strokeWidth = 3f
+                canvas.drawRoundRect(RectF(bx, by, bx + boxS, by + boxS), r * 0.8f, r * 0.8f, strokePaint)
+                val tvW = boxS * 0.56f
+                val tvH = boxS * 0.40f
+                val tx = (w - tvW) / 2f
+                val ty = (h - tvH) / 2f + 2f
+                strokePaint.strokeWidth = 2.6f
+                canvas.drawRoundRect(RectF(tx, ty, tx + tvW, ty + tvH), 5f, 5f, strokePaint)
+                fillPaint.color = Color.WHITE
+                triPath.reset()
+                triPath.moveTo(w * 0.47f, ty + tvH * 0.28f)
+                triPath.lineTo(w * 0.56f, ty + tvH * 0.50f)
+                triPath.lineTo(w * 0.47f, ty + tvH * 0.72f)
+                triPath.close()
+                canvas.drawPath(triPath, fillPaint)
+            }
+            3 -> {
+                rect.set(w * 0.22f, h * 0.18f, w * 0.78f, h * 0.82f)
+                fillPaint.color = cardCol
+                canvas.drawRoundRect(rect, r * 0.65f, r * 0.65f, fillPaint)
+                fillPaint.color = textCol
+                canvas.drawCircle(w * 0.36f, h * 0.37f, h * 0.075f, fillPaint)
+                canvas.drawRoundRect(RectF(w * 0.47f, h * 0.33f, w * 0.68f, h * 0.41f), 4f, 4f, fillPaint)
+                fillPaint.color = accentCol
+                canvas.drawRoundRect(RectF(w * 0.31f, h * 0.53f, w * 0.66f, h * 0.60f), 4f, 4f, fillPaint)
+                canvas.drawRoundRect(RectF(w * 0.31f, h * 0.66f, w * 0.54f, h * 0.73f), 4f, 4f, fillPaint)
+            }
+            4 -> {
+                val boxS = minOf(w, h) * 0.64f
+                val bx = (w - boxS) / 2f
+                val by = (h - boxS) / 2f
+                fillPaint.color = cardCol
+                canvas.drawRoundRect(RectF(bx, by, bx + boxS, by + boxS), r * 0.8f, r * 0.8f, fillPaint)
+                val tvW = boxS * 0.66f
+                val tvH = boxS * 0.50f
+                val tx = (w - tvW) / 2f
+                val ty = by + boxS * 0.32f
+                strokePaint.color = accentCol
+                strokePaint.strokeWidth = 3.5f
+                canvas.drawLine(w * 0.5f, ty, w * 0.43f, ty - boxS * 0.16f, strokePaint)
+                canvas.drawLine(w * 0.5f, ty, w * 0.57f, ty - boxS * 0.16f, strokePaint)
+                fillPaint.color = accentCol
+                canvas.drawRoundRect(RectF(tx, ty, tx + tvW, ty + tvH), 8f, 8f, fillPaint)
+                fillPaint.color = bgCol
+                canvas.drawRoundRect(RectF(tx + tvW * 0.09f, ty + tvH * 0.14f, tx + tvW * 0.72f, ty + tvH * 0.86f), 5f, 5f, fillPaint)
+                canvas.drawCircle(tx + tvW * 0.85f, ty + tvH * 0.36f, tvH * 0.08f, fillPaint)
+                canvas.drawCircle(tx + tvW * 0.85f, ty + tvH * 0.64f, tvH * 0.08f, fillPaint)
+                fillPaint.color = accentCol
+                triPath.reset()
+                triPath.moveTo(tx + tvW * 0.34f, ty + tvH * 0.32f)
+                triPath.lineTo(tx + tvW * 0.52f, ty + tvH * 0.50f)
+                triPath.lineTo(tx + tvW * 0.34f, ty + tvH * 0.68f)
+                triPath.close()
+                canvas.drawPath(triPath, fillPaint)
+            }
+            else -> {
+                fillPaint.color = Color.argb(140, Color.red(cardCol), Color.green(cardCol), Color.blue(cardCol))
+                canvas.drawRoundRect(RectF(w * 0.06f, h * 0.30f, w * 0.27f, h * 0.70f), 8f, 8f, fillPaint)
+                canvas.drawRoundRect(RectF(w * 0.73f, h * 0.30f, w * 0.94f, h * 0.70f), 8f, 8f, fillPaint)
+                rect.set(w * 0.31f, h * 0.20f, w * 0.69f, h * 0.80f)
+                fillPaint.color = cardCol
+                canvas.drawRoundRect(rect, 11f, 11f, fillPaint)
+                strokePaint.color = accentCol
+                strokePaint.strokeWidth = 3f
+                canvas.drawRoundRect(rect, 11f, 11f, strokePaint)
+                fillPaint.color = accentCol
+                canvas.drawRoundRect(RectF(w * 0.38f, h * 0.56f, w * 0.62f, h * 0.63f), 4f, 4f, fillPaint)
+                fillPaint.color = Color.argb(180, Color.red(textCol), Color.green(textCol), Color.blue(textCol))
+                canvas.drawRoundRect(RectF(w * 0.42f, h * 0.68f, w * 0.58f, h * 0.73f), 3f, 3f, fillPaint)
+            }
+        }
+
+        strokePaint.color = Color.argb(90, Color.red(strokeCol), Color.green(strokeCol), Color.blue(strokeCol))
+        strokePaint.strokeWidth = 2f
+        canvas.drawRoundRect(RectF(2f, 2f, w - 2f, h - 2f), r, r, strokePaint)
     }
 }
