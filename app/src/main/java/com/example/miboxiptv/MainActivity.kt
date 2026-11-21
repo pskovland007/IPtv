@@ -1542,17 +1542,71 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun deleteUserPlaylistAt(index: Int): Boolean {
+        if (index !in 1 until playlists.size) return false
+        if (playlists[index].source == "BUILTIN_OPEN_RU") return false
+        val removed = playlists.removeAt(index)
+        try {
+            val internalDir = File(filesDir, "user_playlists").absolutePath
+            if (removed.isLocal && removed.source.startsWith(internalDir)) {
+                File(removed.source).delete()
+            }
+        } catch (_: Exception) {}
+        val wasActive = (activePlaylistIndex == index)
+        if (wasActive) {
+            activePlaylistIndex = 0
+        } else if (activePlaylistIndex > index) {
+            activePlaylistIndex--
+        }
+        if (activePlaylistIndex !in playlists.indices) activePlaylistIndex = 0
+        saveState()
+        Toast.makeText(this, "Плейлист удалён: ${removed.title}", Toast.LENGTH_SHORT).show()
+        if (wasActive) {
+            closeAllMenus()
+            loadActivePlaylist(autoPlayLast = false)
+        }
+        return wasActive
+    }
+
+    private fun openDeletePlaylistSubModal() {
+        ensureDefaultPlaylists()
+        val userEntries = playlists.mapIndexedNotNull { idx, p ->
+            if (idx >= 1 && p.source != "BUILTIN_OPEN_RU") Pair(idx, p) else null
+        }
+        if (userEntries.isEmpty()) {
+            navigateBackInMenu()
+            return
+        }
+        setSubModalHeaderTitle("Удалить плейлист")
+        subModalInputContainer.visibility = View.GONE
+        subModalList.visibility = View.VISIBLE
+        val items = userEntries.map { "[-]   ${it.second.title}" }
+        updateSubModalListItems(items, preservePositionIndex = 0)
+
+        subModalList.setOnItemClickListener { _, _, which, _ ->
+            val target = userEntries.getOrNull(which) ?: return@setOnItemClickListener
+            val reloaded = deleteUserPlaylistAt(target.first)
+            if (!reloaded) {
+                val hasMore = playlists.any { it.source != "BUILTIN_OPEN_RU" }
+                if (hasMore) openDeletePlaylistSubModal() else navigateBackInMenu()
+            }
+        }
+        animateMenuAppear(subModalOverlay)
+        subModalList.requestFocus()
+    }
+
     private fun openPlaylistsSubModal() {
         ensureDefaultPlaylists()
         setSubModalHeaderTitle("Плейлисты")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val snapshot = playlists.toList()
+        val hasUserPlaylists = snapshot.any { it.source != "BUILTIN_OPEN_RU" }
         val items = snapshot.mapIndexed { idx, p -> (if (idx == activePlaylistIndex) "[+]   " else "[-]   ") + p.title }.toMutableList()
         items.add("[>]   Добавить плейлист по ссылке")
         items.add("[>]   Выбрать файл плейлиста")
         items.add("[>]   Добавить файл ТВ программы")
-        if (snapshot.size > 1 && activePlaylistIndex >= 1) items.add("[-]   Удалить выбранный плейлист")
-        updateSubModalListItems(items, preservePositionIndex = activePlaylistIndex)
+        if (hasUserPlaylists) items.add("[-]   Удалить плейлист")
+        updateSubModalListItems(items, preservePositionIndex = activePlaylistIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0)))
 
         subModalList.setOnItemClickListener { _, _, which, _ ->
             when {
@@ -1560,18 +1614,16 @@ class MainActivity : AppCompatActivity() {
                 which == snapshot.size -> navigateToMenu("ADD_URL")
                 which == snapshot.size + 1 -> launchSystemPlaylistPicker()
                 which == snapshot.size + 2 -> launchSystemEpgPicker()
-                else -> {
-                    if (activePlaylistIndex >= 1 && activePlaylistIndex < playlists.size) {
-                        val removed = playlists.removeAt(activePlaylistIndex)
-                        try {
-                            val internalDir = File(filesDir, "user_playlists").absolutePath
-                            if (removed.isLocal && removed.source.startsWith(internalDir)) {
-                                File(removed.source).delete()
-                            }
-                        } catch (_: Exception) {}
-                        activePlaylistIndex = 0; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
-                    }
-                }
+                hasUserPlaylists && which == snapshot.size + 3 -> navigateToMenu("DELETE_PLAYLIST")
+            }
+        }
+        subModalList.setOnItemLongClickListener { _, _, which, _ ->
+            if (which in 1 until snapshot.size && snapshot[which].source != "BUILTIN_OPEN_RU") {
+                val reloaded = deleteUserPlaylistAt(which)
+                if (!reloaded) openPlaylistsSubModal()
+                true
+            } else {
+                false
             }
         }
         animateMenuAppear(subModalOverlay); subModalList.requestFocus()
@@ -3422,6 +3474,7 @@ class MainActivity : AppCompatActivity() {
         subModalTopButtons.visibility = View.GONE
         subModalTopButtons.removeAllViews()
         if (::subModalThemesGrid.isInitialized) subModalThemesGrid.visibility = View.GONE
+        if (::subModalList.isInitialized) subModalList.onItemLongClickListener = null
 
         val dm = resources.displayMetrics
         val isCompactInput = (menuId == "EPG" || menuId == "ADD_URL")
@@ -3479,6 +3532,7 @@ class MainActivity : AppCompatActivity() {
             "TOP_MANAGER" -> openTopManagerSubModal(inPlace = false)
             "MORE_SETTINGS" -> openMoreSettingsSubModal(inPlace = false)
             "PLAYLISTS" -> openPlaylistsSubModal()
+            "DELETE_PLAYLIST" -> openDeletePlaylistSubModal()
             "CHANNEL_EDITOR_GROUPS" -> openChannelEditorGroupsModal(inPlace = false)
             "CHANNEL_EDITOR_ITEMS" -> openChannelEditorItemsModal(selectedEditorCategory, inPlace = false)
             "ANALYZER_GROUPS" -> openAnalyzerGroupsModal(firstOpen = true)
@@ -3697,13 +3751,19 @@ class MainActivity : AppCompatActivity() {
     internal fun collectMirrorsForChannel(ch: Channel): List<String> {
         val cleanUrl = ch.url.substringBefore("#")
         val normTarget = CoreEngines.normalizeName(ch.name.replace(Regex("\\s+orig$", RegexOption.IGNORE_CASE), "").trim())
+        val canonTarget = canonicalDedupKey(ch.name)
         return LinkedHashSet<String>().apply {
-            backupMirrorsMap[normTarget]?.forEach { m ->
-                if (m != cleanUrl && !autoDisabledUrls.contains(m)) add(m)
+            for (k in listOf(canonTarget, normTarget).distinct()) {
+                if (k.isEmpty()) continue
+                backupMirrorsMap[k]?.forEach { m ->
+                    if (m != cleanUrl && !autoDisabledUrls.contains(m) && !isBlockedCastChannel("", m, "")) add(m)
+                }
             }
             allChannels.forEach { cand ->
                 val u = cand.url.substringBefore("#")
-                if (u != cleanUrl && !autoDisabledUrls.contains(cand.url) && CoreEngines.normalizeName(cand.name) == normTarget) {
+                if (u != cleanUrl && !autoDisabledUrls.contains(cand.url) && !isBlockedCastChannel(cand.name, u, cand.category) &&
+                    (canonicalDedupKey(cand.name) == canonTarget || CoreEngines.normalizeName(cand.name) == normTarget)
+                ) {
                     add(u)
                 }
             }
@@ -4265,6 +4325,120 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val regexSafeCastWords = Regex(
+        "(broad|pod|multi|uni|simul|news|sports|tele|fore|out|over|type|re|down|up)cast[a-z]*",
+        RegexOption.IGNORE_CASE
+    )
+    private val regexBracketQualityOrDup = Regex(
+        "[\\(\\[]\\s*(?:\\d{1,2}|2160p?|1440p?|1080[pi]?|720p?|576p?|540p?|480p?|360p?|240p?|4k|2k|uhd|fhd|full\\s*hd|hd|хд|hq|sd|orig|ориг(?:инал)?|резерв|основн\\w*|прямой(?:\\s+cdn)?|geo[- ]?blocked|not\\s*24/7)\\s*[\\)\\]]",
+        RegexOption.IGNORE_CASE
+    )
+    private val regexQualityToken = Regex(
+        "(?<![a-zа-яё0-9])(?:2160p?|1440p?|1080[pi]?|720p?|576p?|540p?|480p?|360p?|240p?|4k|2k|uhd|fhd|full\\s*hd|fullhd|hd|хд|hq|sd|orig|оригинал|резерв)(?![a-zа-яё0-9])",
+        RegexOption.IGNORE_CASE
+    )
+    private val regexTrailingDupNumber = Regex("\\s*[\\(\\[]\\s*\\d{1,2}\\s*[\\)\\]]\\s*$")
+
+    internal fun isBlockedCastChannel(name: String, url: String, group: String = ""): Boolean {
+        val combined = "$name $url $group".lowercase(Locale.getDefault())
+        if (combined.contains("catcast") || combined.contains("кэткаст") || combined.contains("каткаст")) return true
+        val cleaned = regexSafeCastWords.replace(combined, " ")
+        return cleaned.contains("cast")
+    }
+
+    internal fun canonicalDedupKey(rawName: String): String {
+        val low = rawName.lowercase(Locale.getDefault()).trim()
+        val noBrackets = regexBracketQualityOrDup.replace(low, " ")
+        val noQuality = regexQualityToken.replace(noBrackets, " ")
+        val canon = CoreEngines.normalizeName(noQuality)
+        return canon.ifEmpty { CoreEngines.normalizeName(rawName) }
+    }
+
+    internal fun estimateChannelQualityScore(ch: Channel, isCurated: Boolean): Int {
+        val n = ch.name.lowercase(Locale.getDefault())
+        val u = ch.url.substringBefore("#").lowercase(Locale.getDefault())
+        var score = 0
+
+        score += when {
+            n.contains("4k") || n.contains("uhd") || n.contains("2160") || u.contains("2160") || u.contains("uhd") || u.contains("4k") -> 500
+            n.contains("2k") || n.contains("1440") || u.contains("1440") -> 420
+            n.contains("1080") || n.contains("fhd") || n.contains("full hd") || n.contains("fullhd") || u.contains("1080") || u.contains("fhd") -> 340
+            n.contains("hd") || n.contains("хд") || n.contains("720") || u.contains("hdhigh") || u.contains("_hd") || u.contains("/hd") || u.contains("720") -> 220
+            n.contains("hq") || n.contains("576") || n.contains("540") -> 120
+            n.contains("480") || u.contains("sdhigh") -> 60
+            n.contains("360") || n.contains("240") || u.contains("_low") || u.contains("low/") || n.endsWith(" sd") -> -40
+            else -> 100
+        }
+
+        if (u.contains(".m3u8") || u.contains("hls")) score += 35
+        if (u.startsWith("https://")) score += 10
+        if (isCurated) score += 25
+        if (regexTrailingDupNumber.containsMatchIn(n)) score -= 15
+
+        // Штраф за часто отдающие 403/ошибки хосты, чтобы при наличии рабочего зеркала побеждало оно
+        if (u.contains("176.118.197.101") || u.contains("31.210.208.171") || u.contains("bonus-tv.ru") || u.contains("stitch.teletarget.ru")) {
+            score -= 80
+        }
+        return score
+    }
+
+    private fun cleanDisplayDupSuffix(ch: Channel): Channel {
+        val trimmed = regexTrailingDupNumber.replace(ch.name, "").trim()
+        return if (trimmed.isNotEmpty() && trimmed != ch.name) {
+            Channel(trimmed, ch.url, ch.category, ch.tvgId)
+        } else {
+            ch
+        }
+    }
+
+    internal fun deduplicateBuiltinChannelsByQuality(candidates: List<Pair<Channel, Boolean>>): List<Channel> {
+        data class Winner(val channel: Channel, val score: Int, val order: Int)
+        val bestByKey = LinkedHashMap<String, Winner>()
+        val seenUrls = HashSet<String>()
+        val mirrorScoreList = HashMap<String, MutableList<Pair<String, Int>>>()
+        var orderCounter = 0
+
+        for ((rawCh, isCurated) in candidates) {
+            if (isBlockedCastChannel(rawCh.name, rawCh.url, rawCh.category)) continue
+            val cleanMirrorUrl = rawCh.url.substringBefore("#").trim()
+            val cleanUrlKey = cleanMirrorUrl.lowercase(Locale.getDefault())
+            if (cleanUrlKey.isEmpty() || !seenUrls.add(cleanUrlKey)) continue
+
+            val canonKey = canonicalDedupKey(rawCh.name)
+            val normKey = CoreEngines.normalizeName(rawCh.name)
+            val score = estimateChannelQualityScore(rawCh, isCurated)
+
+            if (canonKey.isNotEmpty()) {
+                mirrorScoreList.getOrPut(canonKey) { mutableListOf() }.add(Pair(cleanMirrorUrl, score))
+            }
+            if (normKey.isNotEmpty() && normKey != canonKey) {
+                mirrorScoreList.getOrPut(normKey) { mutableListOf() }.add(Pair(cleanMirrorUrl, score))
+            }
+
+            val dedupKey = "${canonKey}_${rawCh.category}"
+            val cleanCh = cleanDisplayDupSuffix(rawCh)
+            val existing = bestByKey[dedupKey]
+            if (existing == null) {
+                bestByKey[dedupKey] = Winner(cleanCh, score, orderCounter++)
+            } else if (score > existing.score) {
+                bestByKey[dedupKey] = Winner(cleanCh, score, existing.order)
+            }
+        }
+
+        // Сохраняем отсортированные по качеству резервные зеркала (лучшие первыми, до 8 на канал)
+        for ((k, scoredUrls) in mirrorScoreList) {
+            val sortedUrls = scoredUrls.sortedByDescending { it.second }.map { it.first }.distinct().take(8)
+            val targetMirrors = backupMirrorsMap.getOrPut(k) { CopyOnWriteArrayList() }
+            for (u in sortedUrls) {
+                if (!targetMirrors.contains(u) && targetMirrors.size < 8) {
+                    targetMirrors.add(u)
+                }
+            }
+        }
+
+        return bestByKey.values.sortedBy { it.order }.map { it.channel }
+    }
+
     internal fun ensureDefaultPlaylists() {
         playlists.removeAll { it.source == "BUILTIN_VIP_PROVIDER" || it.source == "BUILTIN_STRICT_RU_ONLY" }
         val mainIdx = playlists.indexOfFirst { it.source == "BUILTIN_OPEN_RU" }
@@ -4294,34 +4468,25 @@ class MainActivity : AppCompatActivity() {
 
         if (isBuiltin) {
             for ((normKey, mirrorUrl) in BuiltinCatalog.origBackupPairs) {
+                if (isBlockedCastChannel("", mirrorUrl, "")) continue
                 val list = backupMirrorsMap.getOrPut(normKey) { CopyOnWriteArrayList() }
                 if (!list.contains(mirrorUrl)) list.add(mirrorUrl)
             }
-            val initialBuiltin = mutableListOf<Channel>()
-            val seenNameCatKeys = HashSet<String>()
-            val seenStreamUrls = HashSet<String>()
-            val builtinDirectKeys = HashSet<String>()
-            val builtinDirectUrls = HashSet<String>()
+            val curatedRaw = mutableListOf<Pair<Channel, Boolean>>()
             for (extra in BuiltinCatalog.extraOpenStreams) {
                 if (CoreEngines.isArabicOrIndianChannel(extra.name, extra.category, extra.url)) continue
                 if (strictRuOnly && !CoreEngines.isStrictlyRussianChannel(extra.name, extra.url, extra.category)) continue
                 val cleanTitle = CoreEngines.cleanChannelDisplayName(extra.name)
                 val cat = customCategoryMap[extra.url] ?: extra.category
-                val normName = CoreEngines.normalizeName(cleanTitle)
-                val nameCatKey = normName + "_" + cat
-                val cleanUrlKey = extra.url.substringBefore("#").trim().lowercase()
-                builtinDirectKeys.add(nameCatKey)
-                if (cleanUrlKey.isNotEmpty()) builtinDirectUrls.add(cleanUrlKey)
-                if (cleanUrlKey.isNotEmpty() && !seenStreamUrls.contains(cleanUrlKey) && !seenNameCatKeys.contains(nameCatKey)) {
-                    seenStreamUrls.add(cleanUrlKey)
-                    seenNameCatKeys.add(nameCatKey)
-                    initialBuiltin.add(Channel(cleanTitle, extra.url, cat, extra.tvgId))
-                }
+                if (isBlockedCastChannel(cleanTitle, extra.url, cat)) continue
+                curatedRaw.add(Pair(Channel(cleanTitle, extra.url, cat, extra.tvgId), true))
             }
 
-            // Мгновенно подхватываем локальный кэш открытых источников (если уже загружались ранее)
-            val cacheFile = File(filesDir, "open_catalog_cache_v16.m3u")
-            val cachedVisible = mutableListOf<Channel>()
+            // Чистим устаревший кэш v16 (мог содержать дубликаты и cast-потоки) и используем v17
+            try { File(filesDir, "open_catalog_cache_v16.m3u").delete() } catch (_: Exception) {}
+            val cacheFile = File(filesDir, "open_catalog_cache_v17.m3u")
+            val startupCandidates = ArrayList<Pair<Channel, Boolean>>(curatedRaw)
+            var cachedRawCount = 0
             if (cacheFile.exists() && cacheFile.length() > 100L) {
                 try {
                     val cachedMap = LinkedHashMap<String, Channel>()
@@ -4336,29 +4501,19 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
                     for (ch in cachedMap.values) {
-                        val normName = CoreEngines.normalizeName(ch.name)
-                        val cleanMirrorUrl = ch.url.substringBefore("#")
-                        val cleanUrlKey = cleanMirrorUrl.trim().lowercase()
-                        if (normName.isNotEmpty() && cleanMirrorUrl.isNotEmpty()) {
-                            val mirrors = backupMirrorsMap.getOrPut(normName) { CopyOnWriteArrayList() }
-                            if (!mirrors.contains(cleanMirrorUrl) && mirrors.size < 8) mirrors.add(cleanMirrorUrl)
-                        }
-                        val nameCatKey = normName + "_" + ch.category
-                        if (cleanUrlKey.isNotEmpty() && !seenStreamUrls.contains(cleanUrlKey) && !seenNameCatKeys.contains(nameCatKey)) {
-                            seenStreamUrls.add(cleanUrlKey)
-                            seenNameCatKeys.add(nameCatKey)
-                            cachedVisible.add(ch)
-                        }
+                        if (isBlockedCastChannel(ch.name, ch.url, ch.category)) continue
+                        startupCandidates.add(Pair(ch, false))
+                        cachedRawCount++
                     }
-                    CoreEngines.appendDiagLog("CACHE_LOAD", "Из кэша загружено каналов: ${cachedVisible.size}")
+                    CoreEngines.appendDiagLog("CACHE_LOAD", "Из кэша v17 загружено кандидатов: $cachedRawCount")
                 } catch (_: Exception) {}
             }
 
-            val startupList = ArrayList<Channel>(initialBuiltin.size + cachedVisible.size + 1)
-            startupList.addAll(initialBuiltin)
-            startupList.addAll(cachedVisible)
+            val startupList = deduplicateBuiltinChannelsByQuality(startupCandidates).toMutableList()
 
-            if (requestedStartupUrl.isNotEmpty() && startupList.none { it.url == requestedStartupUrl }) {
+            if (requestedStartupUrl.isNotEmpty() && !isBlockedCastChannel(lastSavedChannelName, requestedStartupUrl, lastSavedChannelGroup) &&
+                startupList.none { it.url == requestedStartupUrl }
+            ) {
                 val restoredName = lastSavedChannelName.ifEmpty { "Канал" }
                 val restoredCat = customCategoryMap[requestedStartupUrl] ?: lastSavedChannelGroup.ifEmpty { "Новости и общие" }
                 if (!manualDisabledUrls.contains(requestedStartupUrl)) {
@@ -4374,8 +4529,8 @@ class MainActivity : AppCompatActivity() {
             val matchedInBuiltin = if (requestedStartupUrl.isNotEmpty()) {
                 currentList.firstOrNull { it.url == requestedStartupUrl }
                     ?: if (lastSavedChannelName.isNotEmpty()) {
-                        val normSaved = CoreEngines.normalizeName(lastSavedChannelName)
-                        currentList.firstOrNull { CoreEngines.normalizeName(it.name) == normSaved }
+                        val canonSaved = canonicalDedupKey(lastSavedChannelName)
+                        currentList.firstOrNull { canonicalDedupKey(it.name) == canonSaved }
                     } else null
             } else null
 
@@ -4422,47 +4577,34 @@ class MainActivity : AppCompatActivity() {
                 loaderPool.shutdownNow()
                 if (myGen != playlistLoadGeneration) return@thread
 
-                val freshCombined = ArrayList<Channel>(initialBuiltin)
-                val freshSeenKeys = HashSet<String>(builtinDirectKeys)
-                val freshSeenUrls = HashSet<String>(builtinDirectUrls)
-                val cacheChannels = ArrayList<Channel>()
-                val cacheSeenUrls = HashSet<String>()
+                val allFetchedCandidates = ArrayList<Pair<Channel, Boolean>>(curatedRaw)
                 var fetchedTotal = 0
+                var castBlockedTotal = 0
 
                 for (list in perSourceResults) {
                     if (list == null) continue
                     for (ch in list) {
                         fetchedTotal++
-                        val normName = CoreEngines.normalizeName(ch.name)
-                        val cleanMirrorUrl = ch.url.substringBefore("#")
-                        val cleanUrlKey = cleanMirrorUrl.trim().lowercase()
-                        if (normName.isNotEmpty() && cleanMirrorUrl.isNotEmpty()) {
-                            val mirrors = backupMirrorsMap.getOrPut(normName) { CopyOnWriteArrayList() }
-                            if (!mirrors.contains(cleanMirrorUrl) && mirrors.size < 8) {
-                                mirrors.add(cleanMirrorUrl)
-                                if (cacheSeenUrls.add(cleanUrlKey) && cacheChannels.size < 2500) {
-                                    cacheChannels.add(ch)
-                                }
-                            }
+                        if (isBlockedCastChannel(ch.name, ch.url, ch.category)) {
+                            castBlockedTotal++
+                            continue
                         }
-                        val nameCatKey = normName + "_" + ch.category
-                        if (cleanUrlKey.isNotEmpty() && !freshSeenUrls.contains(cleanUrlKey) && !freshSeenKeys.contains(nameCatKey)) {
-                            freshSeenUrls.add(cleanUrlKey)
-                            freshSeenKeys.add(nameCatKey)
-                            freshCombined.add(ch)
-                            if (cacheSeenUrls.add(cleanUrlKey) && cacheChannels.size < 2500) {
-                                cacheChannels.add(ch)
-                            }
-                        }
+                        allFetchedCandidates.add(Pair(ch, false))
                     }
                 }
 
-                CoreEngines.appendDiagLog("OPEN_CATALOG", "Итого загружено: $fetchedTotal потоков -> уникальных каналов: ${freshCombined.size}")
                 if (fetchedTotal == 0) return@thread
+                val freshCombined = deduplicateBuiltinChannelsByQuality(allFetchedCandidates)
+                val cacheChannels = freshCombined.take(2500)
 
-                // Сохраняем свежий каталог открытых источников в локальный кэш
+                CoreEngines.appendDiagLog(
+                    "OPEN_CATALOG",
+                    "Загружено: $fetchedTotal потоков (cast скрыто: $castBlockedTotal) -> без дублей (лучшее качество): ${freshCombined.size}"
+                )
+
+                // Сохраняем свежий очищенный каталог в локальный кэш v17
                 try {
-                    val tmp = File(filesDir, "open_catalog_cache_v16.tmp")
+                    val tmp = File(filesDir, "open_catalog_cache_v17.tmp")
                     tmp.bufferedWriter().use { bw ->
                         bw.write("#EXTM3U\n")
                         for (c in cacheChannels) {
