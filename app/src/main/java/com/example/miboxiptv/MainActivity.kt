@@ -326,8 +326,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var subModalThemesGrid: LinearLayout
     private lateinit var subModalAdapter: ArrayAdapter<String>
     private val subModalItems = mutableListOf<String>()
+    private lateinit var subModalStatsAdapter: ArrayAdapter<StatsModalRowData>
+    private val subModalStatsItems = mutableListOf<StatsModalRowData>()
     private var animateNextSubModalChange = false
     private var subModalHighlightedPos = 0
+    private var lastSwipeLeftFromIdleMs: Long = 0L
 
     private lateinit var currentChannelBanner: TextView
 
@@ -942,10 +945,15 @@ class MainActivity : AppCompatActivity() {
 
         fitSideListsExactRows()
         if (::subModalAdapter.isInitialized) {
-            if (subModalList.visibility == View.VISIBLE && subModalItems.isNotEmpty()) {
-                fitSubModalListToWholeRows(subModalItems.size)
+            if (subModalList.visibility == View.VISIBLE) {
+                if (::subModalStatsAdapter.isInitialized && subModalList.adapter === subModalStatsAdapter && subModalStatsItems.isNotEmpty()) {
+                    fitSubModalListToWholeRows(subModalStatsItems.size)
+                } else if (subModalItems.isNotEmpty()) {
+                    fitSubModalListToWholeRows(subModalItems.size)
+                }
             }
             subModalAdapter.notifyDataSetChanged()
+            if (::subModalStatsAdapter.isInitialized) subModalStatsAdapter.notifyDataSetChanged()
         }
         updateCategoriesList()
         refreshChannelAdapter()
@@ -1872,17 +1880,26 @@ class MainActivity : AppCompatActivity() {
         })
         val snapshot = allChannels.toList()
         val editableCats = activeCategoryList().drop(2)
-        updateSubModalListItems(
-            editableCats.map { cat ->
-                val isCatEnabled = !disabledCategories.contains(cat)
-                val totalInCat = snapshot.count { effectiveCategory(it) == cat }
-                val activeInCat = snapshot.count { effectiveCategory(it) == cat && isChannelActive(it) }
-                "${if (isCatEnabled) "[+]" else "[-]"}   $cat   •   $activeInCat из $totalInCat"
-            },
-            smoothToggle = inPlace,
-            preservePositionIndex = keepIndex
-        )
-        subModalList.setOnItemClickListener { _, _, idx, _ -> selectedEditorCategory = editableCats[idx]; navigateToMenu("CHANNEL_EDITOR_ITEMS") }
+        val rows = editableCats.map { cat ->
+            val isCatEnabled = !disabledCategories.contains(cat)
+            val totalInCat = snapshot.count { effectiveCategory(it) == cat }
+            val activeInCat = snapshot.count { effectiveCategory(it) == cat && isChannelActive(it) }
+            StatsModalRowData(
+                isAnalyzerMode = false,
+                isEnabled = isCatEnabled,
+                title = cat,
+                primaryCount = activeInCat,
+                secondaryCount = totalInCat,
+                totalCount = totalInCat
+            )
+        }
+        updateSubModalStatsRows(rows, smoothToggle = inPlace, preservePositionIndex = keepIndex)
+        subModalList.setOnItemClickListener { _, _, idx, _ ->
+            if (idx in editableCats.indices) {
+                selectedEditorCategory = editableCats[idx]
+                navigateToMenu("CHANNEL_EDITOR_ITEMS")
+            }
+        }
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
     }
 
@@ -1941,10 +1958,20 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val groupNames = listOf("Все каналы") + activeCategoryList().drop(2)
-        updateSubModalListItems(groupNames.map { gName ->
+        val rows = groupNames.map { gName ->
             val groupChans = if (gName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == gName }
-            "[>]   $gName   •   [+] ${groupChans.count { channelHealthMap[it.url] == true }}   [-] ${groupChans.count { channelHealthMap[it.url] == false }}"
-        }, preservePositionIndex = subModalHighlightedPos)
+            val aliveCnt = groupChans.count { channelHealthMap[it.url] == true }
+            val deadCnt = groupChans.count { channelHealthMap[it.url] == false }
+            StatsModalRowData(
+                isAnalyzerMode = true,
+                isEnabled = true,
+                title = gName,
+                primaryCount = aliveCnt,
+                secondaryCount = deadCnt,
+                totalCount = groupChans.size
+            )
+        }
+        updateSubModalStatsRows(rows, smoothToggle = !firstOpen, preservePositionIndex = subModalHighlightedPos)
         subModalList.setOnItemClickListener { _, _, idx, _ ->
             if (idx in groupNames.indices) { selectedAnalyzerCategory = groupNames[idx]; navigateToMenu("ANALYZER_GROUP_VIEW") }
         }
@@ -2943,6 +2970,18 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
         subModalAdapter = createRoundedSelectorAdapter(subModalItems, 15.5f, true, fixedRowHeight = true) { pos -> subModalHighlightedPos == pos }
+        subModalStatsAdapter = object : ArrayAdapter<StatsModalRowData>(this@MainActivity, 0, subModalStatsItems) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val rowView = (convertView as? StructuredStatsRowView) ?: StructuredStatsRowView(this@MainActivity)
+                val item = if (position in 0 until count) getItem(position) else null
+                val rowH = exactModalRowHeightPx()
+                rowView.layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, rowH)
+                if (item != null) {
+                    rowView.bindData(item, currentTheme(), uiScaleFactor(), subModalHighlightedPos == position)
+                }
+                return rowView
+            }
+        }
         subModalList.adapter = subModalAdapter
         subModalList.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -3172,10 +3211,15 @@ class MainActivity : AppCompatActivity() {
             val scale = uiScaleFactor()
             val firstVis = listView.firstVisiblePosition
             for (i in 0 until listView.childCount) {
-                val child = listView.getChildAt(i) as? MarqueeRowTextView ?: continue
+                val rawChild = listView.getChildAt(i)
                 val itemPos = firstVis + i
                 if (itemPos !in 0 until totalCount) continue
                 val isHighlighted = (itemPos == activeAdapterPos)
+                if (rawChild is StructuredStatsRowView) {
+                    rawChild.applyThemeAndHighlight(t, scale, isHighlighted)
+                    continue
+                }
+                val child = rawChild as? MarqueeRowTextView ?: continue
                 child.typeface = if (isHighlighted) t.boldFont else t.normalFont
                 child.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f * scale)
                 child.forceMarqueeActive = isHighlighted
@@ -3273,6 +3317,9 @@ class MainActivity : AppCompatActivity() {
             subModalList.getChildAt(0)?.top ?: 8
         }
 
+        if (subModalList.adapter !== subModalAdapter) {
+            subModalList.adapter = subModalAdapter
+        }
         subModalHighlightedPos = targetPos
         animateNextSubModalChange = smoothToggle
         subModalItems.clear()
@@ -3285,6 +3332,44 @@ class MainActivity : AppCompatActivity() {
             animateNextSubModalChange = false
             if (newItems.isNotEmpty()) {
                 if (smoothToggle) {
+                    subModalList.setSelectionFromTop(targetPos, selectedRowTopPx)
+                } else {
+                    subModalList.setSelection(targetPos)
+                }
+                refreshSimpleListHighlightInPlace(subModalList, targetPos)
+            }
+        }
+    }
+
+
+    internal fun updateSubModalStatsRows(newRows: List<StatsModalRowData>, smoothToggle: Boolean = false, preservePositionIndex: Int = -1) {
+        val targetPos = when {
+            preservePositionIndex in newRows.indices -> preservePositionIndex
+            subModalHighlightedPos in newRows.indices -> subModalHighlightedPos
+            else -> 0
+        }
+        val wasStatsAdapter = (subModalList.adapter === subModalStatsAdapter)
+        val firstVis = subModalList.firstVisiblePosition
+        val selectedChildIdx = targetPos - firstVis
+        val selectedRowTopPx = if (wasStatsAdapter && smoothToggle && selectedChildIdx in 0 until subModalList.childCount) {
+            subModalList.getChildAt(selectedChildIdx)?.top ?: 8
+        } else {
+            subModalList.getChildAt(0)?.top ?: 8
+        }
+
+        subModalHighlightedPos = targetPos
+        subModalStatsItems.clear()
+        subModalStatsItems.addAll(newRows)
+        if (!wasStatsAdapter) {
+            subModalList.adapter = subModalStatsAdapter
+        }
+        fitSubModalListToWholeRows(newRows.size)
+        subModalStatsAdapter.notifyDataSetChanged()
+        updateSubModalTitleWithCounter()
+
+        subModalList.post {
+            if (newRows.isNotEmpty()) {
+                if (wasStatsAdapter && smoothToggle) {
                     subModalList.setSelectionFromTop(targetPos, selectedRowTopPx)
                 } else {
                     subModalList.setSelection(targetPos)
@@ -3430,6 +3515,7 @@ class MainActivity : AppCompatActivity() {
         gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean = false
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                lastSwipeLeftFromIdleMs = 0L
                 if (firstRunModeOverlay.visibility == View.VISIBLE) return false
                 if (System.currentTimeMillis() - lastMenuChangeMs < 500L) return true
                 if (isDualStreamActive && isPointInsideVisibleView(e.rawX, e.rawY, dualStreamContainer) && !isPointInsideVisibleView(e.rawX, e.rawY, dualCloseBtn)) {
@@ -3453,10 +3539,12 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             override fun onLongPress(e: MotionEvent) {
+                lastSwipeLeftFromIdleMs = 0L
                 if (firstRunModeOverlay.visibility == View.VISIBLE || menuHistory.isNotEmpty()) return
                 navigateToMenu("SETTINGS")
             }
             override fun onDoubleTap(e: MotionEvent): Boolean {
+                lastSwipeLeftFromIdleMs = 0L
                 if (firstRunModeOverlay.visibility == View.VISIBLE || menuHistory.isNotEmpty()) return false
                 if (isDualStreamActive) {
                     swapMainAndDualStream()
@@ -3474,27 +3562,47 @@ class MainActivity : AppCompatActivity() {
                     return false
                 }
 
+                val nowMs = System.currentTimeMillis()
                 if (abs(dx) > abs(dy) * 1.45f && abs(dx) > 95f) {
                     if (curMenu == "SIDE") {
                         if (dx > 0) {
+                            lastSwipeLeftFromIdleMs = 0L
                             if (isSideShowingChannels) showSideGroupsMode()
                             else if (!isLeftRailVisible) showLeftIconRailFromGroups()
                         } else {
+                            if (lastSwipeLeftFromIdleMs > 0L && (nowMs - lastSwipeLeftFromIdleMs) in 80L..1050L) {
+                                lastSwipeLeftFromIdleMs = 0L
+                                powerOffAppWithCrtEffect()
+                                return true
+                            }
+                            lastSwipeLeftFromIdleMs = 0L
                             if (isLeftRailVisible) hideLeftIconRailToGroups()
                             else if (!isSideShowingChannels) showSideChannelsMode(focusCurrentChannelIfSameGroup = false)
                             else closeAllMenus()
                         }
                         return true
+                    } else if (curMenu == "INFO") {
+                        lastSwipeLeftFromIdleMs = 0L
+                        navigateBackInMenu()
+                        return true
                     } else if (curMenu != null) {
+                        lastSwipeLeftFromIdleMs = 0L
                         if (dx < 0) {
                             navigateBackInMenu()
                             return true
                         }
                     } else {
-                        navigateToMenu("SIDE")
+                        if (dx < 0) {
+                            lastSwipeLeftFromIdleMs = nowMs
+                            navigateToMenu("SIDE")
+                        } else {
+                            lastSwipeLeftFromIdleMs = 0L
+                            navigateToMenu("INFO")
+                        }
                         return true
                     }
                 } else if (abs(dy) > abs(dx) * 1.35f && abs(dy) > 85f) {
+                    lastSwipeLeftFromIdleMs = 0L
                     val touchedEmptySpace = !isTouchInsideAnyActiveMenu(e1)
                     if (curMenu == null || curMenu == "INFO") {
                         switchChannelByOffset(if (dy < 0) +1 else -1)
@@ -5576,7 +5684,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN && menuHistory.isNotEmpty()) resetMenuInactivityTimer()
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            lastSwipeLeftFromIdleMs = 0L
+            if (menuHistory.isNotEmpty()) resetMenuInactivityTimer()
+        }
         return super.dispatchKeyEvent(event)
     }
 
@@ -6222,5 +6333,307 @@ class ThemeLivePreviewView(context: Context, initialTheme: AppThemeStyle) : View
         strokePaint.strokeWidth = 2.4f
         rect.set(left, top, right, bottom)
         canvas.drawRoundRect(rect, frameR, frameR, strokePaint)
+    }
+}
+
+data class StatsModalRowData(
+    val isAnalyzerMode: Boolean,
+    val isEnabled: Boolean,
+    val title: String,
+    val primaryCount: Int,
+    val secondaryCount: Int,
+    val totalCount: Int
+)
+
+class StatsStatusIconView(context: Context) : View(context) {
+    var isAnalyzerMode: Boolean = false
+        set(value) { field = value; invalidate() }
+    var isEnabledState: Boolean = true
+        set(value) { field = value; invalidate() }
+    var isHighlighted: Boolean = false
+        set(value) { field = value; invalidate() }
+    var iconTintOnAccent: Int = Color.BLACK
+        set(value) { field = value; invalidate() }
+    var iconTintNormal: Int = Color.WHITE
+        set(value) { field = value; invalidate() }
+
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val path = Path()
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        val cx = w * 0.5f
+        val cy = h * 0.5f
+        val r = minOf(w, h) * 0.42f
+
+        if (isAnalyzerMode) {
+            fillPaint.color = if (isHighlighted) iconTintOnAccent else Color.argb(185, Color.red(iconTintNormal), Color.green(iconTintNormal), Color.blue(iconTintNormal))
+            path.reset()
+            path.moveTo(cx - r * 0.42f, cy - r * 0.58f)
+            path.lineTo(cx + r * 0.62f, cy)
+            path.lineTo(cx - r * 0.42f, cy + r * 0.58f)
+            path.close()
+            canvas.drawPath(path, fillPaint)
+        } else {
+            val badgeCol = if (isEnabledState) Color.parseColor("#22C55E") else Color.parseColor("#EF4444")
+            fillPaint.color = badgeCol
+            canvas.drawCircle(cx, cy, r, fillPaint)
+
+            strokePaint.color = Color.WHITE
+            strokePaint.strokeWidth = (r * 0.24f).coerceAtLeast(2.2f)
+            if (isEnabledState) {
+                path.reset()
+                path.moveTo(cx - r * 0.44f, cy + r * 0.04f)
+                path.lineTo(cx - r * 0.10f, cy + r * 0.38f)
+                path.lineTo(cx + r * 0.48f, cy - r * 0.34f)
+                canvas.drawPath(path, strokePaint)
+            } else {
+                val d = r * 0.34f
+                canvas.drawLine(cx - d, cy - d, cx + d, cy + d, strokePaint)
+                canvas.drawLine(cx + d, cy - d, cx - d, cy + d, strokePaint)
+            }
+        }
+    }
+}
+
+class StatsProgressBarView(context: Context) : View(context) {
+    var greenFraction: Float = 0f
+        set(value) { field = value.coerceIn(0f, 1f); invalidate() }
+    var redFraction: Float = 0f
+        set(value) { field = value.coerceIn(0f, 1f); invalidate() }
+    var trackColor: Int = Color.parseColor("#2B313C")
+        set(value) { field = value; invalidate() }
+    var greenColor: Int = Color.parseColor("#22C55E")
+        set(value) { field = value; invalidate() }
+    var redColor: Int = Color.parseColor("#EF4444")
+        set(value) { field = value; invalidate() }
+
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val rect = RectF()
+    private val clipPath = Path()
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+
+        val barH = (h * 0.46f).coerceIn(7f, 13f)
+        val top = (h - barH) * 0.5f
+        val bot = top + barH
+        val rad = barH * 0.5f
+
+        rect.set(0f, top, w, bot)
+        paint.color = trackColor
+        canvas.drawRoundRect(rect, rad, rad, paint)
+
+        if (greenFraction <= 0f && redFraction <= 0f) return
+
+        clipPath.reset()
+        clipPath.addRoundRect(rect, rad, rad, Path.Direction.CW)
+        canvas.save()
+        canvas.clipPath(clipPath)
+
+        val greenW = (w * greenFraction).coerceIn(0f, w)
+        if (greenW > 0f) {
+            val drawW = greenW.coerceAtLeast(barH)
+            paint.color = greenColor
+            canvas.drawRoundRect(RectF(0f, top, drawW.coerceAtMost(w), bot), rad, rad, paint)
+        }
+        val redW = (w * redFraction).coerceIn(0f, (w - greenW).coerceAtLeast(0f))
+        if (redW > 0f) {
+            val startX = greenW
+            val endX = (startX + redW).coerceAtMost(w)
+            paint.color = redColor
+            canvas.drawRect(startX, top, endX, bot, paint)
+        }
+        canvas.restore()
+    }
+}
+
+class StructuredStatsRowView(context: Context) : LinearLayout(context) {
+    private val statusIcon = StatsStatusIconView(context)
+    private val titleTv = TextView(context)
+    private val progressBar = StatsProgressBarView(context)
+    private val rightBox = LinearLayout(context)
+    private val rightPrimaryTv = TextView(context)
+    private val rightSecondaryTv = TextView(context)
+    private var currentData: StatsModalRowData? = null
+
+    init {
+        orientation = HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        weightSum = 1f
+        setPadding(18, 0, 18, 0)
+
+        val leftZone = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 0.40f)
+        }
+        statusIcon.layoutParams = LayoutParams(26, 26).apply { rightMargin = 14 }
+        titleTv.apply {
+            isSingleLine = true
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
+        }
+        leftZone.addView(statusIcon)
+        leftZone.addView(titleTv)
+
+        val midZone = FrameLayout(context).apply {
+            setPadding(14, 0, 14, 0)
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 0.30f)
+        }
+        progressBar.layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            24,
+            Gravity.CENTER
+        )
+        midZone.addView(progressBar)
+
+        rightBox.apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 0.30f)
+        }
+        rightPrimaryTv.apply {
+            isSingleLine = true
+            maxLines = 1
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                fontFeatureSettings = "tnum"
+            }
+            layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
+        }
+        rightSecondaryTv.apply {
+            isSingleLine = true
+            maxLines = 1
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                fontFeatureSettings = "tnum"
+            }
+            layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = 8 }
+        }
+        rightBox.addView(rightPrimaryTv)
+        rightBox.addView(rightSecondaryTv)
+
+        addView(leftZone)
+        addView(midZone)
+        addView(rightBox)
+    }
+
+    private fun isDarkColor(col: Int): Boolean {
+        val lum = (Color.red(col) * 299 + Color.green(col) * 587 + Color.blue(col) * 114) / 1000
+        return lum < 145
+    }
+
+    fun bindData(data: StatsModalRowData, theme: AppThemeStyle, scale: Float, highlighted: Boolean) {
+        currentData = data
+        statusIcon.isAnalyzerMode = data.isAnalyzerMode
+        statusIcon.isEnabledState = data.isEnabled
+        titleTv.text = data.title
+
+        val iconPx = (24 * scale).toInt().coerceIn(20, 34)
+        val iconLp = statusIcon.layoutParams as LayoutParams
+        if (iconLp.width != iconPx) {
+            iconLp.width = iconPx
+            iconLp.height = iconPx
+            iconLp.rightMargin = (12 * scale).toInt().coerceAtLeast(10)
+            statusIcon.layoutParams = iconLp
+        }
+
+        val total = data.totalCount.coerceAtLeast(0)
+        if (data.isAnalyzerMode) {
+            rightSecondaryTv.visibility = VISIBLE
+            rightPrimaryTv.text = "✓ ${data.primaryCount}"
+            rightSecondaryTv.text = "✕ ${data.secondaryCount}"
+            if (total > 0) {
+                progressBar.greenFraction = data.primaryCount.toFloat() / total.toFloat()
+                progressBar.redFraction = data.secondaryCount.toFloat() / total.toFloat()
+            } else {
+                progressBar.greenFraction = 0f
+                progressBar.redFraction = 0f
+            }
+        } else {
+            rightSecondaryTv.visibility = GONE
+            rightPrimaryTv.text = "${data.primaryCount} / ${data.secondaryCount}"
+            progressBar.greenFraction = if (total > 0 && data.isEnabled) {
+                data.primaryCount.toFloat() / total.toFloat()
+            } else {
+                0f
+            }
+            progressBar.redFraction = 0f
+        }
+
+        applyThemeAndHighlight(theme, scale, highlighted)
+    }
+
+    fun applyThemeAndHighlight(theme: AppThemeStyle, scale: Float, highlighted: Boolean) {
+        val data = currentData
+        val textSp = 15.2f * scale
+        val numSp = 14.6f * scale
+
+        titleTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSp)
+        rightPrimaryTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, numSp)
+        rightSecondaryTv.setTextSize(TypedValue.COMPLEX_UNIT_SP, numSp)
+
+        titleTv.typeface = if (highlighted) theme.boldFont else theme.normalFont
+        rightPrimaryTv.typeface = if (highlighted) theme.boldFont else theme.normalFont
+        rightSecondaryTv.typeface = if (highlighted) theme.boldFont else theme.normalFont
+
+        statusIcon.isHighlighted = highlighted
+        statusIcon.iconTintOnAccent = theme.textOnAccent
+        statusIcon.iconTintNormal = theme.textPrimaryColor
+
+        val padH = (18 * scale).toInt().coerceIn(14, 28)
+        setPadding(padH, 0, padH, 0)
+
+        if (highlighted) {
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(theme.accentColor)
+                cornerRadius = 16f * scale
+                setStroke(2, Color.WHITE)
+            })
+            titleTv.setTextColor(theme.textOnAccent)
+            val accentIsLight = !isDarkColor(theme.accentColor)
+            progressBar.trackColor = if (accentIsLight) Color.parseColor("#382B1E") else Color.argb(95, 0, 0, 0)
+            progressBar.greenColor = Color.parseColor("#22C55E")
+            progressBar.redColor = Color.parseColor("#EF4444")
+
+            if (data?.isAnalyzerMode == true) {
+                rightPrimaryTv.setTextColor(if (accentIsLight) Color.parseColor("#0B5D2E") else Color.parseColor("#86EFAC"))
+                rightSecondaryTv.setTextColor(if (accentIsLight) Color.parseColor("#991B1B") else Color.parseColor("#FCA5A5"))
+            } else {
+                rightPrimaryTv.setTextColor(theme.textOnAccent)
+            }
+        } else {
+            val darkSurface = isDarkColor(theme.panelBgColor)
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(if (darkSurface) Color.argb(68, 0, 0, 0) else Color.argb(24, 0, 0, 0))
+                cornerRadius = 14f * scale
+                setStroke(1, if (darkSurface) Color.argb(36, 255, 255, 255) else Color.argb(40, 0, 0, 0))
+            })
+            titleTv.setTextColor(theme.textPrimaryColor)
+            progressBar.trackColor = if (darkSurface) Color.argb(52, 255, 255, 255) else Color.parseColor("#D4D4D8")
+            progressBar.greenColor = Color.parseColor("#22C55E")
+            progressBar.redColor = Color.parseColor("#EF4444")
+
+            if (data?.isAnalyzerMode == true) {
+                rightPrimaryTv.setTextColor(if (darkSurface) Color.parseColor("#4ADE80") else Color.parseColor("#15803D"))
+                rightSecondaryTv.setTextColor(if (darkSurface) Color.parseColor("#F87171") else Color.parseColor("#DC2626"))
+            } else {
+                rightPrimaryTv.setTextColor(theme.textPrimaryColor)
+            }
+        }
     }
 }
