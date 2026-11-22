@@ -1942,18 +1942,31 @@ class MainActivity : AppCompatActivity() {
 
     private fun openAnalyzerGroupsModal(firstOpen: Boolean = false) {
         val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
+        val hiddenChannels = snapshot.filter { autoDisabledUrls.contains(it.url) }
+        val hiddenCount = hiddenChannels.size
         setSubModalHeaderTitle("Тест каналов")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
             subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
             subModalTopButtons.addView(makeModernButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Запустить тест") {
                 if (isAnalyzerRunning) { isAnalyzerRunning = false; analyzerStatusBanner.visibility = View.GONE; openAnalyzerGroupsModal(firstOpen = true) }
-                else { selectedAnalyzerCategory = "Все каналы"; startBackgroundChannelAnalyzer(snapshot); openAnalyzerGroupsModal(firstOpen = true) }
+                else { selectedAnalyzerCategory = "Все каналы"; startBackgroundChannelAnalyzer(snapshot, isRescanHidden = false); openAnalyzerGroupsModal(firstOpen = true) }
             })
             if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ В фон") { collapseAnalyzerToTopBar() })
-            if (autoDisabledUrls.isNotEmpty()) {
-                subModalTopButtons.addView(makeModernButton("↺ Вернуть скрытые") {
-                    autoDisabledUrls.clear(); saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openAnalyzerGroupsModal(firstOpen = false)
+            if (!isAnalyzerRunning && hiddenCount > 0) {
+                subModalTopButtons.addView(makeModernButton("↻ Пересканировать ($hiddenCount)") {
+                    selectedAnalyzerCategory = "Все каналы"
+                    startBackgroundChannelAnalyzer(hiddenChannels, isRescanHidden = true)
+                    openAnalyzerGroupsModal(firstOpen = true)
+                })
+                subModalTopButtons.addView(makeModernButton("↺ Вернуть скрытые ($hiddenCount)") {
+                    hiddenChannels.forEach { ch ->
+                        autoDisabledUrls.remove(ch.url)
+                        if (channelHealthMap[ch.url] == false) channelHealthMap.remove(ch.url)
+                    }
+                    autoDisabledUrls.clear()
+                    saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
+                    openAnalyzerGroupsModal(firstOpen = false)
                 })
             }
         }
@@ -1961,7 +1974,7 @@ class MainActivity : AppCompatActivity() {
         val rows = groupNames.map { gName ->
             val groupChans = if (gName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == gName }
             val aliveCnt = groupChans.count { channelHealthMap[it.url] == true }
-            val deadCnt = groupChans.count { channelHealthMap[it.url] == false }
+            val deadCnt = groupChans.count { channelHealthMap[it.url] == false || (channelHealthMap[it.url] == null && autoDisabledUrls.contains(it.url)) }
             StatsModalRowData(
                 isAnalyzerMode = true,
                 isEnabled = true,
@@ -1981,25 +1994,45 @@ class MainActivity : AppCompatActivity() {
     private fun openAnalyzerGroupChannelsModal(catName: String, firstOpen: Boolean = false) {
         val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
         val groupChans = (if (catName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == catName }).sortedWith(safeChannelComparator)
+        val groupHidden = groupChans.filter { autoDisabledUrls.contains(it.url) }
+        val groupHiddenCount = groupHidden.size
         setSubModalHeaderTitle(catName)
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
             subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
             subModalTopButtons.addView(makeModernButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Тест группы") {
                 if (isAnalyzerRunning) { isAnalyzerRunning = false; analyzerStatusBanner.visibility = View.GONE; openAnalyzerGroupChannelsModal(catName, firstOpen = true) }
-                else { startBackgroundChannelAnalyzer(groupChans); openAnalyzerGroupChannelsModal(catName, firstOpen = true) }
+                else { startBackgroundChannelAnalyzer(groupChans, isRescanHidden = false); openAnalyzerGroupChannelsModal(catName, firstOpen = true) }
             })
             if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ В фон") { collapseAnalyzerToTopBar() })
+            if (!isAnalyzerRunning && groupHiddenCount > 0) {
+                subModalTopButtons.addView(makeModernButton("↻ Пересканировать ($groupHiddenCount)") {
+                    startBackgroundChannelAnalyzer(groupHidden, isRescanHidden = true)
+                    openAnalyzerGroupChannelsModal(catName, firstOpen = true)
+                })
+                subModalTopButtons.addView(makeModernButton("↺ Вернуть ($groupHiddenCount)") {
+                    groupHidden.forEach { ch ->
+                        autoDisabledUrls.remove(ch.url)
+                        if (channelHealthMap[ch.url] == false) channelHealthMap.remove(ch.url)
+                    }
+                    saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
+                    openAnalyzerGroupChannelsModal(catName, firstOpen = false)
+                })
+            }
         }
         updateSubModalListItems(groupChans.map { ch ->
-            val status = when (channelHealthMap[ch.url]) { true -> "[+]   Работает"; false -> "[-]   Скрыт"; null -> "[?]   Очередь" }
+            val status = when {
+                channelHealthMap[ch.url] == true -> "[+]   Работает"
+                channelHealthMap[ch.url] == false || autoDisabledUrls.contains(ch.url) -> "[-]   Скрыт"
+                else -> "[?]   Очередь"
+            }
             "$status   •   ${ch.name}"
         }, preservePositionIndex = subModalHighlightedPos)
         subModalList.setOnItemClickListener { _, _, idx, _ -> if (idx in groupChans.indices) { playChannelObj(groupChans[idx], immediate = true); closeAllMenus() } }
         if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
     }
 
-    private fun startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>) {
+    private fun startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>, isRescanHidden: Boolean = false) {
         val targetChannels = rawTargetChannels.filter { !manualDisabledUrls.contains(it.url) }
         if (isAnalyzerRunning || targetChannels.isEmpty()) return
         isAnalyzerRunning = true
@@ -2011,7 +2044,7 @@ class MainActivity : AppCompatActivity() {
         val total = snapshot.size
         val counter = AtomicInteger(0)
 
-        analyzerStatusBanner.text = colorizeStatusText("Быстрый тест: 0 / $total")
+        analyzerStatusBanner.text = colorizeStatusText(if (isRescanHidden) "Проверка скрытых: 0 / $total" else "Быстрый тест: 0 / $total")
         analyzerStatusBanner.visibility = View.VISIBLE
         resetMenuInactivityTimer()
 
@@ -2065,7 +2098,7 @@ class MainActivity : AppCompatActivity() {
                     val curMenu = menuHistory.lastOrNull()
                     if (curMenu == "ANALYZER_GROUP_VIEW") openAnalyzerGroupChannelsModal(selectedAnalyzerCategory, firstOpen = false)
                     else if (curMenu == "ANALYZER_GROUPS") openAnalyzerGroupsModal(firstOpen = false)
-                    analyzerStatusBanner.text = colorizeStatusText("Готово! Рабочих: [+] $aliveCount  |  Скрыто нерабочих: [-] $deadCount")
+                    analyzerStatusBanner.text = colorizeStatusText(if (isRescanHidden) "Пересканировано: [+] вернулось $aliveCount  |  [-] скрыто: $deadCount" else "Готово! Рабочих: [+] $aliveCount  |  Скрыто нерабочих: [-] $deadCount")
                     uiHandler.postDelayed({ analyzerStatusBanner.visibility = View.GONE }, 5000L)
                 }
             }
@@ -3565,23 +3598,22 @@ class MainActivity : AppCompatActivity() {
                 val nowMs = System.currentTimeMillis()
                 if (abs(dx) > abs(dy) * 1.45f && abs(dx) > 95f) {
                     if (curMenu == "SIDE") {
+                        lastSwipeLeftFromIdleMs = 0L
                         if (dx > 0) {
-                            lastSwipeLeftFromIdleMs = 0L
                             if (isSideShowingChannels) showSideGroupsMode()
                             else if (!isLeftRailVisible) showLeftIconRailFromGroups()
                         } else {
-                            if (lastSwipeLeftFromIdleMs > 0L && (nowMs - lastSwipeLeftFromIdleMs) in 80L..1050L) {
-                                lastSwipeLeftFromIdleMs = 0L
-                                powerOffAppWithCrtEffect()
-                                return true
-                            }
-                            lastSwipeLeftFromIdleMs = 0L
                             if (isLeftRailVisible) hideLeftIconRailToGroups()
                             else if (!isSideShowingChannels) showSideChannelsMode(focusCurrentChannelIfSameGroup = false)
                             else closeAllMenus()
                         }
                         return true
                     } else if (curMenu == "INFO") {
+                        if (dx < 0 && lastSwipeLeftFromIdleMs > 0L && (nowMs - lastSwipeLeftFromIdleMs) in 80L..1050L) {
+                            lastSwipeLeftFromIdleMs = 0L
+                            powerOffAppWithCrtEffect()
+                            return true
+                        }
                         lastSwipeLeftFromIdleMs = 0L
                         navigateBackInMenu()
                         return true
@@ -3592,11 +3624,11 @@ class MainActivity : AppCompatActivity() {
                             return true
                         }
                     } else {
-                        if (dx < 0) {
-                            lastSwipeLeftFromIdleMs = nowMs
+                        if (dx > 0) {
+                            lastSwipeLeftFromIdleMs = 0L
                             navigateToMenu("SIDE")
                         } else {
-                            lastSwipeLeftFromIdleMs = 0L
+                            lastSwipeLeftFromIdleMs = nowMs
                             navigateToMenu("INFO")
                         }
                         return true
