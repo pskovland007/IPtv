@@ -57,6 +57,7 @@ import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
+import okhttp3.Request
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import javax.net.ssl.SSLContext
@@ -133,6 +134,14 @@ class MainActivity : AppCompatActivity() {
     private var httpDataSourceFactory: OkHttpDataSource.Factory? = null
     private var wasStoppedInBackground: Boolean = false
     private val streamOkHttpClient: OkHttpClient by lazy { buildStreamOkHttpClient() }
+    private val analyzerOkHttpClient: OkHttpClient by lazy {
+        streamOkHttpClient.newBuilder()
+            .connectTimeout(4000, TimeUnit.MILLISECONDS)
+            .readTimeout(4500, TimeUnit.MILLISECONDS)
+            .callTimeout(7500, TimeUnit.MILLISECONDS)
+            .retryOnConnectionFailure(false)
+            .build()
+    }
 
     private fun buildStreamOkHttpClient(): OkHttpClient {
         val dispatcher = Dispatcher().apply {
@@ -1985,7 +1994,9 @@ class MainActivity : AppCompatActivity() {
             for (ch in snapshot) {
                 pool.submit {
                     if (!isAnalyzerRunning) return@submit
-                    val isProtectedVipToken = CoreEngines.isSingleSessionTokenUrl(ch.url)
+                    val activeSrc = playlists.getOrNull(activePlaylistIndex)?.source
+                    val isBuiltinCatalog = (activeSrc == "BUILTIN_OPEN_RU" || activeSrc == "BUILTIN_STRICT_RU_ONLY")
+                    val isProtectedVipToken = !isBuiltinCatalog && CoreEngines.isSingleSessionTokenUrl(ch.url)
                     val ok = if (isProtectedVipToken) true else checkStreamAliveDeep(ch.url)
                     channelHealthMap[ch.url] = ok
                     if (ok) {
@@ -2034,43 +2045,136 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkStreamAliveDeep(urlStr: String): Boolean {
-        var conn: HttpURLConnection? = null
+    private fun probeMediaBytesOkHttp(targetUrl: String, minBytes: Int = 188): Boolean {
         return try {
-            val cleanUrl = urlStr.substringBefore("#")
-            val parsed = URL(cleanUrl)
-            val hdrs = CoreEngines.headersForStreamUrl(cleanUrl)
-            conn = (parsed.openConnection() as HttpURLConnection).apply {
-                setRequestProperty("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
-                for ((k, v) in hdrs) setRequestProperty(k, v)
-                instanceFollowRedirects = true
-                connectTimeout = 4000
-                readTimeout = 4000
+            val clean = targetUrl.substringBefore("#").trim()
+            val hdrs = CoreEngines.headersForStreamUrl(clean)
+            val reqBuilder = Request.Builder()
+                .url(clean)
+                .header("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
+                .header("Range", "bytes=0-65535")
+            for ((k, v) in hdrs) reqBuilder.header(k, v)
+            analyzerOkHttpClient.newCall(reqBuilder.build()).execute().use { resp ->
+                if (!resp.isSuccessful) return false
+                val cType = (resp.header("Content-Type") ?: "").lowercase(Locale.US)
+                if (cType.contains("text/html") || cType.contains("application/json")) return false
+                val stream = resp.body?.byteStream() ?: return false
+                val buf = ByteArray(4096)
+                var totalRead = 0
+                val firstChunk = ByteArray(256)
+                var firstLen = 0
+                while (totalRead < minBytes) {
+                    val n = stream.read(buf)
+                    if (n <= 0) break
+                    if (firstLen < firstChunk.size) {
+                        val copyLen = minOf(n, firstChunk.size - firstLen)
+                        System.arraycopy(buf, 0, firstChunk, firstLen, copyLen)
+                        firstLen += copyLen
+                    }
+                    totalRead += n
+                }
+                if (totalRead < minBytes) return false
+                val headStr = String(firstChunk, 0, firstLen)
+                if (headStr.contains("<html", true) || headStr.contains("<!doctype html", true) ||
+                    headStr.contains("404 not found", true) || headStr.contains("access denied", true)
+                ) {
+                    return false
+                }
+                true
             }
-            val code = conn.responseCode
-            if (code !in 200..299) {
-                conn.disconnect()
-                return false
-            }
-            val cType = (conn.contentType ?: "").lowercase()
-            if (cType.contains("text/html")) {
-                conn.disconnect()
-                return false
-            }
-            val buf = ByteArray(256)
-            val readBytes = conn.inputStream.read(buf)
-            conn.disconnect()
-            if (readBytes <= 0) return false
-            val headStr = String(buf, 0, readBytes)
-            if (headStr.contains("<html", true) || headStr.contains("<!doctype html", true) || headStr.contains("404 not found", true) || headStr.contains("access denied", true)) {
-                return false
-            }
-            if (cleanUrl.contains(".m3u", true) && !headStr.contains("#EXTM3U", true) && buf[0] != 0x47.toByte()) {
-                return false
-            }
-            true
         } catch (_: Exception) {
-            try { conn?.disconnect() } catch (_: Exception) {}
+            false
+        }
+    }
+
+    private fun fetchPlaylistTextOkHttp(targetUrl: String): Pair<String, String>? {
+        return try {
+            val clean = targetUrl.substringBefore("#").trim()
+            val hdrs = CoreEngines.headersForStreamUrl(clean)
+            val reqBuilder = Request.Builder()
+                .url(clean)
+                .header("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
+            for ((k, v) in hdrs) reqBuilder.header(k, v)
+            analyzerOkHttpClient.newCall(reqBuilder.build()).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val cType = (resp.header("Content-Type") ?: "").lowercase(Locale.US)
+                if (cType.contains("text/html")) return null
+                val finalUrl = resp.request.url.toString()
+                val stream = resp.body?.byteStream() ?: return null
+                val out = ByteArray(65536)
+                var total = 0
+                while (total < out.size) {
+                    val n = stream.read(out, total, out.size - total)
+                    if (n <= 0) break
+                    total += n
+                }
+                if (total <= 0) return null
+                Pair(finalUrl, String(out, 0, total, Charsets.UTF_8))
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun extractFirstHlsUri(playlistText: String, baseUrl: String): String? {
+        for (rawLine in playlistText.lineSequence()) {
+            val line = rawLine.trim()
+            if (line.isEmpty() || line.startsWith("#")) continue
+            return try {
+                URL(URL(baseUrl), line).toString()
+            } catch (_: Exception) {
+                line
+            }
+        }
+        return null
+    }
+
+    private fun checkStreamAliveDeep(urlStr: String): Boolean {
+        return try {
+            val cleanUrl = urlStr.substringBefore("#").trim()
+            val lowerUrl = cleanUrl.lowercase(Locale.US)
+            if (!lowerUrl.startsWith("http://") && !lowerUrl.startsWith("https://")) return false
+
+            val isLikelyHls = lowerUrl.contains(".m3u") || lowerUrl.contains("/hls/") || lowerUrl.contains("playlist") || lowerUrl.contains("mono.") || lowerUrl.contains("index.")
+            val isDash = lowerUrl.contains(".mpd")
+
+            if (isLikelyHls || isDash) {
+                val (finalUrl, body) = fetchPlaylistTextOkHttp(cleanUrl) ?: return false
+                if (body.contains("<html", true) || body.contains("<!doctype html", true) ||
+                    body.contains("404 not found", true) || body.contains("access denied", true)
+                ) {
+                    return false
+                }
+                if (isDash || body.contains("<MPD", true)) {
+                    if (body.contains("edef8ba9", true) || body.contains("widevine", true) || body.contains("playready", true)) return false
+                    return body.contains("<Segment", true) || body.contains("<BaseURL", true) || body.contains("<AdaptationSet", true)
+                }
+                if (body.contains("#EXTM3U", true)) {
+                    // Отбрасываем DRM-потоки, которые не воспроизводятся без лицензии
+                    if (body.contains("SAMPLE-AES", true) || body.contains("widevine", true) || body.contains("edef8ba9", true)) {
+                        return false
+                    }
+                    // Если это master-плейлист — спускаемся в первый медиа-плейлист и проверяем реальный видео-сегмент
+                    var mediaUrl = finalUrl
+                    var mediaBody = body
+                    if (mediaBody.contains("#EXT-X-STREAM-INF", true)) {
+                        val variantUrl = extractFirstHlsUri(mediaBody, finalUrl) ?: return false
+                        val fetchedVariant = fetchPlaylistTextOkHttp(variantUrl) ?: return false
+                        mediaUrl = fetchedVariant.first
+                        mediaBody = fetchedVariant.second
+                        if (!mediaBody.contains("#EXTM3U", true)) return false
+                        if (mediaBody.contains("SAMPLE-AES", true) || mediaBody.contains("widevine", true)) return false
+                    }
+                    val firstSegUrl = extractFirstHlsUri(mediaBody, mediaUrl) ?: return false
+                    return probeMediaBytesOkHttp(firstSegUrl, minBytes = 188)
+                }
+                // Некоторые URL с "index" отдают сразу бинарный поток (MPEG-TS/MP3/AAC)
+                return probeMediaBytesOkHttp(cleanUrl, minBytes = 1024)
+            }
+
+            // Прямой поток (TS / MP4 / MP3 / Icecast) — проверяем реальную отдачу байт через тот же OkHttp
+            probeMediaBytesOkHttp(cleanUrl, minBytes = 1024)
+        } catch (_: Exception) {
             false
         }
     }
@@ -3894,6 +3998,12 @@ class MainActivity : AppCompatActivity() {
                                 "ch='${currentChannel?.name}' state=$state bufMs=$bufMs curPos=$curPos prevPos=$prevPos stuckSec=$lowSignalStuckSeconds drops=$consecutiveDropFailures"
                             )
                         }
+                        if (lowSignalStuckSeconds == 6 && state == Player.STATE_BUFFERING && bufMs >= 8000L && curPos < 0L) {
+                            try {
+                                p.seekToDefaultPosition()
+                                p.play()
+                            } catch (_: Exception) {}
+                        }
                         if (lowSignalStuckSeconds >= 12) {
                             lowSignalStuckSeconds = 0
                             continuousBufferingTicks = 0
@@ -3965,17 +4075,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var pendingForceMirror: Boolean = false
+    private var pendingPreferHttpFallback: Boolean = false
     private var mirrorCycleIndex: Int = 0
     private val pendingErrorReconnectRunnable = Runnable {
         val useMirrorNow = pendingForceMirror
+        val preferHttpNow = pendingPreferHttpFallback
         pendingForceMirror = false
-        reconnectCurrentStreamSilently(forceMirror = useMirrorNow)
+        pendingPreferHttpFallback = false
+        reconnectCurrentStreamSilently(forceMirror = useMirrorNow, preferHttpFallback = preferHttpNow)
     }
 
     internal fun collectMirrorsForChannel(ch: Channel): List<String> {
         val cleanUrl = ch.url.substringBefore("#")
         val normTarget = CoreEngines.normalizeName(ch.name.replace(Regex("\\s+orig$", RegexOption.IGNORE_CASE), "").trim())
-        val canonTarget = canonicalDedupKey(ch.name)
+        val canonTarget = canonicalDedupKey(ch.name, effectiveCategory(ch))
         return LinkedHashSet<String>().apply {
             for (k in listOf(canonTarget, normTarget).distinct()) {
                 if (k.isEmpty()) continue
@@ -3986,7 +4099,7 @@ class MainActivity : AppCompatActivity() {
             allChannels.forEach { cand ->
                 val u = cand.url.substringBefore("#")
                 if (u != cleanUrl && !autoDisabledUrls.contains(cand.url) && !isBlockedCastChannel(cand.name, u, cand.category, cand.tvgId) &&
-                    (canonicalDedupKey(cand.name) == canonTarget || CoreEngines.normalizeName(cand.name) == normTarget)
+                    (canonicalDedupKey(cand.name, effectiveCategory(cand)) == canonTarget || CoreEngines.normalizeName(cand.name) == normTarget)
                 ) {
                     add(u)
                 }
@@ -3994,21 +4107,41 @@ class MainActivity : AppCompatActivity() {
         }.toList()
     }
 
-    internal fun reconnectCurrentStreamSilently(forceMirror: Boolean = false) {
+    internal fun reconnectCurrentStreamSilently(forceMirror: Boolean = false, preferHttpFallback: Boolean = false) {
         val ch = currentChannel ?: return
         val p = player ?: return
         try {
             uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
             val cleanUrl = ch.url.substringBefore("#")
-            val allMirrors = collectMirrorsForChannel(ch)
-            val useMirror = (forceMirror || consecutiveDropFailures >= 2) && allMirrors.isNotEmpty()
-            val targetUrl = if (useMirror) {
-                silentFallbackAttemptedForUrl = ch.url
-                val chosen = allMirrors[mirrorCycleIndex % allMirrors.size]
-                mirrorCycleIndex++
-                chosen
+            val rawMirrors = collectMirrorsForChannel(ch)
+            val allMirrors = if (preferHttpFallback) {
+                rawMirrors.sortedBy { if (it.startsWith("http://", ignoreCase = true)) 0 else 1 }
             } else {
-                cleanUrl
+                rawMirrors
+            }
+            val httpEquivalent = if (preferHttpFallback && cleanUrl.startsWith("https://", ignoreCase = true)) {
+                "http://" + cleanUrl.removePrefix("https://")
+            } else {
+                ""
+            }
+            val useMirror = (forceMirror || consecutiveDropFailures >= 2 || (preferHttpFallback && allMirrors.any { it.startsWith("http://", ignoreCase = true) })) && allMirrors.isNotEmpty()
+            val targetUrl = when {
+                preferHttpFallback && allMirrors.any { it.startsWith("http://", ignoreCase = true) } -> {
+                    silentFallbackAttemptedForUrl = ch.url
+                    val chosen = allMirrors[mirrorCycleIndex % allMirrors.size]
+                    mirrorCycleIndex++
+                    chosen
+                }
+                preferHttpFallback && httpEquivalent.isNotEmpty() && consecutiveDropFailures == 1 -> {
+                    httpEquivalent
+                }
+                useMirror -> {
+                    silentFallbackAttemptedForUrl = ch.url
+                    val chosen = allMirrors[mirrorCycleIndex % allMirrors.size]
+                    mirrorCycleIndex++
+                    chosen
+                }
+                else -> cleanUrl
             }
             CoreEngines.appendDiagLog(
                 "RECONNECT",
@@ -4067,10 +4200,10 @@ class MainActivity : AppCompatActivity() {
 
         // Оптимизированная сетка буферов под реальное 20–30 сек окно CDN + быстрый подхват на ТВ
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(10000, 20000, 900, 1500)
-            1 -> listOf(15000, 28000, 1000, 1800)
-            2 -> listOf(22000, 38000, 1100, 2000)
-            else -> listOf(30000, 50000, 1200, 2200)
+            0 -> listOf(10000, 20000, 800, 1100)
+            1 -> listOf(15000, 28000, 900, 1300)
+            2 -> listOf(22000, 38000, 1000, 1500)
+            else -> listOf(30000, 50000, 1100, 1600)
         }
         val targetBytes = when (bufferLevel) {
             0 -> 24 * 1024 * 1024
@@ -4105,16 +4238,24 @@ class MainActivity : AppCompatActivity() {
             .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(initUrl))
         httpDataSourceFactory = dsFactory
 
-        val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(1) {
+        val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(2) {
             override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
-                if (loadErrorInfo.errorCount > 1) return C.TIME_UNSET
                 val errMsg = loadErrorInfo.exception.message ?: ""
-                if (errMsg.contains("Response code: 404") ||
-                    errMsg.contains("Response code: 403") ||
-                    errMsg.contains("Response code: 410")) {
+                val isManifest = (loadErrorInfo.mediaLoadData.dataType == C.DATA_TYPE_MANIFEST)
+                if (errMsg.contains("Response code: 403") ||
+                    errMsg.contains("Response code: 410") ||
+                    errMsg.contains("SSLException") ||
+                    errMsg.contains("Unable to parse TLS")
+                ) {
                     return C.TIME_UNSET
                 }
-                return 500L
+                if (isManifest) {
+                    if (errMsg.contains("Response code: 404") || loadErrorInfo.errorCount > 1) return C.TIME_UNSET
+                    return 450L
+                }
+                // Для отдельных видео-сегментов (.ts/.m4s) разрешаем 2 быстрых повтора при кратковременном 404/таймауте
+                if (loadErrorInfo.errorCount > 2) return C.TIME_UNSET
+                return if (loadErrorInfo.errorCount == 1) 400L else 950L
             }
         }
 
@@ -4228,14 +4369,18 @@ class MainActivity : AppCompatActivity() {
                     }
                     return
                 }
-                val tryMirrorNow = (isDecoderError || isBadHttpStatus) && mirrorsCount > 0
+                val isTlsError = causeMsg.contains("SSLException", ignoreCase = true) ||
+                    causeMsg.contains("Unable to parse TLS", ignoreCase = true) ||
+                    causeMsg.contains("SSLHandshake", ignoreCase = true)
+                val tryMirrorNow = (isDecoderError || isBadHttpStatus || isTlsError) && mirrorsCount > 0
                 val delayMs = when {
-                    tryMirrorNow && consecutiveDropFailures == 1 -> 350L
+                    (tryMirrorNow || isTlsError) && consecutiveDropFailures == 1 -> 350L
                     consecutiveDropFailures == 1 -> 650L
                     consecutiveDropFailures == 2 -> 1800L
                     else -> 3200L
                 }
-                pendingForceMirror = (isDecoderError || isBadHttpStatus)
+                pendingForceMirror = (isDecoderError || isBadHttpStatus || isTlsError)
+                pendingPreferHttpFallback = isTlsError
                 uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
                 uiHandler.postDelayed(pendingErrorReconnectRunnable, delayMs)
             }
@@ -4622,11 +4767,82 @@ class MainActivity : AppCompatActivity() {
         return BufferedReader(StringReader(out.toString()))
     }
 
-    internal fun canonicalDedupKey(rawName: String): String {
+    private val regexSportCountryToken = Regex(
+        "(?<![a-zа-яё0-9])(?:" +
+            "czechia|czech|germany|deutschland|hungary|italy|italia|romania|spain|espana|españa|" +
+            "united\\s+kingdom|england|britain|bulgaria|poland|polska|france|netherlands|holland|" +
+            "greece|portugal|turkey|turkiye|türkiye|serbia|croatia|slovenia|slovakia|sweden|" +
+            "norway|denmark|finland|austria|switzerland|belgium|ireland|ukraine|belarus|" +
+            "kazakhstan|georgia|armenia|azerbaijan|estonia|latvia|lithuania|moldova|israel|" +
+            "usa|canada|australia|brazil|mexico|argentina|india|arabia|arabic|mena|europe|" +
+            "international|intl|asia|global|latam|baltic|nordic|balkans|cis|" +
+            "uk|de|pl|it|es|fr|ro|hu|bg|cz|sk|tr|nl|se|no|dk|fi|gr|pt|at|ch|be|ie|ua|by|kz|en|rs|hr|eu|" +
+            "чехия|германия|венгрия|италия|румыния|испания|болгария|польша|франция|турция|сербия|хорватия|" +
+            "греция|португалия|швеция|норвегия|дания|финляндия|австрия|бельгия|украина|беларусь|казахстан|европа" +
+            ")(?![a-zа-яё0-9])",
+        RegexOption.IGNORE_CASE
+    )
+
+    private val politicalKeywordsOther = listOf(
+        "дума", "госдума", "совет федерации", "вместе-рф", "вместе рф", "парламент",
+        "красная линия", "кпрф", "лдпр", "единая россия", "справедливая", "полит",
+        "соловьев", "соловьёв", "царьград", "день тв", "россия 24", "вести", "известия",
+        "russia today", "rt ", "rt-", "sputnik", "спутник", "звезда", "рада", "свобода",
+        "настоящее время", "дождь", "belarus 24", "беларусь 24", "euronews", "евроньюс",
+        "bbc", "cnn", "al jazeera", "france 24", "deutsche welle", "bloomberg", "cnbc",
+        "fox news", "sky news", "новости", "news", "инфо 24", "инфоканал", "мир 24",
+        "рбк", "отр", "партия", "выборы", "кремль", "правительство", "президент", "агит"
+    )
+
+    private val regionalKeywordsOther = listOf(
+        "область", "обл.", " край", "республика", "респ.", "автоном", "округ",
+        "гтрк", "чгтрк", "нвк", "бст", "тнв", "отв", "губерния", "регион", "местн",
+        "городск", "муниципал", "телерадиокомпания", "трк ", "ктв", "якт",
+        "москва", "подмосков", "петербург", "лентв", "питер", "воронеж", "белгород",
+        "курган", "астрахан", "башкортостан", "уфа", "татарстан", "казан", "челны",
+        "самара", "тольятти", "саратов", "волгоград", "ростов", "дон 24", "краснодар",
+        "кубань", "сочи", "ставропол", "крым", "севастопол", "екатеринбург", "свердлов",
+        "урал", "челябинск", "тюмень", "югра", "ямал", "янао", "хмао", "сургут",
+        "омск", "новосибирск", "томск", "кемерово", "кузбасс", "барнаул", "алтай",
+        "красноярск", "енисей", "иркутск", "байкал", "бурятия", "чита", "забайкал",
+        "якутия", "саха", "хабаровск", "примор", "владивосток", "сахалин", "камчат",
+        "магадан", "чукот", "перм", "киров", "ижевск", "удмурт", "оренбург", "пенза",
+        "ульяновск", "чуваш", "чебоксар", "марий", "йошкар", "мордови", "саранск",
+        "нижний новгород", "нижегород", "владимир", "иваново", "ярославл", "костром",
+        "тверь", "тверск", "смоленск", "калуга", "тула", "рязань", "тамбов", "липецк",
+        "орел", "орёл", "курск", "брянск", "псков", "новгород", "вологда", "вологод",
+        "череповец", "архангельск", "мурманск", "карел", "петрозаводск", "коми",
+        "сыктывкар", "калининград", "кавказ", "дагестан", "чечня", "грозный", "ингуш",
+        "осетия", "владикавказ", "кабардин", "нальчик", "карачаев", "черкес", "адыгея",
+        "калмык", "тыва", "хакасия", "абакан", "приоскол", "белогор", "катунь",
+        "шадринск", "магнитогорск", "норильск", "ноябрьск", "нижневартовск", "нефтеюганск",
+        "армавир", "анапа", "новороссийск", "таганрог", "шахты", "волжский", "энгельс",
+        "сызрань", "димитровград", "дзержинск", "рыбинск", "обнинск", "подольск",
+        "химки", "балашиха", "королев", "мытищи", "люберцы", "одинцово", "серпухов",
+        "коломна", "долгопрудный", "красногорск", "раменск", "щелково", "пушкино",
+        "ногинск", "сергиев", "дмитров", "клин", "дубна", "сигма"
+    )
+
+    internal fun isFilteredOtherChannel(ch: Channel): Boolean {
+        if (ch.category != "Прочее") return false
+        val n = ch.name.lowercase(Locale.getDefault())
+        val u = ch.url.substringBefore("#").lowercase(Locale.getDefault())
+        if (n.contains("|")) return true
+        for (kw in politicalKeywordsOther) {
+            if (n.contains(kw)) return true
+        }
+        for (kw in regionalKeywordsOther) {
+            if (n.contains(kw) || u.contains(kw)) return true
+        }
+        return false
+    }
+
+    internal fun canonicalDedupKey(rawName: String, category: String = ""): String {
         val low = rawName.lowercase(Locale.getDefault()).trim()
         val noBrackets = regexBracketQualityOrDup.replace(low, " ")
         val noQuality = regexQualityToken.replace(noBrackets, " ")
-        val canon = CoreEngines.normalizeName(noQuality)
+        val cleaned = if (category == "Спорт") regexSportCountryToken.replace(noQuality, " ") else noQuality
+        val canon = CoreEngines.normalizeName(cleaned)
         return canon.ifEmpty { CoreEngines.normalizeName(rawName) }
     }
 
@@ -4644,6 +4860,19 @@ class MainActivity : AppCompatActivity() {
             n.contains("480") || u.contains("sdhigh") -> 60
             n.contains("360") || n.contains("240") || u.contains("_low") || u.contains("low/") || n.endsWith(" sd") -> -40
             else -> 100
+        }
+
+        // Для «Спорт»: отдаём приоритет русским / нейтральным версиям (например Eurosport 1 HD / Eurosport 2 1080p)
+        // перед локализованными версиями по странам (Czechia, Hungary, Romania, Spain, Italy и т.д.)
+        if (ch.category == "Спорт") {
+            val hasCountryTag = regexSportCountryToken.containsMatchIn(n)
+            val isNeutralOrRu = !hasCountryTag || n.contains("рус") || n.contains("russia") || n.contains(" ru")
+            val isEnglish = n.contains(" uk") || n.contains("(uk)") || n.contains("international") || n.contains(" en")
+            score += when {
+                isNeutralOrRu -> 180
+                isEnglish -> 65
+                else -> -45
+            }
         }
 
         if (u.contains(".m3u8") || u.contains("hls")) score += 35
@@ -4676,11 +4905,12 @@ class MainActivity : AppCompatActivity() {
 
         for ((rawCh, isCurated) in candidates) {
             if (isBlockedCastChannel(rawCh.name, rawCh.url, rawCh.category, rawCh.tvgId)) continue
+            if (isFilteredOtherChannel(rawCh)) continue
             val cleanMirrorUrl = rawCh.url.substringBefore("#").trim()
             val cleanUrlKey = cleanMirrorUrl.lowercase(Locale.getDefault())
             if (cleanUrlKey.isEmpty() || !seenUrls.add(cleanUrlKey)) continue
 
-            val canonKey = canonicalDedupKey(rawCh.name)
+            val canonKey = canonicalDedupKey(rawCh.name, rawCh.category)
             val normKey = CoreEngines.normalizeName(rawCh.name)
             val score = estimateChannelQualityScore(rawCh, isCurated)
 
@@ -4732,7 +4962,7 @@ class MainActivity : AppCompatActivity() {
         if (autoDisabledUrls.contains(ch.url)) return false
         val activeSrc = playlists.getOrNull(activePlaylistIndex)?.source
         if ((activeSrc == "BUILTIN_OPEN_RU" || activeSrc == "BUILTIN_STRICT_RU_ONLY") &&
-            isBlockedCastChannel(ch.name, ch.url, ch.category, ch.tvgId)
+            (isBlockedCastChannel(ch.name, ch.url, ch.category, ch.tvgId) || isFilteredOtherChannel(ch))
         ) {
             return false
         }
@@ -4764,10 +4994,11 @@ class MainActivity : AppCompatActivity() {
                 curatedRaw.add(Pair(Channel(cleanTitle, extra.url, cat, extra.tvgId), true))
             }
 
-            // Чистим устаревшие кэши v16/v17 и используем v18 (полностью без cast и дублей)
+            // Чистим устаревшие кэши v16/v17/v18 и используем v19 (без дублей по странам в Спорте и без региональных/политических в Прочем)
             try { File(filesDir, "open_catalog_cache_v16.m3u").delete() } catch (_: Exception) {}
             try { File(filesDir, "open_catalog_cache_v17.m3u").delete() } catch (_: Exception) {}
-            val cacheFile = File(filesDir, "open_catalog_cache_v18.m3u")
+            try { File(filesDir, "open_catalog_cache_v18.m3u").delete() } catch (_: Exception) {}
+            val cacheFile = File(filesDir, "open_catalog_cache_v19.m3u")
             val startupCandidates = ArrayList<Pair<Channel, Boolean>>(curatedRaw)
             var cachedRawCount = 0
             if (cacheFile.exists() && cacheFile.length() > 100L) {
@@ -4790,7 +5021,7 @@ class MainActivity : AppCompatActivity() {
                         startupCandidates.add(Pair(ch, false))
                         cachedRawCount++
                     }
-                    CoreEngines.appendDiagLog("CACHE_LOAD", "Из кэша v18 загружено кандидатов: $cachedRawCount")
+                    CoreEngines.appendDiagLog("CACHE_LOAD", "Из кэша v19 загружено кандидатов: $cachedRawCount")
                 } catch (_: Exception) {}
             }
 
@@ -4891,7 +5122,7 @@ class MainActivity : AppCompatActivity() {
 
                 // Сохраняем свежий очищенный каталог в локальный кэш v17
                 try {
-                    val tmp = File(filesDir, "open_catalog_cache_v18.tmp")
+                    val tmp = File(filesDir, "open_catalog_cache_v19.tmp")
                     tmp.bufferedWriter().use { bw ->
                         bw.write("#EXTM3U\n")
                         for (c in cacheChannels) {
