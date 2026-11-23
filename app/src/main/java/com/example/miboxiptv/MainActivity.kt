@@ -72,6 +72,8 @@ import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import java.io.IOException
+import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -127,6 +129,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val systemDiagSaveLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.data
+            if (uri != null) {
+                saveDiagLogToUri(uri)
+            }
+        }
+    }
+
     private var player: ExoPlayer? = null
     private var dualPipPlayer: ExoPlayer? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
@@ -150,7 +163,7 @@ class MainActivity : AppCompatActivity() {
         }
         val builder = OkHttpClient.Builder()
             .dispatcher(dispatcher)
-            .connectionPool(ConnectionPool(4, 30, TimeUnit.SECONDS))
+            .connectionPool(ConnectionPool(8, 2, TimeUnit.MINUTES))
             .protocols(listOf(Protocol.HTTP_1_1))
             .connectTimeout(7000, TimeUnit.MILLISECONDS)
             .readTimeout(7000, TimeUnit.MILLISECONDS)
@@ -1427,18 +1440,150 @@ class MainActivity : AppCompatActivity() {
         return m?.value?.trim() ?: "0 КБ"
     }
 
-    private fun openDiagLogInSystemFileManager() {
-        val exportedInfo = try {
+    private fun findDiagLogSourceFile(): File? {
+        val dirs = listOfNotNull(filesDir, getExternalFilesDir(null), cacheDir, externalCacheDir)
+        var best: File? = null
+        for (d in dirs) {
+            val exact = File(d, "TiViLook_diag.txt")
+            if (exact.exists() && exact.length() > (best?.length() ?: -1L)) best = exact
+            d.listFiles()?.forEach { f ->
+                if (f.isFile && f.name.contains("diag", ignoreCase = true) && f.length() > (best?.length() ?: -1L)) {
+                    best = f
+                }
+            }
+        }
+        return best
+    }
+
+    private fun exportDiagLogToDownloadsSafely(): Pair<Boolean, String> {
+        val srcFile = findDiagLogSourceFile()
+        if (srcFile != null && srcFile.exists() && srcFile.length() > 0L) {
+            // 1. Android 10–16 (смартфоны и современные Android TV): сохраняем в публичный Download без спецправ через MediaStore
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    val fileName = "TiViLook_diag.txt"
+                    try {
+                        contentResolver.delete(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            "${MediaStore.Downloads.DISPLAY_NAME}=?",
+                            arrayOf(fileName)
+                        )
+                    } catch (_: Exception) {}
+                    val values = ContentValues().apply {
+                        put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                        put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+                        put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                        put(MediaStore.Downloads.IS_PENDING, 1)
+                    }
+                    val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    if (uri != null) {
+                        srcFile.inputStream().use { input ->
+                            contentResolver.openOutputStream(uri)?.use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        values.clear()
+                        values.put(MediaStore.Downloads.IS_PENDING, 0)
+                        contentResolver.update(uri, values, null, null)
+                        return Pair(true, "Download/$fileName")
+                    }
+                } catch (_: Exception) {}
+            } else {
+                // 2. Android 9 и ниже (например, Mi Box TV): пробуем прямой путь в публичную папку Download
+                try {
+                    val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    if (pubDir != null && (pubDir.exists() || pubDir.mkdirs())) {
+                        val dst = File(pubDir, "TiViLook_diag.txt")
+                        srcFile.inputStream().use { input ->
+                            FileOutputStream(dst).use { output -> input.copyTo(output) }
+                        }
+                        if (dst.exists() && dst.length() > 0L) {
+                            return Pair(true, dst.absolutePath)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+        // 3. Резерв через CoreEngines (Android/data/com.example.miboxiptv/files/TiViLook_diag.txt)
+        val fallbackPath = try {
             CoreEngines.exportDiagLogToPublicDownloads(this)
         } catch (_: Exception) {
-            ""
+            srcFile?.absolutePath ?: ""
         }
+        val inPublicDownload = fallbackPath.contains("/Download/", ignoreCase = true) && !fallbackPath.contains("/Android/data/", ignoreCase = true)
+        return Pair(inPublicDownload, fallbackPath)
+    }
+
+    private fun saveDiagLogToUri(uri: Uri) {
+        try {
+            val src = findDiagLogSourceFile()
+            if (src == null || !src.exists()) {
+                Toast.makeText(this, "Файл лога пока пуст", Toast.LENGTH_SHORT).show()
+                return
+            }
+            src.inputStream().use { input ->
+                contentResolver.openOutputStream(uri)?.use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Toast.makeText(this, "Диагностический файл сохранён!", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка сохранения: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun launchSaveDiagLogAsDocument() {
+        try {
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TITLE, "TiViLook_diag.txt")
+            }
+            systemDiagSaveLauncher.launch(intent)
+        } catch (_: Exception) {
+            Toast.makeText(this, "На ТВ нет системного окна сохранения — используйте «Поделиться»", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun shareDiagLogFile() {
+        try {
+            val src = findDiagLogSourceFile()
+            if (src == null || !src.exists()) {
+                Toast.makeText(this, "Файл лога пока пуст", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val shareDir = File(externalCacheDir ?: cacheDir, "shared_logs").apply { mkdirs() }
+            val shareCopy = File(shareDir, "TiViLook_diag.txt")
+            src.inputStream().use { input ->
+                FileOutputStream(shareCopy).use { output -> input.copyTo(output) }
+            }
+            val uri = FileProvider.getUriForFile(this, "com.example.miboxiptv.fileprovider", shareCopy)
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "TiViLook_diag.txt")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(sendIntent, "Отправить диагностический файл"))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Не найдено приложение для отправки файла", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openDiagLogInSystemFileManager() {
+        val (savedToPublic, exportedInfo) = exportDiagLogToDownloadsSafely()
         val toastMsg = if (exportedInfo.isNotBlank()) {
             "Файл сохранён: $exportedInfo"
         } else {
             "Открытие папки Download..."
         }
-        Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, toastMsg, Toast.LENGTH_LONG).show()
+
+        // На ТВ при отсутствии записи в публичный Download сразу открываем просмотр/отправку лога
+        if (controlMode == 2 && !savedToPublic) {
+            navigateToMenu("DIAG_LOG_VIEW")
+            return
+        }
 
         val downloadDocUri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload")
 
@@ -2112,7 +2257,6 @@ class MainActivity : AppCompatActivity() {
             val reqBuilder = Request.Builder()
                 .url(clean)
                 .header("User-Agent", CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size])
-                .header("Range", "bytes=0-65535")
             for ((k, v) in hdrs) reqBuilder.header(k, v)
             analyzerOkHttpClient.newCall(reqBuilder.build()).execute().use { resp ->
                 if (!resp.isSuccessful) return false
@@ -2249,9 +2393,15 @@ class MainActivity : AppCompatActivity() {
             openDiagLogViewerModal(firstOpen = false)
         })
         subModalTopButtons.addView(makeModernButton("📥 В Download") {
-            val savedPath = CoreEngines.exportDiagLogToPublicDownloads(this)
+            val (_, savedPath) = exportDiagLogToDownloadsSafely()
             Toast.makeText(this, "Сохранено: $savedPath", Toast.LENGTH_LONG).show()
             openDiagLogViewerModal(firstOpen = false)
+        })
+        subModalTopButtons.addView(makeModernButton("📤 Поделиться") {
+            shareDiagLogFile()
+        })
+        subModalTopButtons.addView(makeModernButton("💾 Выбрать папку") {
+            launchSaveDiagLogAsDocument()
         })
         subModalTopButtons.addView(makeModernButton("🗑 Очистить") {
             val path = CoreEngines.clearDiagLog()
@@ -4305,8 +4455,23 @@ class MainActivity : AppCompatActivity() {
 
     internal fun createLiveMediaItem(url: String): MediaItem {
         val cleanUrl = url.substringBefore("#")
+        val targetOffsetMs = when (bufferLevel) {
+            0 -> 9000L
+            1 -> 12000L
+            2 -> 14000L
+            else -> 16000L
+        }
         return MediaItem.Builder()
             .setUri(cleanUrl)
+            .setLiveConfiguration(
+                MediaItem.LiveConfiguration.Builder()
+                    .setTargetOffsetMs(targetOffsetMs)
+                    .setMinOffsetMs(6000L)
+                    .setMaxOffsetMs(26000L)
+                    .setMinPlaybackSpeed(1.0f)
+                    .setMaxPlaybackSpeed(1.0f)
+                    .build()
+            )
             .build()
     }
 
@@ -4338,12 +4503,12 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release(); loudnessEnhancer = null; lastAudioSessionId = C.AUDIO_SESSION_ID_UNSET } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
 
-        // Оптимизированная сетка буферов под реальное 20–30 сек окно CDN + быстрый подхват на ТВ
+        // Сбалансированная сетка буферов под реальные 15–30 сек окна HLS без перескоков и повторов кусков
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(10000, 20000, 800, 1100)
-            1 -> listOf(15000, 28000, 900, 1300)
-            2 -> listOf(22000, 38000, 1000, 1500)
-            else -> listOf(30000, 50000, 1100, 1600)
+            0 -> listOf(9000, 18000, 1200, 1800)
+            1 -> listOf(12000, 24000, 1500, 2200)
+            2 -> listOf(16000, 30000, 1800, 2500)
+            else -> listOf(22000, 38000, 2000, 2800)
         }
         val targetBytes = when (bufferLevel) {
             0 -> 24 * 1024 * 1024
@@ -4355,7 +4520,7 @@ class MainActivity : AppCompatActivity() {
             .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
             .setTargetBufferBytes(targetBytes)
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setBackBuffer(15000, false)
+            .setBackBuffer(10000, false)
             .build()
 
         val extensionMode = when (decoderMode) {
@@ -4378,7 +4543,7 @@ class MainActivity : AppCompatActivity() {
             .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(initUrl))
         httpDataSourceFactory = dsFactory
 
-        val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(2) {
+        val smartRetryPolicy = object : DefaultLoadErrorHandlingPolicy(3) {
             override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
                 val errMsg = loadErrorInfo.exception.message ?: ""
                 val isManifest = (loadErrorInfo.mediaLoadData.dataType == C.DATA_TYPE_MANIFEST)
@@ -4390,18 +4555,31 @@ class MainActivity : AppCompatActivity() {
                     return C.TIME_UNSET
                 }
                 if (isManifest) {
-                    if (errMsg.contains("Response code: 404") || loadErrorInfo.errorCount > 1) return C.TIME_UNSET
-                    return 450L
+                    if (errMsg.contains("Response code: 404") || loadErrorInfo.errorCount > 2) return C.TIME_UNSET
+                    return if (loadErrorInfo.errorCount == 1) 450L else 900L
                 }
-                // Для отдельных видео-сегментов (.ts/.m4s) разрешаем 2 быстрых повтора при кратковременном 404/таймауте
-                if (loadErrorInfo.errorCount > 2) return C.TIME_UNSET
-                return if (loadErrorInfo.errorCount == 1) 400L else 950L
+                // Для отдельных видео-сегментов (.ts/.m4s) разрешаем 3 быстрых повтора без перезапуска потока
+                if (loadErrorInfo.errorCount > 3) return C.TIME_UNSET
+                return when (loadErrorInfo.errorCount) {
+                    1 -> 350L
+                    2 -> 750L
+                    else -> 1300L
+                }
             }
         }
 
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(dsFactory)
             .setLoadErrorHandlingPolicy(smartRetryPolicy)
+
+        // Стабильный выбор битрейта: предотвращает дёрганье между вариантами HLS, из-за которого музыка прыгает кусками
+        val stableAdaptiveFactory = AdaptiveTrackSelection.Factory(
+            25_000,
+            25_000,
+            25_000,
+            0.75f
+        )
+        val trackSelector = DefaultTrackSelector(this, stableAdaptiveFactory)
 
         val audioAttrs = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -4410,6 +4588,7 @@ class MainActivity : AppCompatActivity() {
 
         val newPlayer = ExoPlayer.Builder(this, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttrs, true)
             .build()
@@ -5134,17 +5313,20 @@ class MainActivity : AppCompatActivity() {
                 curatedRaw.add(Pair(Channel(cleanTitle, extra.url, cat, extra.tvgId), true))
             }
 
-            // Чистим устаревшие кэши v16/v17/v18 и используем v19 (без дублей по странам в Спорте и без региональных/политических в Прочем)
-            try { File(filesDir, "open_catalog_cache_v16.m3u").delete() } catch (_: Exception) {}
-            try { File(filesDir, "open_catalog_cache_v17.m3u").delete() } catch (_: Exception) {}
-            try { File(filesDir, "open_catalog_cache_v18.m3u").delete() } catch (_: Exception) {}
+            // Используем свежий кэш v19, но при первом запуске подстраховываемся старым кэшем до успешной загрузки сети
             val cacheFile = File(filesDir, "open_catalog_cache_v19.m3u")
+            val fallbackReadCache = listOf(
+                cacheFile,
+                File(filesDir, "open_catalog_cache_v18.m3u"),
+                File(filesDir, "open_catalog_cache_v17.m3u"),
+                File(filesDir, "open_catalog_cache_v16.m3u")
+            ).firstOrNull { it.exists() && it.length() > 100L }
             val startupCandidates = ArrayList<Pair<Channel, Boolean>>(curatedRaw)
             var cachedRawCount = 0
-            if (cacheFile.exists() && cacheFile.length() > 100L) {
+            if (fallbackReadCache != null) {
                 try {
                     val cachedMap = LinkedHashMap<String, Channel>()
-                    cacheFile.bufferedReader().use { rawBr ->
+                    fallbackReadCache.bufferedReader().use { rawBr ->
                         stripCastEntriesFromM3uReader(rawBr).use { br ->
                             CoreEngines.parseM3uReaderIntoMap(
                                 reader = br,
@@ -5272,7 +5454,11 @@ class MainActivity : AppCompatActivity() {
                             bw.write("${c.url}\n")
                         }
                     }
-                    tmp.renameTo(cacheFile)
+                    if (tmp.renameTo(cacheFile)) {
+                        try { File(filesDir, "open_catalog_cache_v16.m3u").delete() } catch (_: Exception) {}
+                        try { File(filesDir, "open_catalog_cache_v17.m3u").delete() } catch (_: Exception) {}
+                        try { File(filesDir, "open_catalog_cache_v18.m3u").delete() } catch (_: Exception) {}
+                    }
                 } catch (_: Exception) {}
 
                 runOnUiThread {
