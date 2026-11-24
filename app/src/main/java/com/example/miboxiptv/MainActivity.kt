@@ -137,6 +137,7 @@ class MainActivity : AppCompatActivity() {
     private var pendingStoragePermissionAction: (() -> Unit)? = null
     private var cachedShareTargets: List<ResolveInfo> = emptyList()
     private var cachedShareFileUri: Uri? = null
+    private var lastDiagExportTriggerMs: Long = 0L
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -1459,18 +1460,46 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun findDiagLogSourceFile(): File? {
-        val dirs = listOfNotNull(filesDir, getExternalFilesDir(null), cacheDir, externalCacheDir)
+        val dirs = listOfNotNull(
+            filesDir,
+            getExternalFilesDir(null),
+            getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
+            getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS),
+            cacheDir,
+            externalCacheDir
+        )
         var best: File? = null
-        for (d in dirs) {
-            val exact = File(d, "TiViLook_diag.txt")
-            if (exact.exists() && exact.length() > (best?.length() ?: -1L)) best = exact
-            d.listFiles()?.forEach { f ->
+        fun inspectDir(dir: File, depth: Int) {
+            val exact = File(dir, "TiViLook_diag.txt")
+            if (exact.isFile && exact.length() > (best?.length() ?: -1L)) best = exact
+            dir.listFiles()?.forEach { f ->
                 if (f.isFile && f.name.contains("diag", ignoreCase = true) && f.length() > (best?.length() ?: -1L)) {
                     best = f
+                } else if (f.isDirectory && depth < 1 && !f.name.equals("shared_logs", ignoreCase = true)) {
+                    inspectDir(f, depth + 1)
                 }
             }
         }
+        for (d in dirs) {
+            try { inspectDir(d, 0) } catch (_: Exception) {}
+        }
         return best
+    }
+
+    private fun readDiagLogBytesForExport(): ByteArray? {
+        val srcFile = findDiagLogSourceFile()
+        if (srcFile != null && srcFile.exists() && srcFile.length() > 0L) {
+            try {
+                val bytes = srcFile.readBytes()
+                if (bytes.isNotEmpty()) return bytes
+            } catch (_: Exception) {}
+        }
+        return try {
+            val lines = CoreEngines.readDiagLogTail(500)
+            if (lines.isNotEmpty()) lines.joinToString("\n").toByteArray(Charsets.UTF_8) else null
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun hasPublicDownloadWritePermission(): Boolean {
@@ -1502,69 +1531,109 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun exportDiagLogToDownloadsSafely(): Pair<Boolean, String> {
-        val srcFile = findDiagLogSourceFile()
+        val logBytes = readDiagLogBytesForExport() ?: return Pair(false, "")
         val fileName = "TiViLook_diag.txt"
-        if (srcFile != null && srcFile.exists() && srcFile.length() > 0L) {
-            // 1. Android 10–16: сохраняем в публичный Download через MediaStore без спецправ
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+
+        // 1. Android 10–16: сохраняем строго ОДИН файл TiViLook_diag.txt в публичный Download через MediaStore
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                // Удаляем старый дубль TiViLook_diag_TV.txt, если остался от прошлых версий
                 try {
-                    try {
-                        contentResolver.delete(
-                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                            "${MediaStore.Downloads.DISPLAY_NAME}=?",
-                            arrayOf(fileName)
-                        )
-                    } catch (_: Exception) {}
-                    val values = ContentValues().apply {
-                        put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                        put(MediaStore.Downloads.MIME_TYPE, "text/plain")
-                        put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                        put(MediaStore.Downloads.IS_PENDING, 1)
-                    }
-                    val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                    if (uri != null) {
-                        srcFile.inputStream().use { input ->
-                            contentResolver.openOutputStream(uri)?.use { output ->
-                                input.copyTo(output)
-                            }
+                    contentResolver.delete(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        "${MediaStore.Downloads.DISPLAY_NAME}=?",
+                        arrayOf("TiViLook_diag_TV.txt")
+                    )
+                } catch (_: Exception) {}
+
+                // Если наш TiViLook_diag.txt уже есть в Download — перезаписываем его без создания копий
+                var existingUri: Uri? = null
+                try {
+                    contentResolver.query(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        arrayOf(MediaStore.Downloads._ID),
+                        "${MediaStore.Downloads.DISPLAY_NAME}=?",
+                        arrayOf(fileName),
+                        null
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val id = cursor.getLong(0)
+                            existingUri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id.toString())
                         }
-                        values.clear()
-                        values.put(MediaStore.Downloads.IS_PENDING, 0)
-                        contentResolver.update(uri, values, null, null)
-                        return Pair(true, "Download/$fileName")
                     }
-                } catch (e: Exception) {
-                    CoreEngines.appendDiagLog("DIAG_EXPORT_ERR", "MediaStore export fail: ${e.message}")
+                } catch (_: Exception) {}
+
+                if (existingUri != null) {
+                    try {
+                        contentResolver.openOutputStream(existingUri!!, "wt")?.use { output ->
+                            output.write(logBytes)
+                            output.flush()
+                        } ?: throw IOException("openOutputStream returned null")
+                        return Pair(true, "Download/$fileName")
+                    } catch (_: Exception) {
+                        // Файл создан другой установкой — создадим новый ниже
+                    }
                 }
+
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                    put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + File.separator)
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri != null) {
+                    contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                        output.write(logBytes)
+                        output.flush()
+                    } ?: throw IOException("openOutputStream returned null")
+                    val doneValues = ContentValues().apply {
+                        put(MediaStore.Downloads.IS_PENDING, 0)
+                    }
+                    contentResolver.update(uri, doneValues, null, null)
+                    val actualName = resolveUriDisplayName(uri).ifBlank { fileName }
+                    return Pair(true, "Download/$actualName")
+                }
+            } catch (e: Exception) {
+                CoreEngines.appendDiagLog("DIAG_EXPORT_ERR", "MediaStore export fail: ${e.message}")
             }
-            // 2. Android 9 и ниже (Mi Box TV) или резерв на кастомных ТВ-прошивках: прямой путь /storage/emulated/0/Download
+        } else {
+            // 2. Android 9 и ниже (Mi Box TV): прямой путь /storage/emulated/0/Download
             try {
                 @Suppress("DEPRECATION")
                 val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 if (pubDir != null && (pubDir.exists() || pubDir.mkdirs())) {
+                    try { File(pubDir, "TiViLook_diag_TV.txt").delete() } catch (_: Exception) {}
                     val dst = File(pubDir, fileName)
-                    srcFile.inputStream().use { input ->
-                        FileOutputStream(dst).use { output -> input.copyTo(output) }
+                    FileOutputStream(dst, false).use { output ->
+                        output.write(logBytes)
+                        output.flush()
                     }
                     if (dst.exists() && dst.length() > 0L) {
                         try {
                             MediaScannerConnection.scanFile(this, arrayOf(dst.absolutePath), arrayOf("text/plain"), null)
                         } catch (_: Exception) {}
-                        return Pair(true, dst.absolutePath)
+                        return Pair(true, "Download/$fileName")
                     }
                 }
             } catch (e: Exception) {
                 CoreEngines.appendDiagLog("DIAG_EXPORT_ERR", "Public Download write fail: ${e.message}")
             }
         }
-        // 3. Резерв через CoreEngines (внутренняя папка приложения, если ОС отказала в доступе к Download)
-        val fallbackPath = try {
-            CoreEngines.exportDiagLogToPublicDownloads(this)
+
+        // 3. Резерв во внутреннюю папку программы, только если запись в публичный Download не удалась
+        return try {
+            val fallbackDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: getExternalFilesDir(null) ?: filesDir
+            if (!fallbackDir.exists()) fallbackDir.mkdirs()
+            val outFile = File(fallbackDir, fileName)
+            FileOutputStream(outFile, false).use { output ->
+                output.write(logBytes)
+                output.flush()
+            }
+            Pair(false, outFile.absolutePath)
         } catch (_: Exception) {
-            srcFile?.absolutePath ?: ""
+            Pair(false, "")
         }
-        val inPublicDownload = fallbackPath.contains("/Download/", ignoreCase = true) && !fallbackPath.contains("/Android/data/", ignoreCase = true)
-        return Pair(inPublicDownload, fallbackPath)
     }
 
     private fun launchSystemFileManagerForDownloads(): Boolean {
@@ -1636,6 +1705,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveDiagLogToDownloadsAndOpenFileManager() {
+        val now = System.currentTimeMillis()
+        if (now - lastDiagExportTriggerMs < 1500L) return
+        lastDiagExportTriggerMs = now
+
         ensurePublicStoragePermission {
             val (savedToPublic, exportedInfo) = exportDiagLogToDownloadsSafely()
             val toastMsg = when {
@@ -1656,12 +1729,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun prepareDiagShareFileUri(): Uri? {
-        val src = findDiagLogSourceFile()
-        if (src == null || !src.exists() || src.length() <= 0L) return null
+        val bytes = readDiagLogBytesForExport() ?: return null
         val shareDir = File(externalCacheDir ?: cacheDir, "shared_logs").apply { mkdirs() }
         val shareCopy = File(shareDir, "TiViLook_diag.txt")
-        src.inputStream().use { input ->
-            FileOutputStream(shareCopy).use { output -> input.copyTo(output) }
+        FileOutputStream(shareCopy, false).use { output ->
+            output.write(bytes)
+            output.flush()
         }
         return FileProvider.getUriForFile(this, "com.example.miboxiptv.fileprovider", shareCopy)
     }
