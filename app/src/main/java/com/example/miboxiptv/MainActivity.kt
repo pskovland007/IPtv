@@ -3,7 +3,11 @@ package com.example.miboxiptv
 import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.DownloadManager
+import android.Manifest
+import android.content.ClipData
 import android.content.ContentValues
+import android.content.pm.ResolveInfo
+import android.media.MediaScannerConnection
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
@@ -95,6 +99,7 @@ import java.text.Collator
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -129,15 +134,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val systemDiagSaveLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val uri = result.data?.data
-            if (uri != null) {
-                saveDiagLogToUri(uri)
-            }
+    private var pendingStoragePermissionAction: (() -> Unit)? = null
+    private var cachedShareTargets: List<ResolveInfo> = emptyList()
+    private var cachedShareFileUri: Uri? = null
+
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val granted = grants[Manifest.permission.WRITE_EXTERNAL_STORAGE] == true ||
+            hasPublicDownloadWritePermission()
+        val action = pendingStoragePermissionAction
+        pendingStoragePermissionAction = null
+        if (granted) {
+            CoreEngines.appendDiagLog("PERM", "Выдано разрешение WRITE_EXTERNAL_STORAGE")
+        } else {
+            CoreEngines.appendDiagLog("PERM_ERR", "Нет разрешения WRITE_EXTERNAL_STORAGE (проверьте AndroidManifest.xml и Права приложения на ТВ)")
+            Toast.makeText(
+                this,
+                "Нет доступа к папке Download — выдайте разрешение «Память» приложению TiViLook",
+                Toast.LENGTH_LONG
+            ).show()
         }
+        action?.invoke()
     }
 
     private var player: ExoPlayer? = null
@@ -1455,13 +1473,41 @@ class MainActivity : AppCompatActivity() {
         return best
     }
 
+    private fun hasPublicDownloadWritePermission(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return true
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun ensurePublicStoragePermission(action: () -> Unit) {
+        if (hasPublicDownloadWritePermission()) {
+            action()
+            return
+        }
+        pendingStoragePermissionAction = action
+        try {
+            storagePermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                )
+            )
+        } catch (e: Exception) {
+            pendingStoragePermissionAction = null
+            CoreEngines.appendDiagLog("PERM_ERR", "Ошибка запроса разрешений: ${e.message}")
+            action()
+        }
+    }
+
     private fun exportDiagLogToDownloadsSafely(): Pair<Boolean, String> {
         val srcFile = findDiagLogSourceFile()
+        val fileName = "TiViLook_diag.txt"
         if (srcFile != null && srcFile.exists() && srcFile.length() > 0L) {
-            // 1. Android 10–16 (смартфоны и современные Android TV): сохраняем в публичный Download без спецправ через MediaStore
+            // 1. Android 10–16: сохраняем в публичный Download через MediaStore без спецправ
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 try {
-                    val fileName = "TiViLook_diag.txt"
                     try {
                         contentResolver.delete(
                             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
@@ -1487,24 +1533,31 @@ class MainActivity : AppCompatActivity() {
                         contentResolver.update(uri, values, null, null)
                         return Pair(true, "Download/$fileName")
                     }
-                } catch (_: Exception) {}
-            } else {
-                // 2. Android 9 и ниже (например, Mi Box TV): пробуем прямой путь в публичную папку Download
-                try {
-                    val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    if (pubDir != null && (pubDir.exists() || pubDir.mkdirs())) {
-                        val dst = File(pubDir, "TiViLook_diag.txt")
-                        srcFile.inputStream().use { input ->
-                            FileOutputStream(dst).use { output -> input.copyTo(output) }
-                        }
-                        if (dst.exists() && dst.length() > 0L) {
-                            return Pair(true, dst.absolutePath)
-                        }
+                } catch (e: Exception) {
+                    CoreEngines.appendDiagLog("DIAG_EXPORT_ERR", "MediaStore export fail: ${e.message}")
+                }
+            }
+            // 2. Android 9 и ниже (Mi Box TV) или резерв на кастомных ТВ-прошивках: прямой путь /storage/emulated/0/Download
+            try {
+                @Suppress("DEPRECATION")
+                val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (pubDir != null && (pubDir.exists() || pubDir.mkdirs())) {
+                    val dst = File(pubDir, fileName)
+                    srcFile.inputStream().use { input ->
+                        FileOutputStream(dst).use { output -> input.copyTo(output) }
                     }
-                } catch (_: Exception) {}
+                    if (dst.exists() && dst.length() > 0L) {
+                        try {
+                            MediaScannerConnection.scanFile(this, arrayOf(dst.absolutePath), arrayOf("text/plain"), null)
+                        } catch (_: Exception) {}
+                        return Pair(true, dst.absolutePath)
+                    }
+                }
+            } catch (e: Exception) {
+                CoreEngines.appendDiagLog("DIAG_EXPORT_ERR", "Public Download write fail: ${e.message}")
             }
         }
-        // 3. Резерв через CoreEngines (Android/data/com.example.miboxiptv/files/TiViLook_diag.txt)
+        // 3. Резерв через CoreEngines (внутренняя папка приложения, если ОС отказала в доступе к Download)
         val fallbackPath = try {
             CoreEngines.exportDiagLogToPublicDownloads(this)
         } catch (_: Exception) {
@@ -1514,87 +1567,17 @@ class MainActivity : AppCompatActivity() {
         return Pair(inPublicDownload, fallbackPath)
     }
 
-    private fun saveDiagLogToUri(uri: Uri) {
-        try {
-            val src = findDiagLogSourceFile()
-            if (src == null || !src.exists()) {
-                Toast.makeText(this, "Файл лога пока пуст", Toast.LENGTH_SHORT).show()
-                return
-            }
-            src.inputStream().use { input ->
-                contentResolver.openOutputStream(uri)?.use { output ->
-                    input.copyTo(output)
-                }
-            }
-            Toast.makeText(this, "Диагностический файл сохранён!", Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            Toast.makeText(this, "Ошибка сохранения: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun launchSaveDiagLogAsDocument() {
-        try {
-            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TITLE, "TiViLook_diag.txt")
-            }
-            systemDiagSaveLauncher.launch(intent)
-        } catch (_: Exception) {
-            Toast.makeText(this, "На ТВ нет системного окна сохранения — используйте «Поделиться»", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun shareDiagLogFile() {
-        try {
-            val src = findDiagLogSourceFile()
-            if (src == null || !src.exists()) {
-                Toast.makeText(this, "Файл лога пока пуст", Toast.LENGTH_SHORT).show()
-                return
-            }
-            val shareDir = File(externalCacheDir ?: cacheDir, "shared_logs").apply { mkdirs() }
-            val shareCopy = File(shareDir, "TiViLook_diag.txt")
-            src.inputStream().use { input ->
-                FileOutputStream(shareCopy).use { output -> input.copyTo(output) }
-            }
-            val uri = FileProvider.getUriForFile(this, "com.example.miboxiptv.fileprovider", shareCopy)
-            val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "TiViLook_diag.txt")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            startActivity(Intent.createChooser(sendIntent, "Отправить диагностический файл"))
-        } catch (_: Exception) {
-            Toast.makeText(this, "Не найдено приложение для отправки файла", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun openDiagLogInSystemFileManager() {
-        val (savedToPublic, exportedInfo) = exportDiagLogToDownloadsSafely()
-        val toastMsg = if (exportedInfo.isNotBlank()) {
-            "Файл сохранён: $exportedInfo"
-        } else {
-            "Открытие папки Download..."
-        }
-        Toast.makeText(this, toastMsg, Toast.LENGTH_LONG).show()
-
-        // На ТВ при отсутствии записи в публичный Download сразу открываем просмотр/отправку лога
-        if (controlMode == 2 && !savedToPublic) {
-            navigateToMenu("DIAG_LOG_VIEW")
-            return
-        }
-
+    private fun launchSystemFileManagerForDownloads(): Boolean {
         val downloadDocUri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload")
 
-        // 1. Системный файловый менеджер (DocumentsUI) прямо в папке Download
+        // 1. Системный файловый менеджер (DocumentsUI) прямо на папке Download
         try {
             val dirIntent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(downloadDocUri, "vnd.android.document/directory")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(dirIntent)
-            return
+            return true
         } catch (_: Exception) {}
 
         // 2. Системное приложение «Загрузки / Файлы»
@@ -1603,29 +1586,309 @@ class MainActivity : AppCompatActivity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(dlIntent)
-            return
+            return true
         } catch (_: Exception) {}
 
-        // 3. Системный выбор документов, открытый на папке Download
+        // 3. Системный выбор документов с открытой папкой Download
         try {
             val docIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
-                type = "text/plain"
+                type = "*/*"
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     putExtra(DocumentsContract.EXTRA_INITIAL_URI, downloadDocUri)
                 }
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(docIntent)
-            return
+            return true
         } catch (_: Exception) {}
 
-        // 4. Запасной вариант (для ТВ-приставок без системного файлового менеджера)
-        navigateToMenu("DIAG_LOG_VIEW")
+        // 4. Популярные файловые менеджеры Android TV / Android (Mi Box TV часто не содержит DocumentsUI)
+        val knownManagers = listOf(
+            "com.google.android.documentsui",
+            "com.android.documentsui",
+            "com.lonelycatgames.Xplore",
+            "com.alphainventor.filemanager",
+            "com.mobisystems.fileman",
+            "com.mixplorer",
+            "com.mixplorer.silver",
+            "pl.solidexplorer2",
+            "com.google.android.apps.nbu.files",
+            "nextapp.fx",
+            "com.ghisler.android.TotalCommander",
+            "com.estrongs.android.pop",
+            "com.amaze.filemanager",
+            "dev.dworks.apps.anexplorer",
+            "com.mi.android.globalFileexplorer",
+            "com.sec.android.app.myfiles"
+        )
+        for (pkg in knownManagers) {
+            try {
+                val launch = packageManager.getLaunchIntentForPackage(pkg)
+                if (launch != null) {
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(launch)
+                    return true
+                }
+            } catch (_: Exception) {}
+        }
+        return false
     }
 
-    private fun findLatestApkFromReleaseJson(rel: JSONObject): Pair<String, String>? {
+    private fun saveDiagLogToDownloadsAndOpenFileManager() {
+        ensurePublicStoragePermission {
+            val (savedToPublic, exportedInfo) = exportDiagLogToDownloadsSafely()
+            val toastMsg = when {
+                savedToPublic -> "Сохранено в Загрузки: $exportedInfo"
+                exportedInfo.isNotBlank() -> "Нет прав на Download (сохранено: $exportedInfo)"
+                else -> "Файл лога пока пуст"
+            }
+            Toast.makeText(this, toastMsg, Toast.LENGTH_LONG).show()
+            val opened = launchSystemFileManagerForDownloads()
+            if (!opened) {
+                Toast.makeText(this, "Файловый менеджер не найден на устройстве", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun openDiagLogInSystemFileManager() {
+        saveDiagLogToDownloadsAndOpenFileManager()
+    }
+
+    private fun prepareDiagShareFileUri(): Uri? {
+        val src = findDiagLogSourceFile()
+        if (src == null || !src.exists() || src.length() <= 0L) return null
+        val shareDir = File(externalCacheDir ?: cacheDir, "shared_logs").apply { mkdirs() }
+        val shareCopy = File(shareDir, "TiViLook_diag.txt")
+        src.inputStream().use { input ->
+            FileOutputStream(shareCopy).use { output -> input.copyTo(output) }
+        }
+        return FileProvider.getUriForFile(this, "com.example.miboxiptv.fileprovider", shareCopy)
+    }
+
+    private fun buildDiagSendIntent(uri: Uri, mimeType: String = "text/plain"): Intent {
+        return Intent(Intent.ACTION_SEND).apply {
+            type = mimeType
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "TiViLook_diag.txt")
+            clipData = ClipData.newRawUri("TiViLook_diag.txt", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
+
+    private fun shareDiagLogFile() {
+        try {
+            val uri = prepareDiagShareFileUri()
+            if (uri == null) {
+                Toast.makeText(this, "Файл лога пока пуст", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val found = LinkedHashMap<String, ResolveInfo>()
+            for (mime in listOf("text/plain", "*/*")) {
+                try {
+                    val probe = buildDiagSendIntent(uri, mime)
+                    @Suppress("DEPRECATION")
+                    val list = packageManager.queryIntentActivities(probe, PackageManager.MATCH_DEFAULT_ONLY)
+                    for (ri in list) {
+                        val ai = ri.activityInfo ?: continue
+                        if (ai.packageName == packageName) continue
+                        if (!ai.exported) continue
+                        val key = "${ai.packageName}/${ai.name}"
+                        if (!found.containsKey(key)) found[key] = ri
+                    }
+                } catch (_: Exception) {}
+            }
+
+            val targets = found.values.sortedBy {
+                try { it.loadLabel(packageManager).toString().lowercase(Locale.getDefault()) } catch (_: Exception) { "" }
+            }
+
+            if (targets.isNotEmpty()) {
+                cachedShareTargets = targets
+                cachedShareFileUri = uri
+                navigateToMenu("DIAG_SHARE_PICKER")
+            } else {
+                // Фолбэк для Android 11+ без <queries> в манифесте
+                val fallbackIntent = buildDiagSendIntent(uri, "text/plain")
+                startActivity(Intent.createChooser(fallbackIntent, "Отправить диагностический файл"))
+            }
+        } catch (e: Exception) {
+            CoreEngines.appendDiagLog("SHARE_ERR", "Share fail: ${e.message}")
+            Toast.makeText(this, "Не найдено приложение для отправки файла", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openDiagSharePickerModal(firstOpen: Boolean = false) {
+        setSubModalHeaderTitle("Поделиться файлом")
+        subModalInputContainer.visibility = View.GONE
+        subModalList.visibility = View.VISIBLE
+        subModalTopButtons.visibility = View.VISIBLE
+        subModalTopButtons.removeAllViews()
+        subModalTopButtons.addView(makeModernButton("◀ Назад к логу") {
+            navigateBackInMenu()
+        })
+
+        val targets = cachedShareTargets
+        val uri = cachedShareFileUri
+        if (targets.isEmpty() || uri == null) {
+            Toast.makeText(this, "Нет доступных приложений для отправки", Toast.LENGTH_LONG).show()
+            navigateBackInMenu()
+            return
+        }
+
+        // Определяем повторяющиеся названия приложений, чтобы уточнять имя активности только при совпадении
+        val labelCounts = HashMap<String, Int>()
+        val rawLabels = targets.map { ri ->
+            try { ri.loadLabel(packageManager).toString().trim() } catch (_: Exception) { ri.activityInfo.packageName }
+        }
+        for (lbl in rawLabels) {
+            labelCounts[lbl] = (labelCounts[lbl] ?: 0) + 1
+        }
+
+        val rows = targets.mapIndexed { idx, ri ->
+            val lbl = rawLabels[idx].ifBlank { ri.activityInfo.packageName }
+            if ((labelCounts[lbl] ?: 0) > 1) {
+                val appName = try {
+                    ri.activityInfo.applicationInfo.loadLabel(packageManager).toString().trim()
+                } catch (_: Exception) { "" }
+                val suffix = if (appName.isNotEmpty() && !appName.equals(lbl, ignoreCase = true)) appName else ri.activityInfo.name.substringAfterLast('.')
+                "[>]   $lbl  •  $suffix"
+            } else {
+                "[>]   $lbl"
+            }
+        }.toMutableList()
+
+        val hasSystemChooserRow = (controlMode != 2)
+        if (hasSystemChooserRow) {
+            rows.add("[>]   Системное меню Android")
+        }
+
+        updateSubModalListItems(rows, smoothToggle = !firstOpen, preservePositionIndex = 0)
+        subModalList.setOnItemClickListener { _, _, which, _ ->
+            if (which in targets.indices) {
+                val chosen = targets[which]
+                val pkg = chosen.activityInfo.packageName
+                val cls = chosen.activityInfo.name
+                try {
+                    grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Exception) {}
+                try {
+                    val direct = buildDiagSendIntent(uri, "text/plain").apply {
+                        setClassName(pkg, cls)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(direct)
+                } catch (e: Exception) {
+                    CoreEngines.appendDiagLog("SHARE_ERR", "Direct share $pkg fail: ${e.message}")
+                    Toast.makeText(this, "Не удалось открыть ${rawLabels[which]}", Toast.LENGTH_LONG).show()
+                }
+            } else if (hasSystemChooserRow && which == targets.size) {
+                try {
+                    startActivity(Intent.createChooser(buildDiagSendIntent(uri, "text/plain"), "Отправить TiViLook_diag.txt"))
+                } catch (_: Exception) {}
+            }
+        }
+        if (firstOpen) {
+            animateMenuAppear(subModalOverlay)
+            subModalList.requestFocus()
+        }
+    }
+
+    private data class GithubApkReleaseInfo(
+        val tagName: String,
+        val releaseName: String,
+        val apkUrl: String,
+        val apkFileName: String,
+        val updatedAtMs: Long,
+        val sizeBytes: Long
+    )
+
+    private fun parseIso8601UtcMillis(raw: String?): Long {
+        if (raw.isNullOrBlank()) return 0L
+        val clean = raw.trim()
+        val formats = listOf("yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+        for (fmt in formats) {
+            try {
+                val sdf = SimpleDateFormat(fmt, Locale.US)
+                sdf.timeZone = TimeZone.getTimeZone("UTC")
+                val parsed = sdf.parse(clean)
+                if (parsed != null) return parsed.time
+            } catch (_: Exception) {}
+        }
+        return 0L
+    }
+
+    private fun extractDottedVersionParts(raw: String): List<Int>? {
+        val m = Regex("(\d+(?:\.\d+)+)").find(raw) ?: return null
+        return m.groupValues[1].split('.').mapNotNull { it.toIntOrNull() }.takeIf { it.size >= 2 }
+    }
+
+    private fun compareVersionParts(a: List<Int>, b: List<Int>): Int {
+        val maxLen = maxOf(a.size, b.size)
+        for (i in 0 until maxLen) {
+            val av = if (i < a.size) a[i] else 0
+            val bv = if (i < b.size) b[i] else 0
+            if (av != bv) return av.compareTo(bv)
+        }
+        return 0
+    }
+
+    private fun isGithubReleaseAlreadyInstalled(info: GithubApkReleaseInfo): Pair<Boolean, String> {
+        return try {
+            @Suppress("DEPRECATION")
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            val localVerName = (pInfo.versionName ?: "").trim()
+            val localVerCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                pInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pInfo.versionCode.toLong()
+            }
+            val localInstalledMs = pInfo.lastUpdateTime
+
+            val localSemVer = extractDottedVersionParts(localVerName)
+            val remoteSemVer = extractDottedVersionParts(info.tagName)
+                ?: extractDottedVersionParts(info.releaseName)
+                ?: extractDottedVersionParts(info.apkFileName)
+
+            CoreEngines.appendDiagLog(
+                "UPDATE",
+                "Проверка версии: local=$localVerName (code=$localVerCode, installedMs=$localInstalledMs) vs remoteTag=${info.tagName} (updatedMs=${info.updatedAtMs})"
+            )
+
+            // 1. Если у релиза и у приложения есть числовая версия вида X.Y(.Z) — сравниваем её
+            if (localSemVer != null && remoteSemVer != null) {
+                val cmp = compareVersionParts(remoteSemVer, localSemVer)
+                return if (cmp <= 0) {
+                    Pair(true, localVerName.ifBlank { info.tagName })
+                } else {
+                    Pair(false, localVerName)
+                }
+            }
+
+            // 2. Если тег вида build-28 / v28 и у приложения задан versionCode > 1
+            val remoteBuild = Regex("(?:^|[^0-9])(?:v|r|build[-_]?)(\d{1,7})(?:$|[^0-9])", RegexOption.IGNORE_CASE)
+                .find(info.tagName)?.groupValues?.getOrNull(1)?.toLongOrNull()
+            if (remoteBuild != null && localVerCode > 1L && remoteBuild <= localVerCode) {
+                return Pair(true, localVerName.ifBlank { "build $localVerCode" })
+            }
+
+            // 3. Плавающий тег (например latest / TiViLook-latest.apk): сравниваем дату сборки на GitHub с датой установки APK на ТВ
+            if (info.updatedAtMs > 0L && localInstalledMs >= info.updatedAtMs) {
+                return Pair(true, localVerName.ifBlank { "актуальная сборка" })
+            }
+
+            Pair(false, localVerName)
+        } catch (e: Exception) {
+            CoreEngines.appendDiagLog("UPDATE", "Не удалось проверить локальную версию: ${e.message}")
+            Pair(false, "")
+        }
+    }
+
+    private fun findLatestApkFromReleaseJson(rel: JSONObject): GithubApkReleaseInfo? {
         val tagName = rel.optString("tag_name", "").trim()
+        val releaseName = rel.optString("name", "").trim()
+        val publishedAtMs = parseIso8601UtcMillis(rel.optString("published_at", ""))
         val assets = rel.optJSONArray("assets") ?: return null
         for (i in 0 until assets.length()) {
             val asset = assets.optJSONObject(i) ?: continue
@@ -1636,59 +1899,119 @@ class MainActivity : AppCompatActivity() {
                 val safeName = name.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifBlank {
                     if (cleanTag.isNotEmpty()) "TiViLook_$cleanTag.apk" else "TiViLook_update.apk"
                 }
-                return Pair(url, if (safeName.endsWith(".apk", true)) safeName else "$safeName.apk")
+                val finalName = if (safeName.endsWith(".apk", true)) safeName else "$safeName.apk"
+                val assetUpdatedMs = parseIso8601UtcMillis(asset.optString("updated_at", ""))
+                    .let { if (it > 0L) it else publishedAtMs }
+                val assetSize = asset.optLong("size", 0L)
+                return GithubApkReleaseInfo(
+                    tagName = tagName,
+                    releaseName = releaseName,
+                    apkUrl = url,
+                    apkFileName = finalName,
+                    updatedAtMs = assetUpdatedMs,
+                    sizeBytes = assetSize
+                )
             }
         }
         return null
     }
 
-    private fun downloadApkFallbackDirect(apkUrl: String, fileName: String): Boolean {
+    private fun downloadApkFallbackDirect(apkUrl: String, fileName: String): Pair<Boolean, String> {
         return try {
             val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
                 setRequestProperty("User-Agent", "TiViLook-Updater")
                 instanceFollowRedirects = true
                 connectTimeout = 12000
-                readTimeout = 30000
+                readTimeout = 35000
             }
             if (conn.responseCode !in 200..299) {
                 conn.disconnect()
-                return false
+                return Pair(false, "")
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    contentResolver.delete(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        "${MediaStore.Downloads.DISPLAY_NAME}=?",
+                        arrayOf(fileName)
+                    )
+                } catch (_: Exception) {}
                 val values = ContentValues().apply {
                     put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
                     put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                     put(MediaStore.Downloads.IS_PENDING, 1)
                 }
-                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return false
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return Pair(false, "")
                 conn.inputStream.use { input ->
                     contentResolver.openOutputStream(uri)?.use { output ->
                         input.copyTo(output)
-                    } ?: return false
+                    } ?: return Pair(false, "")
                 }
                 values.clear()
                 values.put(MediaStore.Downloads.IS_PENDING, 0)
                 contentResolver.update(uri, values, null, null)
-                true
+                Pair(true, "Download/$fileName")
             } else {
+                // На Android 9 и ниже (Mi Box TV) сначала пробуем публичную папку /storage/emulated/0/Download
+                try {
+                    @Suppress("DEPRECATION")
+                    val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    if (pubDir != null && (pubDir.exists() || pubDir.mkdirs())) {
+                        val pubOut = File(pubDir, fileName)
+                        if (pubOut.exists()) pubOut.delete()
+                        conn.inputStream.use { input ->
+                            FileOutputStream(pubOut).use { output -> input.copyTo(output) }
+                        }
+                        if (pubOut.exists() && pubOut.length() > 0L) {
+                            try {
+                                MediaScannerConnection.scanFile(
+                                    this,
+                                    arrayOf(pubOut.absolutePath),
+                                    arrayOf("application/vnd.android.package-archive"),
+                                    null
+                                )
+                            } catch (_: Exception) {}
+                            return Pair(true, pubOut.absolutePath)
+                        }
+                    }
+                } catch (ePub: Exception) {
+                    CoreEngines.appendDiagLog("UPDATE_ERR", "Нет записи в публичный Download: ${ePub.message}")
+                }
+                // Если прав на публичный Download всё же нет — резерв во внутреннюю папку программы
                 val dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
                 val outFile = File(dir, fileName)
-                conn.inputStream.use { input ->
-                    FileOutputStream(outFile).use { output -> input.copyTo(output) }
+                val conn2 = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("User-Agent", "TiViLook-Updater")
+                    instanceFollowRedirects = true
+                    connectTimeout = 12000
+                    readTimeout = 35000
                 }
-                outFile.exists() && outFile.length() > 0L
+                if (conn2.responseCode in 200..299) {
+                    conn2.inputStream.use { input ->
+                        FileOutputStream(outFile).use { output -> input.copyTo(output) }
+                    }
+                }
+                conn2.disconnect()
+                Pair(outFile.exists() && outFile.length() > 0L, outFile.absolutePath)
             }
         } catch (e: Exception) {
             CoreEngines.appendDiagLog("UPDATE_ERR", "Direct download fail: ${e.message}")
-            false
+            Pair(false, "")
         }
     }
 
     private fun checkAndInstallAppUpdateFromGithub() {
-        Toast.makeText(this, "Поиск новой сборки TiViLook...", Toast.LENGTH_SHORT).show()
+        ensurePublicStoragePermission {
+            runCheckAndDownloadAppUpdateFromGithub()
+        }
+    }
+
+    private fun runCheckAndDownloadAppUpdateFromGithub() {
+        Toast.makeText(this, "Проверка новой сборки TiViLook...", Toast.LENGTH_SHORT).show()
         thread {
             try {
-                var found: Pair<String, String>? = null
+                var found: GithubApkReleaseInfo? = null
                 // 1. Проверяем последний стабильный релиз
                 try {
                     val latestConn = (URL("https://api.github.com/repos/pskovland007/IPtv/releases/latest").openConnection() as HttpURLConnection).apply {
@@ -1733,14 +2056,33 @@ class MainActivity : AppCompatActivity() {
                     return@thread
                 }
 
-                val (apkUrl, apkFileName) = target
+                // 3. Если последняя версия уже установлена — не скачиваем файл повторно
+                val (alreadyLatest, localLabel) = isGithubReleaseAlreadyInstalled(target)
+                if (alreadyLatest) {
+                    CoreEngines.appendDiagLog("UPDATE", "Уже установлена последняя версия ($localLabel) — загрузка отменена")
+                    runOnUiThread {
+                        val labelPart = if (localLabel.isNotBlank()) " ($localLabel)" else ""
+                        Toast.makeText(this, "У вас уже установлена последняя версия$labelPart", Toast.LENGTH_LONG).show()
+                    }
+                    return@thread
+                }
+
+                val apkUrl = target.apkUrl
+                val apkFileName = target.apkFileName
                 CoreEngines.appendDiagLog("UPDATE", "Старт автозагрузки APK: $apkFileName ($apkUrl)")
 
-                // Скачиваем напрямую через системный DownloadManager (без открытия сайта GitHub)
+                // 4. Пробуем системный DownloadManager в публичный Download (если есть права записи)
                 var queuedId = -1L
+                val canWritePublic = hasPublicDownloadWritePermission()
                 val dm = getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
-                if (dm != null) {
+                if (dm != null && canWritePublic) {
                     try {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                            @Suppress("DEPRECATION")
+                            val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                            val stale = if (pubDir != null) File(pubDir, apkFileName) else null
+                            if (stale != null && stale.exists()) stale.delete()
+                        }
                         val req = DownloadManager.Request(Uri.parse(apkUrl)).apply {
                             setTitle(apkFileName)
                             setDescription("Загрузка обновления TiViLook")
@@ -1748,24 +2090,21 @@ class MainActivity : AppCompatActivity() {
                             setAllowedOverMetered(true)
                             setAllowedOverRoaming(true)
                             addRequestHeader("User-Agent", "TiViLook-Updater")
-                            try {
-                                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, apkFileName)
-                            } catch (_: Exception) {
-                                setDestinationInExternalFilesDir(this@MainActivity, Environment.DIRECTORY_DOWNLOADS, apkFileName)
-                            }
+                            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, apkFileName)
                         }
                         queuedId = dm.enqueue(req)
                     } catch (e: Exception) {
                         CoreEngines.appendDiagLog("UPDATE_ERR", "DownloadManager error: ${e.message}")
                         queuedId = -1L
                     }
+                } else if (!canWritePublic) {
+                    CoreEngines.appendDiagLog("UPDATE_ERR", "Нет разрешения WRITE_EXTERNAL_STORAGE для записи в публичный Download")
                 }
 
                 if (queuedId > 0L && dm != null) {
                     runOnUiThread {
                         Toast.makeText(this, "Скачивание $apkFileName в папку Download...", Toast.LENGTH_LONG).show()
                     }
-                    // Отслеживаем завершение загрузки в фоне (до 2 минут)
                     val deadline = System.currentTimeMillis() + 120_000L
                     while (System.currentTimeMillis() < deadline) {
                         try { Thread.sleep(1500L) } catch (_: Exception) { break }
@@ -1778,14 +2117,15 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                         if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                            CoreEngines.appendDiagLog("UPDATE", "Успешно скачано в Download: $apkFileName")
                             runOnUiThread {
                                 Toast.makeText(this, "Обновление скачано в Download: $apkFileName", Toast.LENGTH_LONG).show()
                             }
                             break
                         } else if (status == DownloadManager.STATUS_FAILED) {
-                            val directOk = downloadApkFallbackDirect(apkUrl, apkFileName)
+                            val (directOk, savedPath) = downloadApkFallbackDirect(apkUrl, apkFileName)
                             runOnUiThread {
-                                val msg = if (directOk) "Обновление скачано в Download: $apkFileName" else "Ошибка скачивания обновления"
+                                val msg = if (directOk) "Обновление скачано: $savedPath" else "Ошибка скачивания обновления"
                                 Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
                             }
                             break
@@ -1795,9 +2135,9 @@ class MainActivity : AppCompatActivity() {
                     runOnUiThread {
                         Toast.makeText(this, "Скачивание $apkFileName...", Toast.LENGTH_LONG).show()
                     }
-                    val directOk = downloadApkFallbackDirect(apkUrl, apkFileName)
+                    val (directOk, savedPath) = downloadApkFallbackDirect(apkUrl, apkFileName)
                     runOnUiThread {
-                        val msg = if (directOk) "Обновление скачано в Download: $apkFileName" else "Не удалось скачать APK обновления"
+                        val msg = if (directOk) "Обновление скачано: $savedPath" else "Не удалось скачать APK обновления"
                         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
                     }
                 }
@@ -2393,15 +2733,10 @@ class MainActivity : AppCompatActivity() {
             openDiagLogViewerModal(firstOpen = false)
         })
         subModalTopButtons.addView(makeModernButton("📥 В Download") {
-            val (_, savedPath) = exportDiagLogToDownloadsSafely()
-            Toast.makeText(this, "Сохранено: $savedPath", Toast.LENGTH_LONG).show()
-            openDiagLogViewerModal(firstOpen = false)
+            saveDiagLogToDownloadsAndOpenFileManager()
         })
         subModalTopButtons.addView(makeModernButton("📤 Поделиться") {
             shareDiagLogFile()
-        })
-        subModalTopButtons.addView(makeModernButton("💾 Выбрать папку") {
-            launchSaveDiagLogAsDocument()
         })
         subModalTopButtons.addView(makeModernButton("🗑 Очистить") {
             val path = CoreEngines.clearDiagLog()
@@ -4159,6 +4494,7 @@ class MainActivity : AppCompatActivity() {
             "DECODER" -> openDecoderSubModal(inPlace = false)
             "AUDIO" -> openAudioSubModal(inPlace = false)
             "DIAG_LOG_VIEW" -> openDiagLogViewerModal(firstOpen = true)
+            "DIAG_SHARE_PICKER" -> openDiagSharePickerModal(firstOpen = true)
             "EPG" -> openInputSubModal("Ссылка на телепрограмму XMLTV", epgUrl) { newVal ->
                 if (newVal.isNotEmpty()) { epgUrl = newVal; saveState(); loadEpgOncePerDayInBackground(forceRefresh = true) }
             }
