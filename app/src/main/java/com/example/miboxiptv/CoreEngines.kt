@@ -34,23 +34,38 @@ object CoreEngines {
     @Volatile var diagAppContext: Context? = null
 
     fun resolveDiagLogFile(ctx: Context? = diagAppContext): File {
-        try {
-            val dlDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (dlDir != null && (dlDir.exists() || dlDir.mkdirs()) && dlDir.canWrite()) {
-                return File(dlDir, "TiViLook_diag.txt")
-            }
-        } catch (_: Exception) {}
+        // Рабочий лог всегда хранится строго в приватной папке приложения,
+        // чтобы не конфликтовать с экспортом в публичную папку Download.
         val extDir = ctx?.getExternalFilesDir(null)
-        if (extDir != null) return File(extDir, "TiViLook_diag.txt")
+        if (extDir != null) {
+            if (!extDir.exists()) extDir.mkdirs()
+            return File(extDir, "TiViLook_diag.txt")
+        }
         val intDir = ctx?.filesDir
-        if (intDir != null) return File(intDir, "TiViLook_diag.txt")
-        return File("/sdcard/Download/TiViLook_diag.txt")
+        if (intDir != null) {
+            if (!intDir.exists()) intDir.mkdirs()
+            return File(intDir, "TiViLook_diag.txt")
+        }
+        val tmpDir = File(System.getProperty("java.io.tmpdir") ?: "/data/local/tmp")
+        return File(tmpDir, "TiViLook_diag.txt")
+    }
+
+    fun readDiagLogBytes(ctx: Context? = diagAppContext): ByteArray? {
+        return try {
+            synchronized(diagLock) {
+                val f = resolveDiagLogFile(ctx)
+                if (f.exists() && f.length() > 0L) f.readBytes() else null
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun appendDiagLog(tag: String, msg: String) {
         try {
             synchronized(diagLock) {
                 val f = resolveDiagLogFile()
+                f.parentFile?.let { if (!it.exists()) it.mkdirs() }
                 if (f.exists() && f.length() > 1_500_000L) {
                     val tail = f.readText().takeLast(450_000)
                     f.writeText("--- [ЛОГ УСЕЧЁН ПО ЛИМИТУ 1.5 МБ] ---\n" + tail)
@@ -67,11 +82,12 @@ object CoreEngines {
         return try {
             synchronized(diagLock) {
                 val f = resolveDiagLogFile()
+                f.parentFile?.let { if (!it.exists()) it.mkdirs() }
                 f.writeText("${diagTimeFmt.format(Date())} [INIT] Диагностический лог TiViLook очищен пользователем\n")
                 f.absolutePath
             }
         } catch (_: Exception) {
-            "/sdcard/Download/TiViLook_diag.txt"
+            "TiViLook_diag.txt"
         }
     }
 
@@ -105,37 +121,67 @@ object CoreEngines {
     fun exportDiagLogToPublicDownloads(ctx: Context): String {
         return try {
             val src = resolveDiagLogFile(ctx)
-            val content = synchronized(diagLock) {
-                if (src.exists()) src.readText() else "${diagTimeFmt.format(Date())} [INIT] Лог пуст\n"
+            val contentBytes = synchronized(diagLock) {
+                if (src.exists() && src.length() > 0L) src.readBytes()
+                else "${diagTimeFmt.format(Date())} [INIT] Лог пуст\n".toByteArray(Charsets.UTF_8)
             }
+            val fileName = "TiViLook_diag.txt"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val resolver = ctx.contentResolver
-                val fileName = "TiViLook_diag_TV.txt"
                 try {
                     resolver.delete(
                         MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                        "${MediaStore.Downloads.DISPLAY_NAME}=?",
-                        arrayOf(fileName)
+                        "${MediaStore.Downloads.DISPLAY_NAME}=? OR ${MediaStore.Downloads.DISPLAY_NAME} LIKE ?",
+                        arrayOf("TiViLook_diag_TV.txt", "TiViLook_diag (%).txt")
                     )
                 } catch (_: Exception) {}
+                var existingUri: android.net.Uri? = null
+                try {
+                    resolver.query(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        arrayOf(MediaStore.Downloads._ID),
+                        "${MediaStore.Downloads.DISPLAY_NAME}=?",
+                        arrayOf(fileName),
+                        null
+                    )?.use { c ->
+                        if (c.moveToFirst()) {
+                            existingUri = android.net.Uri.withAppendedPath(
+                                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                                c.getLong(0).toString()
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+                if (existingUri != null) {
+                    try {
+                        resolver.openOutputStream(existingUri!!, "wt")?.use { os ->
+                            os.write(contentBytes)
+                            os.flush()
+                        }
+                        return "Download/$fileName"
+                    } catch (_: Exception) {}
+                }
                 val values = ContentValues().apply {
                     put(MediaStore.Downloads.DISPLAY_NAME, fileName)
                     put(MediaStore.Downloads.MIME_TYPE, "text/plain")
-                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + File.separator)
                 }
                 val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                 if (uri != null) {
-                    resolver.openOutputStream(uri)?.use { os ->
-                        os.write(content.toByteArray(Charsets.UTF_8))
+                    resolver.openOutputStream(uri, "wt")?.use { os ->
+                        os.write(contentBytes)
+                        os.flush()
                     }
                     return "Download/$fileName"
                 }
-            }
-            val dlDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (dlDir != null && (dlDir.exists() || dlDir.mkdirs()) && dlDir.canWrite()) {
-                val dst = File(dlDir, "TiViLook_diag_TV.txt")
-                dst.writeText(content)
-                return dst.absolutePath
+            } else {
+                @Suppress("DEPRECATION")
+                val dlDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (dlDir != null && (dlDir.exists() || dlDir.mkdirs()) && dlDir.canWrite()) {
+                    val dst = File(dlDir, fileName)
+                    dst.writeBytes(contentBytes)
+                    return dst.absolutePath
+                }
             }
             src.absolutePath
         } catch (e: Exception) {

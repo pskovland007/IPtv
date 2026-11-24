@@ -1441,18 +1441,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun formatDiagFileSize(): String {
         try {
-            val dirs = listOfNotNull(filesDir, getExternalFilesDir(null), cacheDir, externalCacheDir)
-            var bestBytes = 0L
-            for (d in dirs) {
-                val exact = File(d, "TiViLook_diag.txt")
-                if (exact.exists() && exact.length() > bestBytes) bestBytes = exact.length()
-                d.listFiles()?.forEach { f ->
-                    if (f.isFile && f.name.contains("diag", ignoreCase = true) && f.length() > bestBytes) {
-                        bestBytes = f.length()
-                    }
-                }
+            val liveFile = CoreEngines.resolveDiagLogFile(this)
+            if (liveFile.isFile && liveFile.length() > 0L) {
+                return formatByteSizeRu(liveFile.length())
             }
-            if (bestBytes > 0L) return formatByteSizeRu(bestBytes)
         } catch (_: Exception) {}
         val status = CoreEngines.getDiagLogStatusText()
         val m = Regex("\\d+(?:[.,]\\d+)?\\s*(?:КБ|МБ|ГБ|Б|KB|MB|B)", RegexOption.IGNORE_CASE).find(status)
@@ -1460,33 +1452,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun findDiagLogSourceFile(): File? {
+        try {
+            val liveFile = CoreEngines.resolveDiagLogFile(this)
+            if (liveFile.isFile && liveFile.length() > 0L) return liveFile
+        } catch (_: Exception) {}
         val dirs = listOfNotNull(
-            filesDir,
             getExternalFilesDir(null),
-            getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-            getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS),
+            filesDir,
             cacheDir,
             externalCacheDir
         )
         var best: File? = null
-        fun inspectDir(dir: File, depth: Int) {
-            val exact = File(dir, "TiViLook_diag.txt")
-            if (exact.isFile && exact.length() > (best?.length() ?: -1L)) best = exact
-            dir.listFiles()?.forEach { f ->
-                if (f.isFile && f.name.contains("diag", ignoreCase = true) && f.length() > (best?.length() ?: -1L)) {
-                    best = f
-                } else if (f.isDirectory && depth < 1 && !f.name.equals("shared_logs", ignoreCase = true)) {
-                    inspectDir(f, depth + 1)
-                }
-            }
-        }
         for (d in dirs) {
-            try { inspectDir(d, 0) } catch (_: Exception) {}
+            try {
+                val exact = File(d, "TiViLook_diag.txt")
+                if (exact.isFile && exact.length() > (best?.length() ?: -1L)) best = exact
+            } catch (_: Exception) {}
         }
         return best
     }
 
     private fun readDiagLogBytesForExport(): ByteArray? {
+        CoreEngines.readDiagLogBytes(this)?.let { if (it.isNotEmpty()) return it }
         val srcFile = findDiagLogSourceFile()
         if (srcFile != null && srcFile.exists() && srcFile.length() > 0L) {
             try {
@@ -1537,12 +1524,12 @@ class MainActivity : AppCompatActivity() {
         // 1. Android 10–16: сохраняем строго ОДИН файл TiViLook_diag.txt в публичный Download через MediaStore
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
-                // Удаляем старый дубль TiViLook_diag_TV.txt, если остался от прошлых версий
+                // Чистим старые дубли (TiViLook_diag_TV.txt и TiViLook_diag (1).txt), созданные нашим приложением
                 try {
                     contentResolver.delete(
                         MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                        "${MediaStore.Downloads.DISPLAY_NAME}=?",
-                        arrayOf("TiViLook_diag_TV.txt")
+                        "${MediaStore.Downloads.DISPLAY_NAME}=? OR ${MediaStore.Downloads.DISPLAY_NAME} LIKE ?",
+                        arrayOf("TiViLook_diag_TV.txt", "TiViLook_diag (%).txt")
                     )
                 } catch (_: Exception) {}
 
@@ -1571,9 +1558,21 @@ class MainActivity : AppCompatActivity() {
                         } ?: throw IOException("openOutputStream returned null")
                         return Pair(true, "Download/$fileName")
                     } catch (_: Exception) {
-                        // Файл создан другой установкой — создадим новый ниже
+                        try { contentResolver.delete(existingUri!!, null, null) } catch (_: Exception) {}
                     }
                 }
+
+                // Если на диске остался старый файл от прямой записи прошлых версий — пробуем убрать его до вставки в MediaStore
+                try {
+                    @Suppress("DEPRECATION")
+                    val legacyPubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    if (legacyPubDir != null) {
+                        val legacyFile = File(legacyPubDir, fileName)
+                        if (legacyFile.exists()) legacyFile.delete()
+                        val legacyTv = File(legacyPubDir, "TiViLook_diag_TV.txt")
+                        if (legacyTv.exists()) legacyTv.delete()
+                    }
+                } catch (_: Exception) {}
 
                 val values = ContentValues().apply {
                     put(MediaStore.Downloads.DISPLAY_NAME, fileName)
