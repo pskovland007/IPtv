@@ -1819,7 +1819,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun extractDottedVersionParts(raw: String): List<Int>? {
-        val m = Regex("(\d+(?:\.\d+)+)").find(raw) ?: return null
+        val m = Regex("(\\d+(?:\\.\\d+)+)").find(raw) ?: return null
         return m.groupValues[1].split('.').mapNotNull { it.toIntOrNull() }.takeIf { it.size >= 2 }
     }
 
@@ -1867,7 +1867,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             // 2. Если тег вида build-28 / v28 и у приложения задан versionCode > 1
-            val remoteBuild = Regex("(?:^|[^0-9])(?:v|r|build[-_]?)(\d{1,7})(?:$|[^0-9])", RegexOption.IGNORE_CASE)
+            val remoteBuild = Regex("(?:^|[^0-9])(?:v|r|build[-_]?)(\\d{1,7})(?:$|[^0-9])", RegexOption.IGNORE_CASE)
                 .find(info.tagName)?.groupValues?.getOrNull(1)?.toLongOrNull()
             if (remoteBuild != null && localVerCode > 1L && remoteBuild <= localVerCode) {
                 return Pair(true, localVerName.ifBlank { "build $localVerCode" })
