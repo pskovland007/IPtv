@@ -57,6 +57,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import okhttp3.Call
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
@@ -166,6 +167,26 @@ class MainActivity : AppCompatActivity() {
     private var httpDataSourceFactory: OkHttpDataSource.Factory? = null
     private var wasStoppedInBackground: Boolean = false
     private val streamOkHttpClient: OkHttpClient by lazy { buildStreamOkHttpClient() }
+    private val tokenStreamOkHttpClient: OkHttpClient by lazy {
+        val tokenDispatcher = Dispatcher().apply {
+            maxRequests = 4
+            maxRequestsPerHost = 1
+        }
+        streamOkHttpClient.newBuilder()
+            .dispatcher(tokenDispatcher)
+            .connectionPool(ConnectionPool(2, 3, TimeUnit.MINUTES))
+            .build()
+    }
+    private val streamCallFactory: Call.Factory by lazy {
+        Call.Factory { request ->
+            val u = request.url.toString()
+            if (CoreEngines.isSingleSessionTokenUrl(u)) {
+                tokenStreamOkHttpClient.newCall(request)
+            } else {
+                streamOkHttpClient.newCall(request)
+            }
+        }
+    }
     private val analyzerOkHttpClient: OkHttpClient by lazy {
         streamOkHttpClient.newBuilder()
             .connectTimeout(4000, TimeUnit.MILLISECONDS)
@@ -2830,10 +2851,10 @@ class MainActivity : AppCompatActivity() {
         setSubModalHeaderTitle("Буфер")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val opts = listOf(
-            "Стандартный   •   10–20 сек",
-            "Оптимальный   •   15–28 сек",
-            "Анти-фриз   •   22–38 сек",
-            "Максимальный   •   30–50 сек"
+            "Стандартный   •   3–8 сек",
+            "Оптимальный   •   5–12 сек",
+            "Анти-фриз   •   8–18 сек",
+            "Максимальный   •   12–25 сек"
         ).mapIndexed { i, t -> (if (i == bufferLevel) "[+]   " else "[-]   ") + t }.toMutableList()
         opts.add("[>]   Отмотать эфир -20 сек")
         opts.add("[>]   Отмотать эфир -45 сек")
@@ -4863,21 +4884,15 @@ class MainActivity : AppCompatActivity() {
 
     internal fun createLiveMediaItem(url: String): MediaItem {
         val cleanUrl = url.substringBefore("#")
-        val targetOffsetMs = when (bufferLevel) {
-            0 -> 9000L
-            1 -> 12000L
-            2 -> 14000L
-            else -> 16000L
-        }
+        // Не навязываем жёсткий сдвиг live-окна: ExoPlayer сам берёт безопасную точку
+        // из HLS-манифеста (актуально для коротких 12–15 сек окон музыкальных каналов)
+        // и плавно держит синхронизацию в диапазоне 0.98–1.02x без скачков.
         return MediaItem.Builder()
             .setUri(cleanUrl)
             .setLiveConfiguration(
                 MediaItem.LiveConfiguration.Builder()
-                    .setTargetOffsetMs(targetOffsetMs)
-                    .setMinOffsetMs(6000L)
-                    .setMaxOffsetMs(26000L)
-                    .setMinPlaybackSpeed(1.0f)
-                    .setMaxPlaybackSpeed(1.0f)
+                    .setMinPlaybackSpeed(0.98f)
+                    .setMaxPlaybackSpeed(1.02f)
                     .build()
             )
             .build()
@@ -4911,24 +4926,24 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release(); loudnessEnhancer = null; lastAudioSessionId = C.AUDIO_SESSION_ID_UNSET } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
 
-        // Сбалансированная сетка буферов под реальные 15–30 сек окна HLS без перескоков и повторов кусков
+        // Сетка буферов под короткие окна HLS (12–15 сек) без ухода позиции в минус и перескоков
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(9000, 18000, 1200, 1800)
-            1 -> listOf(12000, 24000, 1500, 2200)
-            2 -> listOf(16000, 30000, 1800, 2500)
-            else -> listOf(22000, 38000, 2000, 2800)
+            0 -> listOf(3000, 8000, 1000, 1500)
+            1 -> listOf(5000, 12000, 1200, 1800)
+            2 -> listOf(8000, 18000, 1500, 2200)
+            else -> listOf(12000, 25000, 1800, 2500)
         }
         val targetBytes = when (bufferLevel) {
-            0 -> 24 * 1024 * 1024
-            1 -> 32 * 1024 * 1024
-            2 -> 44 * 1024 * 1024
-            else -> 56 * 1024 * 1024
+            0 -> 16 * 1024 * 1024
+            1 -> 24 * 1024 * 1024
+            2 -> 32 * 1024 * 1024
+            else -> 44 * 1024 * 1024
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
             .setTargetBufferBytes(targetBytes)
             .setPrioritizeTimeOverSizeThresholds(true)
-            .setBackBuffer(10000, false)
+            .setBackBuffer(0, false)
             .build()
 
         val extensionMode = when (decoderMode) {
@@ -4946,7 +4961,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
         }
-        val dsFactory = OkHttpDataSource.Factory(streamOkHttpClient)
+        val dsFactory = OkHttpDataSource.Factory(streamCallFactory)
             .setUserAgent(activeAgent)
             .setDefaultRequestProperties(CoreEngines.headersForStreamUrl(initUrl))
         httpDataSourceFactory = dsFactory
@@ -5046,6 +5061,30 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
                 if (playbackState == Player.STATE_ENDED) reconnectCurrentStreamSilently()
+            }
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                if (reason == Player.DISCONTINUITY_REASON_REMOVE) return
+                val sinceSwitchMs = System.currentTimeMillis() - lastChannelSwitchMs
+                if (sinceSwitchMs < 3500L) return
+                val deltaMs = newPosition.positionMs - oldPosition.positionMs
+                if (abs(deltaMs) >= 1200L) {
+                    val reasonName = when (reason) {
+                        Player.DISCONTINUITY_REASON_AUTO_TRANSITION -> "AUTO_TRANSITION"
+                        Player.DISCONTINUITY_REASON_SEEK -> "SEEK"
+                        Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT -> "SEEK_ADJUSTMENT"
+                        Player.DISCONTINUITY_REASON_SKIP -> "SKIP"
+                        Player.DISCONTINUITY_REASON_INTERNAL -> "INTERNAL"
+                        else -> "REASON($reason)"
+                    }
+                    CoreEngines.appendDiagLog(
+                        "POS_JUMP",
+                        "ch='${currentChannel?.name}' reason=$reasonName oldPos=${oldPosition.positionMs} newPos=${newPosition.positionMs} deltaMs=$deltaMs bufMs=${newPlayer.totalBufferedDuration}"
+                    )
+                }
             }
             override fun onPlayerError(error: PlaybackException) {
                 val causeMsg = error.cause?.let { "${it.javaClass.simpleName}: ${it.message}" } ?: "none"
@@ -5970,17 +6009,26 @@ class MainActivity : AppCompatActivity() {
     internal fun charAlphabetGroup(name: String): Int {
         val firstChar = name.trim().firstOrNull { it.isLetterOrDigit() } ?: return 3
         return when {
-            firstChar in 'а'..'я' || firstChar in 'А'..'Я' || firstChar == 'ё' || firstChar == 'Ё' -> 0
-            firstChar in 'a'..'z' || firstChar in 'A'..'Z' -> 1
-            else -> 2
+            firstChar in 'а'..'я' || firstChar in 'А'..'Я' ||
+                firstChar == 'ё' || firstChar == 'Ё' ||
+                firstChar in 'А'..'я' || firstChar in listOf('і', 'І', 'ї', 'Ї', 'є', 'Є', 'ў', 'Ў') -> 0
+            firstChar in 'a'..'z' || firstChar in 'A'..'Z' || firstChar.isLetter() -> 1
+            firstChar.isDigit() -> 2
+            else -> 3
         }
     }
 
-    private val safeChannelComparator: Comparator<Channel> = compareBy<Channel>(
-        { charAlphabetGroup(it.name) },
-        { it.name.trim().lowercase(Locale.ROOT) },
-        { it.url }
-    )
+    private val safeChannelComparator: Comparator<Channel> = Comparator { a, b ->
+        val gCmp = charAlphabetGroup(a.name).compareTo(charAlphabetGroup(b.name))
+        if (gCmp != 0) return@Comparator gCmp
+        val keyA = a.name.trimStart { !it.isLetterOrDigit() }.ifEmpty { a.name.trim() }
+        val keyB = b.name.trimStart { !it.isLetterOrDigit() }.ifEmpty { b.name.trim() }
+        val colCmp = synchronized(ruCollator) { ruCollator.compare(keyA, keyB) }
+        if (colCmp != 0) return@Comparator colCmp
+        val lowCmp = keyA.lowercase(Locale.ROOT).compareTo(keyB.lowercase(Locale.ROOT))
+        if (lowCmp != 0) return@Comparator lowCmp
+        a.url.compareTo(b.url)
+    }
 
     internal fun selectCategory(index: Int) {
         try {
@@ -5995,17 +6043,10 @@ class MainActivity : AppCompatActivity() {
                 "Все каналы" -> activeAll
                 else -> activeAll.filter { effectiveCategory(it) == catName }
             }
-            val isCustomUserPlaylist = dynamicCategories.isNotEmpty()
-            val topPart = if (isCustomUserPlaylist) {
-                rawFiltered.filter { topUrls.contains(it.url) }
-            } else {
-                rawFiltered.filter { topUrls.contains(it.url) }.sortedWith(safeChannelComparator)
-            }
-            val regularPart = if (isCustomUserPlaylist) {
-                rawFiltered.filter { !topUrls.contains(it.url) }
-            } else {
-                rawFiltered.filter { !topUrls.contains(it.url) }.sortedWith(safeChannelComparator)
-            }
+            // Единая сортировка для всех плейлистов (встроенного и пользовательских):
+            // ТОП сверху, далее по алфавиту: русские (А–Я) -> иностранные (A–Z) -> цифры (0–9)
+            val topPart = rawFiltered.filter { topUrls.contains(it.url) }.sortedWith(safeChannelComparator)
+            val regularPart = rawFiltered.filter { !topUrls.contains(it.url) }.sortedWith(safeChannelComparator)
 
             displayedChannels.clear()
             displayedChannels.addAll(topPart)
@@ -6249,7 +6290,7 @@ class MainActivity : AppCompatActivity() {
 
     internal fun loadSavedState() {
         val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
-        bufferLevel = prefs.getInt("buffer_level_v34", 2)
+        bufferLevel = prefs.getInt("buffer_level_v34", 1)
         decoderMode = prefs.getInt("decoder_mode", 1)
         themeIndex = prefs.getInt("theme_index", 0).coerceIn(0, themes.lastIndex)
         controlMode = prefs.getInt("control_mode_v13", 0)
@@ -6489,6 +6530,7 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
         try {
             streamOkHttpClient.connectionPool.evictAll()
+            tokenStreamOkHttpClient.connectionPool.evictAll()
         } catch (_: Exception) {}
     }
 
