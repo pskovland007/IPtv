@@ -139,6 +139,8 @@ class MainActivity : AppCompatActivity() {
     private var cachedShareTargets: List<ResolveInfo> = emptyList()
     private var cachedShareFileUri: Uri? = null
     private var lastDiagExportTriggerMs: Long = 0L
+    @Volatile private var availableUpdateInfo: GithubApkReleaseInfo? = null
+    private var hasTriggeredStartupUpdateCheck: Boolean = false
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -178,12 +180,14 @@ class MainActivity : AppCompatActivity() {
             .build()
     }
     private val streamCallFactory: Call.Factory by lazy {
-        Call.Factory { request ->
-            val u = request.url.toString()
-            if (CoreEngines.isSingleSessionTokenUrl(u)) {
-                tokenStreamOkHttpClient.newCall(request)
-            } else {
-                streamOkHttpClient.newCall(request)
+        object : Call.Factory {
+            override fun newCall(request: Request): Call {
+                val u = request.url.toString()
+                return if (CoreEngines.isSingleSessionTokenUrl(u)) {
+                    tokenStreamOkHttpClient.newCall(request)
+                } else {
+                    streamOkHttpClient.newCall(request)
+                }
             }
         }
     }
@@ -808,7 +812,11 @@ class MainActivity : AppCompatActivity() {
         uiHandler.removeCallbacks(autoHideMenuRunnable)
         if (menuHistory.isNotEmpty()) {
             val cur = menuHistory.last()
-            val delay = if ((cur == "ANALYZER_GROUP_VIEW" || cur == "ANALYZER_GROUPS") && isAnalyzerRunning) 5000L else (menuHideDelaySec * 1000L)
+            val delay = when {
+                (cur == "ANALYZER_GROUP_VIEW" || cur == "ANALYZER_GROUPS") && isAnalyzerRunning -> 5000L
+                cur == "UPDATE_PROMPT" -> 18000L
+                else -> menuHideDelaySec * 1000L
+            }
             uiHandler.postDelayed(autoHideMenuRunnable, delay)
         }
     }
@@ -1418,7 +1426,10 @@ class MainActivity : AppCompatActivity() {
             sleepRow,
             "[>]   Телепрограмма EPG   •   Обновить расписание сейчас",
             "[>]   Диагностический файл (${formatDiagFileSize()})",
-            "[>]   Обновление TiViLook   •   Проверить и установить с GitHub"
+            availableUpdateInfo?.let { upd ->
+                val lbl = upd.tagName.ifBlank { upd.releaseName }.ifBlank { "новая сборка" }
+                "[+]   Обновление TiViLook   •   Доступна $lbl"
+            } ?: "[>]   Обновление TiViLook   •   Проверить и установить с GitHub"
         )
         updateSubModalListItems(items, smoothToggle = inPlace, preservePositionIndex = keepIndex)
 
@@ -2094,6 +2105,272 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun releaseUniqueKey(info: GithubApkReleaseInfo): String {
+        val tagPart = info.tagName.trim()
+        return if (tagPart.isNotEmpty() && !tagPart.equals("latest", ignoreCase = true)) {
+            tagPart
+        } else {
+            "${tagPart.ifBlank { info.apkFileName }}_${info.updatedAtMs}"
+        }
+    }
+
+    private fun fetchLatestGithubApkRelease(): GithubApkReleaseInfo? {
+        var found: GithubApkReleaseInfo? = null
+        // 1. Проверяем последний стабильный релиз
+        try {
+            val latestConn = (URL("https://api.github.com/repos/pskovland007/IPtv/releases/latest").openConnection() as HttpURLConnection).apply {
+                setRequestProperty("Accept", "application/vnd.github+json")
+                setRequestProperty("User-Agent", "TiViLook-Updater")
+                connectTimeout = 8000; readTimeout = 8000
+            }
+            if (latestConn.responseCode == 200) {
+                val json = JSONObject(latestConn.inputStream.bufferedReader().readText())
+                found = findLatestApkFromReleaseJson(json)
+            }
+            latestConn.disconnect()
+        } catch (_: Exception) {}
+
+        // 2. Если в /latest нет APK (например, pre-release) — ищем в последних 10 релизах
+        if (found == null) {
+            try {
+                val listConn = (URL("https://api.github.com/repos/pskovland007/IPtv/releases?per_page=10").openConnection() as HttpURLConnection).apply {
+                    setRequestProperty("Accept", "application/vnd.github+json")
+                    setRequestProperty("User-Agent", "TiViLook-Updater")
+                    connectTimeout = 8000; readTimeout = 8000
+                }
+                if (listConn.responseCode == 200) {
+                    val arr = JSONArray(listConn.inputStream.bufferedReader().readText())
+                    for (i in 0 until arr.length()) {
+                        val rel = arr.optJSONObject(i) ?: continue
+                        val hit = findLatestApkFromReleaseJson(rel)
+                        if (hit != null) {
+                            found = hit
+                            break
+                        }
+                    }
+                }
+                listConn.disconnect()
+            } catch (_: Exception) {}
+        }
+        return found
+    }
+
+    private fun startDownloadGithubApkRelease(target: GithubApkReleaseInfo) {
+        val apkUrl = target.apkUrl
+        val apkFileName = target.apkFileName
+        CoreEngines.appendDiagLog("UPDATE", "Старт автозагрузки APK: $apkFileName ($apkUrl)")
+
+        // Пробуем системный DownloadManager в публичный Download (если есть права записи)
+        var queuedId = -1L
+        val canWritePublic = hasPublicDownloadWritePermission()
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+        if (dm != null && canWritePublic) {
+            try {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    @Suppress("DEPRECATION")
+                    val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    val stale = if (pubDir != null) File(pubDir, apkFileName) else null
+                    if (stale != null && stale.exists()) stale.delete()
+                }
+                val req = DownloadManager.Request(Uri.parse(apkUrl)).apply {
+                    setTitle(apkFileName)
+                    setDescription("Загрузка обновления TiViLook")
+                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    setAllowedOverMetered(true)
+                    setAllowedOverRoaming(true)
+                    addRequestHeader("User-Agent", "TiViLook-Updater")
+                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, apkFileName)
+                }
+                queuedId = dm.enqueue(req)
+            } catch (e: Exception) {
+                CoreEngines.appendDiagLog("UPDATE_ERR", "DownloadManager error: ${e.message}")
+                queuedId = -1L
+            }
+        } else if (!canWritePublic) {
+            CoreEngines.appendDiagLog("UPDATE_ERR", "Нет разрешения WRITE_EXTERNAL_STORAGE для записи в публичный Download")
+        }
+
+        if (queuedId > 0L && dm != null) {
+            runOnUiThread {
+                Toast.makeText(this, "Скачивание $apkFileName в папку Download...", Toast.LENGTH_LONG).show()
+            }
+            val deadline = System.currentTimeMillis() + 120_000L
+            while (System.currentTimeMillis() < deadline) {
+                try { Thread.sleep(1500L) } catch (_: Exception) { break }
+                val q = DownloadManager.Query().setFilterById(queuedId)
+                var status = -1
+                dm.query(q)?.use { c ->
+                    if (c.moveToFirst()) {
+                        val col = c.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                        if (col >= 0) status = c.getInt(col)
+                    }
+                }
+                if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                    CoreEngines.appendDiagLog("UPDATE", "Успешно скачано в Download: $apkFileName")
+                    runOnUiThread {
+                        Toast.makeText(this, "Обновление скачано в Download: $apkFileName", Toast.LENGTH_LONG).show()
+                    }
+                    break
+                } else if (status == DownloadManager.STATUS_FAILED) {
+                    val (directOk, savedPath) = downloadApkFallbackDirect(apkUrl, apkFileName)
+                    runOnUiThread {
+                        val msg = if (directOk) "Обновление скачано: $savedPath" else "Ошибка скачивания обновления"
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                    }
+                    break
+                }
+            }
+        } else {
+            runOnUiThread {
+                Toast.makeText(this, "Скачивание $apkFileName...", Toast.LENGTH_LONG).show()
+            }
+            val (directOk, savedPath) = downloadApkFallbackDirect(apkUrl, apkFileName)
+            runOnUiThread {
+                val msg = if (directOk) "Обновление скачано: $savedPath" else "Не удалось скачать APK обновления"
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun downloadPreparedAppUpdate(target: GithubApkReleaseInfo) {
+        ensurePublicStoragePermission {
+            thread {
+                try {
+                    startDownloadGithubApkRelease(target)
+                } catch (e: Exception) {
+                    CoreEngines.appendDiagLog("UPDATE_ERR", "Prepared download fail: ${e.message}")
+                    runOnUiThread { Toast.makeText(this, "Ошибка скачивания обновления", Toast.LENGTH_SHORT).show() }
+                }
+            }
+        }
+    }
+
+    private fun scheduleSilentStartupUpdateCheck() {
+        if (hasTriggeredStartupUpdateCheck) return
+        hasTriggeredStartupUpdateCheck = true
+        uiHandler.postDelayed({
+            if (isFinishing || isDestroyed) return@postDelayed
+            val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
+            val nowMs = System.currentTimeMillis()
+            val lastCheckMs = prefs.getLong("last_silent_update_check_ms", 0L)
+            if (lastCheckMs > 0L && (nowMs - lastCheckMs) < 3_600_000L) return@postDelayed
+
+            thread(priority = Thread.MIN_PRIORITY) {
+                try {
+                    val target = fetchLatestGithubApkRelease() ?: return@thread
+                    prefs.edit().putLong("last_silent_update_check_ms", System.currentTimeMillis()).apply()
+
+                    val (alreadyLatest, _) = isGithubReleaseAlreadyInstalled(target)
+                    if (alreadyLatest) {
+                        availableUpdateInfo = null
+                        return@thread
+                    }
+
+                    availableUpdateInfo = target
+                    val relKey = releaseUniqueKey(target)
+                    val skippedKey = prefs.getString("skipped_update_tag_v32", "") ?: ""
+                    CoreEngines.appendDiagLog("UPDATE", "Тихая проверка: найдена новая сборка ${target.tagName.ifBlank { target.apkFileName }} (skipped=${relKey == skippedKey})")
+                    if (relKey == skippedKey) return@thread
+
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        if (splashOverlay.visibility == View.VISIBLE || firstRunModeOverlay.visibility == View.VISIBLE) return@runOnUiThread
+                        if (menuHistory.isNotEmpty()) return@runOnUiThread
+                        navigateToMenu("UPDATE_PROMPT")
+                    }
+                } catch (_: Exception) {
+                    // Тихая проверка никогда не показывает ошибок пользователю
+                }
+            }
+        }, 5500L)
+    }
+
+    private fun openUpdateAvailablePromptModal() {
+        val info = availableUpdateInfo
+        if (info == null) {
+            navigateBackInMenu()
+            return
+        }
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        setSubModalHeaderTitle("Доступно обновление")
+        subModalList.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalThemesGrid.visibility = View.GONE
+        subModalInputContainer.removeAllViews()
+        subModalInputContainer.visibility = View.VISIBLE
+
+        val verTitle = info.tagName.ifBlank { info.releaseName }.ifBlank { info.apkFileName }
+        val sizePart = if (info.sizeBytes > 0L) "  •  ${formatByteSizeRu(info.sizeBytes)}" else ""
+        val localVer = try {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, 0).versionName?.trim().orEmpty()
+        } catch (_: Exception) { "" }
+        val detailsLine = buildString {
+            append("Вышла новая сборка TiViLook: $verTitle$sizePart")
+            if (localVer.isNotEmpty() && !localVer.equals(verTitle, ignoreCase = true)) {
+                append("\nУстановлена: $localVer")
+            }
+        }
+
+        val infoTv = TextView(this).apply {
+            text = detailsLine
+            setTextColor(t.textPrimaryColor)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f * scale)
+            typeface = t.normalFont
+            gravity = Gravity.CENTER
+            setLineSpacing(6f, 1.0f)
+            setPadding(16, 6, 16, 22)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        subModalInputContainer.addView(infoTv)
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, 4, 0, 8)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val btnDownload = makeModernButton("Скачать") {
+            closeAllMenus()
+            downloadPreparedAppUpdate(info)
+        }.apply { id = 8801 }
+
+        val btnLater = makeModernButton("Позже") {
+            navigateBackInMenu()
+        }.apply { id = 8802 }
+
+        val btnSkip = makeModernButton("Пропустить") {
+            getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
+                .edit()
+                .putString("skipped_update_tag_v32", releaseUniqueKey(info))
+                .apply()
+            navigateBackInMenu()
+        }.apply { id = 8803 }
+
+        btnDownload.nextFocusLeftId = btnSkip.id
+        btnDownload.nextFocusRightId = btnLater.id
+        btnLater.nextFocusLeftId = btnDownload.id
+        btnLater.nextFocusRightId = btnSkip.id
+        btnSkip.nextFocusLeftId = btnLater.id
+        btnSkip.nextFocusRightId = btnDownload.id
+
+        btnRow.addView(btnDownload)
+        btnRow.addView(btnLater)
+        btnRow.addView(btnSkip)
+        subModalInputContainer.addView(btnRow)
+
+        animateMenuAppear(subModalOverlay)
+        btnDownload.requestFocus()
+    }
+
     private fun checkAndInstallAppUpdateFromGithub() {
         ensurePublicStoragePermission {
             runCheckAndDownloadAppUpdateFromGithub()
@@ -2104,43 +2381,7 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Проверка новой сборки TiViLook...", Toast.LENGTH_SHORT).show()
         thread {
             try {
-                var found: GithubApkReleaseInfo? = null
-                // 1. Проверяем последний стабильный релиз
-                try {
-                    val latestConn = (URL("https://api.github.com/repos/pskovland007/IPtv/releases/latest").openConnection() as HttpURLConnection).apply {
-                        setRequestProperty("Accept", "application/vnd.github+json")
-                        setRequestProperty("User-Agent", "TiViLook-Updater")
-                        connectTimeout = 8000; readTimeout = 8000
-                    }
-                    if (latestConn.responseCode == 200) {
-                        val json = JSONObject(latestConn.inputStream.bufferedReader().readText())
-                        found = findLatestApkFromReleaseJson(json)
-                    }
-                    latestConn.disconnect()
-                } catch (_: Exception) {}
-
-                // 2. Если в /latest нет APK (например, pre-release) — ищем в последних 10 релизах
-                if (found == null) {
-                    val listConn = (URL("https://api.github.com/repos/pskovland007/IPtv/releases?per_page=10").openConnection() as HttpURLConnection).apply {
-                        setRequestProperty("Accept", "application/vnd.github+json")
-                        setRequestProperty("User-Agent", "TiViLook-Updater")
-                        connectTimeout = 8000; readTimeout = 8000
-                    }
-                    if (listConn.responseCode == 200) {
-                        val arr = JSONArray(listConn.inputStream.bufferedReader().readText())
-                        for (i in 0 until arr.length()) {
-                            val rel = arr.optJSONObject(i) ?: continue
-                            val hit = findLatestApkFromReleaseJson(rel)
-                            if (hit != null) {
-                                found = hit
-                                break
-                            }
-                        }
-                    }
-                    listConn.disconnect()
-                }
-
-                val target = found
+                val target = fetchLatestGithubApkRelease()
                 if (target == null) {
                     CoreEngines.appendDiagLog("UPDATE", "APK не найден в релизах GitHub")
                     runOnUiThread {
@@ -2149,9 +2390,14 @@ class MainActivity : AppCompatActivity() {
                     return@thread
                 }
 
-                // 3. Если последняя версия уже установлена — не скачиваем файл повторно
+                getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putLong("last_silent_update_check_ms", System.currentTimeMillis())
+                    .apply()
+
                 val (alreadyLatest, localLabel) = isGithubReleaseAlreadyInstalled(target)
                 if (alreadyLatest) {
+                    availableUpdateInfo = null
                     CoreEngines.appendDiagLog("UPDATE", "Уже установлена последняя версия ($localLabel) — загрузка отменена")
                     runOnUiThread {
                         val labelPart = if (localLabel.isNotBlank()) " ($localLabel)" else ""
@@ -2160,80 +2406,8 @@ class MainActivity : AppCompatActivity() {
                     return@thread
                 }
 
-                val apkUrl = target.apkUrl
-                val apkFileName = target.apkFileName
-                CoreEngines.appendDiagLog("UPDATE", "Старт автозагрузки APK: $apkFileName ($apkUrl)")
-
-                // 4. Пробуем системный DownloadManager в публичный Download (если есть права записи)
-                var queuedId = -1L
-                val canWritePublic = hasPublicDownloadWritePermission()
-                val dm = getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
-                if (dm != null && canWritePublic) {
-                    try {
-                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                            @Suppress("DEPRECATION")
-                            val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                            val stale = if (pubDir != null) File(pubDir, apkFileName) else null
-                            if (stale != null && stale.exists()) stale.delete()
-                        }
-                        val req = DownloadManager.Request(Uri.parse(apkUrl)).apply {
-                            setTitle(apkFileName)
-                            setDescription("Загрузка обновления TiViLook")
-                            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                            setAllowedOverMetered(true)
-                            setAllowedOverRoaming(true)
-                            addRequestHeader("User-Agent", "TiViLook-Updater")
-                            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, apkFileName)
-                        }
-                        queuedId = dm.enqueue(req)
-                    } catch (e: Exception) {
-                        CoreEngines.appendDiagLog("UPDATE_ERR", "DownloadManager error: ${e.message}")
-                        queuedId = -1L
-                    }
-                } else if (!canWritePublic) {
-                    CoreEngines.appendDiagLog("UPDATE_ERR", "Нет разрешения WRITE_EXTERNAL_STORAGE для записи в публичный Download")
-                }
-
-                if (queuedId > 0L && dm != null) {
-                    runOnUiThread {
-                        Toast.makeText(this, "Скачивание $apkFileName в папку Download...", Toast.LENGTH_LONG).show()
-                    }
-                    val deadline = System.currentTimeMillis() + 120_000L
-                    while (System.currentTimeMillis() < deadline) {
-                        try { Thread.sleep(1500L) } catch (_: Exception) { break }
-                        val q = DownloadManager.Query().setFilterById(queuedId)
-                        var status = -1
-                        dm.query(q)?.use { c ->
-                            if (c.moveToFirst()) {
-                                val col = c.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                                if (col >= 0) status = c.getInt(col)
-                            }
-                        }
-                        if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                            CoreEngines.appendDiagLog("UPDATE", "Успешно скачано в Download: $apkFileName")
-                            runOnUiThread {
-                                Toast.makeText(this, "Обновление скачано в Download: $apkFileName", Toast.LENGTH_LONG).show()
-                            }
-                            break
-                        } else if (status == DownloadManager.STATUS_FAILED) {
-                            val (directOk, savedPath) = downloadApkFallbackDirect(apkUrl, apkFileName)
-                            runOnUiThread {
-                                val msg = if (directOk) "Обновление скачано: $savedPath" else "Ошибка скачивания обновления"
-                                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-                            }
-                            break
-                        }
-                    }
-                } else {
-                    runOnUiThread {
-                        Toast.makeText(this, "Скачивание $apkFileName...", Toast.LENGTH_LONG).show()
-                    }
-                    val (directOk, savedPath) = downloadApkFallbackDirect(apkUrl, apkFileName)
-                    runOnUiThread {
-                        val msg = if (directOk) "Обновление скачано: $savedPath" else "Не удалось скачать APK обновления"
-                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-                    }
-                }
+                availableUpdateInfo = target
+                startDownloadGithubApkRelease(target)
             } catch (e: Exception) {
                 CoreEngines.appendDiagLog("UPDATE_ERR", "Exception: ${e.message}")
                 runOnUiThread { Toast.makeText(this, "Ошибка проверки обновлений", Toast.LENGTH_SHORT).show() }
@@ -3765,6 +3939,7 @@ class MainActivity : AppCompatActivity() {
         applyCurrentThemeToAllPanels()
         loadActivePlaylist(autoPlayLast = true)
         loadEpgOncePerDayInBackground(forceRefresh = false)
+        scheduleSilentStartupUpdateCheck()
     }
 
     internal fun setSubModalHeaderTitle(baseTitle: String) {
@@ -4523,9 +4698,14 @@ class MainActivity : AppCompatActivity() {
         if (::subModalList.isInitialized) subModalList.onItemLongClickListener = null
 
         val dm = resources.displayMetrics
-        val isCompactInput = (menuId == "EPG" || menuId == "ADD_URL")
+        val isCompactInput = (menuId == "EPG" || menuId == "ADD_URL" || menuId == "UPDATE_PROMPT")
+        val modalWidthPx = if (menuId == "UPDATE_PROMPT") {
+            (dm.widthPixels * 0.62f).toInt().coerceIn(660, 1080)
+        } else {
+            (dm.widthPixels * 0.84f).toInt().coerceIn(860, 1640)
+        }
         subModalOverlay.layoutParams = FrameLayout.LayoutParams(
-            (dm.widthPixels * 0.84f).toInt().coerceIn(860, 1640),
+            modalWidthPx,
             if (isCompactInput) FrameLayout.LayoutParams.WRAP_CONTENT else FrameLayout.LayoutParams.MATCH_PARENT,
             Gravity.CENTER
         ).apply {
@@ -4592,6 +4772,7 @@ class MainActivity : AppCompatActivity() {
                 if (newVal.isNotEmpty()) { epgUrl = newVal; saveState(); loadEpgOncePerDayInBackground(forceRefresh = true) }
             }
             "ADD_URL" -> openAddUrlSubModal()
+            "UPDATE_PROMPT" -> openUpdateAvailablePromptModal()
         }
     }
 
