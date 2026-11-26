@@ -375,12 +375,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fullEpgTitle: TextView
     private lateinit var fullEpgListView: ListView
 
+    private lateinit var subModalHeaderRow: LinearLayout
+    private lateinit var subModalBadgeView: TextView
     private lateinit var subModalTitle: TextView
     private var subModalBaseTitleText: String = ""
     private lateinit var subModalTopButtons: LinearLayout
+    private lateinit var subModalCustomBody: LinearLayout
+    private lateinit var subModalBottomButtons: LinearLayout
     private lateinit var subModalList: ListView
     private lateinit var subModalInputContainer: LinearLayout
     private lateinit var subModalThemesGrid: LinearLayout
+    private var selectedPlaylistModalIdx: Int = 0
+    private var renamingPlaylistIdx: Int = -1
+    private var selectedMoreSettingsTab: Int = 0
+    private var selectedTopModalIdx: Int = 0
     private lateinit var subModalAdapter: ArrayAdapter<String>
     private val subModalItems = mutableListOf<String>()
     private lateinit var subModalStatsAdapter: ArrayAdapter<StatsModalRowData>
@@ -549,6 +557,12 @@ class MainActivity : AppCompatActivity() {
         if (subModalOverlay.visibility == View.VISIBLE) {
             subModalOverlay.setBackgroundDrawable(makeThemedPanelBg())
             subModalList.setBackgroundDrawable(makeThemedSubBg())
+            if (::subModalCustomBody.isInitialized && subModalCustomBody.visibility == View.VISIBLE) {
+                subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
+            }
+            if (::subModalThemesGrid.isInitialized && subModalThemesGrid.visibility == View.VISIBLE) {
+                subModalThemesGrid.setBackgroundDrawable(makeThemedSubBg())
+            }
         }
         if (fullEpgOverlay.visibility == View.VISIBLE) {
             fullEpgOverlay.setBackgroundDrawable(makeThemedPanelBg())
@@ -610,7 +624,7 @@ class MainActivity : AppCompatActivity() {
             val currentMenu = menuHistory.last()
             if ((currentMenu == "ANALYZER_GROUP_VIEW" || currentMenu == "ANALYZER_GROUPS") && isAnalyzerRunning) {
                 collapseAnalyzerToTopBar()
-            } else if (currentMenu !in listOf("EPG", "ADD_URL", "MANUAL_PATH")) {
+            } else if (currentMenu !in listOf("EPG", "ADD_URL", "RENAME_PLAYLIST", "MANUAL_PATH")) {
                 closeAllMenus()
             }
         }
@@ -921,6 +935,334 @@ class MainActivity : AppCompatActivity() {
         btn.setTextColor(if (isFocused) curT.textOnAccent else curT.textPrimaryColor)
     }
 
+    private fun isThemeDarkSurface(color: Int): Boolean {
+        val lum = (Color.red(color) * 299 + Color.green(color) * 587 + Color.blue(color) * 114) / 1000
+        return lum < 145
+    }
+
+    private fun computeCenteredModalWidth(fraction: Float, minPx: Int, maxPx: Int): Int {
+        val w = resources.displayMetrics.widthPixels
+        val hardMax = (w * 0.92f).toInt().coerceAtLeast(320)
+        return (w * fraction).toInt().coerceIn(minPx.coerceAtMost(hardMax), maxPx.coerceAtMost(hardMax))
+    }
+
+    private fun computeCenteredModalHeight(fraction: Float, minPx: Int, maxPx: Int): Int {
+        val h = resources.displayMetrics.heightPixels
+        val hardMax = (h * 0.84f).toInt().coerceAtLeast(300)
+        return (h * fraction).toInt().coerceIn(minPx.coerceAtMost(hardMax), maxPx.coerceAtMost(hardMax))
+    }
+
+    private fun styleModalMonogramBadge(badge: TextView) {
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val boxPx = (36 * scale).toInt().coerceIn(30, 48)
+        badge.setTextColor(t.textOnAccent)
+        badge.typeface = t.boldFont
+        badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f * scale)
+        badge.gravity = Gravity.CENTER
+        badge.setBackgroundDrawable(GradientDrawable().apply {
+            setColor(t.accentColor)
+            cornerRadius = 10f * scale
+        })
+        badge.layoutParams = LinearLayout.LayoutParams(boxPx, boxPx).apply {
+            rightMargin = (12 * scale).toInt().coerceAtLeast(8)
+        }
+    }
+
+    private fun resolveMonogramForTitle(title: String): String {
+        val low = title.lowercase(Locale.getDefault())
+        return when {
+            low.contains("плейлист") || low.contains("переименов") -> "ПЛ"
+            low.contains("буфер") -> "БФ"
+            low.contains("декодер") -> "ДК"
+            low.contains("телегид") || low.contains("xmltv") || low.contains("epg") -> "ТГ"
+            low.contains("редактор") -> "РД"
+            low.contains("тест") -> "ТС"
+            low.contains("тем") -> "ТМ"
+            low.contains("топ") -> "ТП"
+            low.contains("звук") || low.contains("drc") -> "ЗВ"
+            low.contains("управлен") -> "УП"
+            low.contains("общие") || low.contains("обновлен") -> "ОБ"
+            low.contains("яркость") -> "ЯР"
+            low.contains("сон") || low.contains("сна") || low.contains("таймер") -> "СН"
+            low.contains("лог") || low.contains("поделить") -> "ЛО"
+            low.contains("групп") -> "ГР"
+            low.contains("канал") -> "КН"
+            else -> title.trim().take(2).uppercase(Locale.getDefault()).ifBlank { "TV" }
+        }
+    }
+
+    private fun makeUnifiedActionButton(
+        label: String,
+        isDanger: Boolean = false,
+        isEnabledState: Boolean = true,
+        fillWidth: Boolean = false,
+        onClick: () -> Unit
+    ): TextView {
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val dark = isThemeDarkSurface(t.panelBgColor)
+        fun applyBtnStyle(tv: TextView, focused: Boolean) {
+            val curT = currentTheme()
+            val bg = when {
+                !isEnabledState -> if (dark) Color.argb(42, 255, 255, 255) else Color.argb(24, 0, 0, 0)
+                focused && isDanger -> Color.parseColor("#DC2626")
+                focused -> curT.accentColor
+                isDanger -> if (dark) Color.argb(85, 185, 28, 28) else Color.argb(46, 220, 38, 38)
+                else -> if (dark) Color.argb(82, 255, 255, 255) else Color.argb(36, 0, 0, 0)
+            }
+            val strokeCol = when {
+                focused -> Color.WHITE
+                isDanger && isEnabledState -> Color.argb(130, 248, 113, 113)
+                else -> Color.argb(if (dark) 56 else 48, Color.red(curT.strokeColor), Color.green(curT.strokeColor), Color.blue(curT.strokeColor))
+            }
+            val txtCol = when {
+                !isEnabledState -> Color.argb(105, Color.red(curT.textPrimaryColor), Color.green(curT.textPrimaryColor), Color.blue(curT.textPrimaryColor))
+                focused && isDanger -> Color.WHITE
+                focused -> curT.textOnAccent
+                isDanger -> if (dark) Color.parseColor("#FCA5A5") else Color.parseColor("#B91C1C")
+                else -> curT.textPrimaryColor
+            }
+            tv.setBackgroundDrawable(GradientDrawable().apply {
+                setColor(bg)
+                cornerRadius = 14f * scale
+                setStroke(if (focused) 2 else 1, strokeCol)
+            })
+            tv.setTextColor(txtCol)
+        }
+        return TextView(this).apply {
+            text = label
+            isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.8f * scale)
+            typeface = t.boldFont
+            isFocusable = isEnabledState
+            isFocusableInTouchMode = false
+            isClickable = isEnabledState
+            isEnabled = isEnabledState
+            val padH = (16 * scale).toInt().coerceAtLeast(12)
+            val padV = (10 * scale).toInt().coerceAtLeast(8)
+            setPadding(padH, padV, padH, padV)
+            layoutParams = if (fillWidth) {
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, (4 * scale).toInt(), 0, (4 * scale).toInt())
+                }
+            } else {
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins((5 * scale).toInt(), (2 * scale).toInt(), (5 * scale).toInt(), (2 * scale).toInt())
+                }
+            }
+            applyBtnStyle(this, false)
+            setOnFocusChangeListener { v, hasFocus ->
+                applyBtnStyle(this, hasFocus)
+                v.animate().scaleX(if (hasFocus) 1.03f else 1f).scaleY(if (hasFocus) 1.03f else 1f).setDuration(110L).start()
+                if (hasFocus) resetMenuInactivityTimer()
+            }
+            setOnClickListener {
+                if (!isEnabledState) return@setOnClickListener
+                resetMenuInactivityTimer()
+                onClick()
+            }
+        }
+    }
+
+    private fun makeStatusPillView(textLabel: String, pillKind: Int): TextView {
+        // pillKind: 0 = neutral value, 1 = ON green, 2 = OFF muted, 3 = accent highlight
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val dark = isThemeDarkSurface(t.panelBgColor)
+        val bgCol = when (pillKind) {
+            1 -> Color.parseColor("#22C55E")
+            2 -> if (dark) Color.argb(72, 148, 163, 184) else Color.argb(65, 100, 116, 139)
+            3 -> t.accentColor
+            else -> if (dark) Color.argb(76, 255, 255, 255) else Color.argb(38, 0, 0, 0)
+        }
+        val txtCol = when (pillKind) {
+            1 -> Color.parseColor("#052E16")
+            2 -> if (dark) Color.parseColor("#E2E8F0") else Color.parseColor("#334155")
+            3 -> t.textOnAccent
+            else -> t.textPrimaryColor
+        }
+        return TextView(this).apply {
+            text = textLabel
+            isSingleLine = true; maxLines = 1
+            gravity = Gravity.CENTER
+            typeface = t.boldFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.2f * scale)
+            setTextColor(txtCol)
+            val ph = (12 * scale).toInt().coerceAtLeast(9)
+            val pv = (4 * scale).toInt().coerceAtLeast(3)
+            setPadding(ph, pv, ph, pv)
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(bgCol)
+                cornerRadius = 999f
+            })
+        }
+    }
+
+    private fun makeUnifiedPresetCard(
+        titleText: String,
+        subtitleText: String,
+        isSelected: Boolean,
+        onFocused: (() -> Unit)? = null,
+        onClick: () -> Unit
+    ): LinearLayout {
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val dark = isThemeDarkSurface(t.panelBgColor)
+        val titleTv = TextView(this).apply {
+            text = titleText
+            typeface = t.boldFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f * scale)
+            gravity = Gravity.CENTER
+            isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+        }
+        val subTv = TextView(this).apply {
+            text = subtitleText
+            typeface = t.normalFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.6f * scale)
+            gravity = Gravity.CENTER
+            isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            setPadding(0, (4 * scale).toInt(), 0, 0)
+        }
+        val checkBadge = TextView(this).apply {
+            text = if (isSelected) "✓" else ""
+            typeface = t.boldFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f * scale)
+            gravity = Gravity.CENTER
+            visibility = if (isSelected) View.VISIBLE else View.INVISIBLE
+            val sz = (20 * scale).toInt().coerceIn(18, 26)
+            layoutParams = LinearLayout.LayoutParams(sz, sz).apply { bottomMargin = (4 * scale).toInt() }
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(Color.parseColor("#22C55E"))
+                cornerRadius = 999f
+            })
+            setTextColor(Color.WHITE)
+        }
+
+        fun applyStyle(box: LinearLayout, focused: Boolean) {
+            val curT = currentTheme()
+            val bgCol = when {
+                focused -> curT.accentColor
+                isSelected -> Color.argb(66, Color.red(curT.accentColor), Color.green(curT.accentColor), Color.blue(curT.accentColor))
+                else -> if (dark) Color.argb(68, 0, 0, 0) else Color.argb(26, 0, 0, 0)
+            }
+            val strokeCol = when {
+                focused -> Color.WHITE
+                isSelected -> curT.accentColor
+                else -> Color.argb(if (dark) 44 else 48, 255, 255, 255)
+            }
+            box.setBackgroundDrawable(GradientDrawable().apply {
+                setColor(bgCol)
+                cornerRadius = 16f * scale
+                setStroke(if (focused) 3 else if (isSelected) 2 else 1, strokeCol)
+            })
+            val mainTxt = if (focused) curT.textOnAccent else curT.textPrimaryColor
+            titleTv.setTextColor(mainTxt)
+            subTv.setTextColor(mainTxt)
+            subTv.alpha = if (focused) 0.92f else 0.74f
+            box.animate().scaleX(if (focused) 1.04f else 1f).scaleY(if (focused) 1.04f else 1f).setDuration(120L).start()
+        }
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+            val pv = (12 * scale).toInt().coerceAtLeast(10)
+            val ph = (8 * scale).toInt().coerceAtLeast(6)
+            setPadding(ph, pv, ph, pv)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                val m = (5 * scale).toInt().coerceAtLeast(4)
+                setMargins(m, m, m, m)
+            }
+            addView(checkBadge)
+            addView(titleTv)
+            if (subtitleText.isNotEmpty()) addView(subTv)
+            applyStyle(this, false)
+            setOnFocusChangeListener { _, hasFocus ->
+                applyStyle(this, hasFocus)
+                if (hasFocus) {
+                    resetMenuInactivityTimer()
+                    onFocused?.invoke()
+                }
+            }
+            setOnClickListener {
+                resetMenuInactivityTimer()
+                onClick()
+            }
+        }
+    }
+
+    private fun makeUnifiedSettingRow(
+        titleText: String,
+        pillText: String,
+        pillKind: Int,
+        onFocused: (() -> Unit)? = null,
+        onClick: () -> Unit
+    ): LinearLayout {
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val dark = isThemeDarkSurface(t.panelBgColor)
+        val titleTv = TextView(this).apply {
+            text = titleText
+            typeface = t.normalFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f * scale)
+            setTextColor(t.textPrimaryColor)
+            isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                rightMargin = (12 * scale).toInt()
+            }
+        }
+        val pillTv = makeStatusPillView(pillText, pillKind)
+
+        fun applyStyle(row: LinearLayout, focused: Boolean) {
+            val curT = currentTheme()
+            if (focused) {
+                row.setBackgroundDrawable(GradientDrawable().apply {
+                    setColor(curT.accentColor)
+                    cornerRadius = 14f * scale
+                    setStroke(2, Color.WHITE)
+                })
+                titleTv.setTextColor(curT.textOnAccent)
+                titleTv.typeface = curT.boldFont
+            } else {
+                row.setBackgroundDrawable(GradientDrawable().apply {
+                    setColor(if (dark) Color.argb(62, 0, 0, 0) else Color.argb(24, 0, 0, 0))
+                    cornerRadius = 14f * scale
+                    setStroke(1, if (dark) Color.argb(34, 255, 255, 255) else Color.argb(36, 0, 0, 0))
+                })
+                titleTv.setTextColor(curT.textPrimaryColor)
+                titleTv.typeface = curT.normalFont
+            }
+        }
+
+        val rowH = (48 * scale).toInt().coerceIn(42, 64)
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+            val ph = (16 * scale).toInt().coerceAtLeast(12)
+            setPadding(ph, 0, ph, 0)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, rowH).apply {
+                setMargins(2, (4 * scale).toInt(), 2, (4 * scale).toInt())
+            }
+            addView(titleTv)
+            addView(pillTv)
+            applyStyle(this, false)
+            setOnFocusChangeListener { _, hasFocus ->
+                applyStyle(this, hasFocus)
+                if (hasFocus) {
+                    resetMenuInactivityTimer()
+                    onFocused?.invoke()
+                }
+            }
+            setOnClickListener {
+                resetMenuInactivityTimer()
+                onClick()
+            }
+        }
+    }
+
     private fun applyCurrentThemeToAllPanels() {
         val t = currentTheme()
         val scale = uiScaleFactor()
@@ -960,8 +1302,9 @@ class MainActivity : AppCompatActivity() {
         osdEpgNextAndDesc.setTextColor(t.accentColor); osdEpgNextAndDesc.typeface = t.boldFont
         osdEpgNextAndDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17.5f * scale)
 
-        subModalTitle.setTextColor(t.accentColor); subModalTitle.typeface = t.boldFont
-        subModalTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18.5f * scale)
+        subModalTitle.setTextColor(t.textPrimaryColor); subModalTitle.typeface = t.boldFont
+        subModalTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f * scale)
+        if (::subModalBadgeView.isInitialized) styleModalMonogramBadge(subModalBadgeView)
         fullEpgTitle.setTextColor(t.accentColor); fullEpgTitle.typeface = t.boldFont
         fullEpgTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f * scale)
         clockTextView.typeface = t.boldFont
@@ -1183,7 +1526,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(12, 8, 12, 8)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.56f)
         }
-        val maxPrevH = (dm.heightPixels * 0.48f).toInt().coerceIn(210, 440)
+        val maxPrevH = (dm.heightPixels * 0.36f).toInt().coerceIn(170, 320)
         val livePreview = ThemeLivePreviewView(this, themes[previewedIdx]).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, maxPrevH)
             setOnClickListener {
@@ -1305,160 +1648,659 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openTopManagerSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        setSubModalHeaderTitle("ТОП каналы")
-        subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
-        if (topUrls.isNotEmpty()) {
-            subModalTopButtons.addView(makeModernButton("Очистить ТОП") {
-                topUrls.clear(); saveState(); selectCategory(currentCategoryIndex); openTopManagerSubModal(inPlace = true, keepIndex = 0)
-            })
-        }
+        setSubModalHeaderTitle("ТОП каналы", "ТП")
+        subModalInputContainer.visibility = View.GONE
+        subModalList.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalThemesGrid.visibility = View.GONE
+        subModalCustomBody.removeAllViews()
+        subModalCustomBody.visibility = View.VISIBLE
+        subModalCustomBody.orientation = LinearLayout.VERTICAL
+        subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
+        subModalCustomBody.setPadding(16, 14, 16, 14)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val dark = isThemeDarkSurface(t.panelBgColor)
         val topChans = allChannels.filter { topUrls.contains(it.url) }
-        updateSubModalListItems(
-            if (topChans.isEmpty()) listOf("[-]   Нет закреплённых каналов")
-            else topChans.map { "[+]   ${it.name}   •   ${effectiveCategory(it)}" },
-            smoothToggle = inPlace,
-            preservePositionIndex = keepIndex
-        )
-        subModalList.setOnItemClickListener { _, _, idx, _ ->
-            if (idx in topChans.indices) {
-                topUrls.remove(topChans[idx].url)
-                saveState(); selectCategory(currentCategoryIndex)
-                openTopManagerSubModal(inPlace = true, keepIndex = idx.coerceAtMost((topChans.size - 2).coerceAtLeast(0)))
+        if (keepIndex in topChans.indices) selectedTopModalIdx = keepIndex
+        else if (selectedTopModalIdx !in topChans.indices) selectedTopModalIdx = 0
+
+        val rowViews = mutableListOf<LinearLayout>()
+        var btnRemoveSelected: TextView? = null
+
+        val scroll = ScrollView(this).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+        val listCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
+        scroll.addView(listCol)
+        subModalCustomBody.addView(scroll)
+
+        if (topChans.isEmpty()) {
+            val emptyTv = TextView(this).apply {
+                text = "Нет закреплённых каналов\nДобавляйте любимые каналы в ТОП из меню плеера (OK → В ТОП)"
+                setTextColor(t.textPrimaryColor)
+                alpha = 0.78f
+                typeface = t.normalFont
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f * scale)
+                gravity = Gravity.CENTER
+                setLineSpacing(6f, 1.0f)
+                setPadding(24, 54, 24, 54)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
+            listCol.addView(emptyTv)
+        } else {
+            val rowH = (50 * scale).toInt().coerceIn(44, 66)
+            topChans.forEachIndexed { idx, ch ->
+                val badge = TextView(this).apply {
+                    text = "▲"
+                    setTextColor(Color.parseColor("#FBBF24"))
+                    typeface = t.boldFont
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f * scale)
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                        rightMargin = (12 * scale).toInt()
+                    }
+                }
+                val titleTv = TextView(this).apply {
+                    text = "${ch.name}  •  ${effectiveCategory(ch)}"
+                    setTextColor(t.textPrimaryColor)
+                    typeface = t.normalFont
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.8f * scale)
+                    isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                val removeX = TextView(this).apply {
+                    text = "✕"
+                    setTextColor(t.textPrimaryColor)
+                    alpha = 0.62f
+                    typeface = t.boldFont
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f * scale)
+                    setPadding((10 * scale).toInt(), 0, 2, 0)
+                }
+                fun applyRowStyle(row: LinearLayout, focused: Boolean) {
+                    val curT = currentTheme()
+                    if (focused) {
+                        row.setBackgroundDrawable(GradientDrawable().apply {
+                            setColor(curT.accentColor)
+                            cornerRadius = 14f * scale
+                            setStroke(2, Color.WHITE)
+                        })
+                        titleTv.setTextColor(curT.textOnAccent)
+                        titleTv.typeface = curT.boldFont
+                        removeX.setTextColor(curT.textOnAccent)
+                        removeX.alpha = 0.95f
+                    } else {
+                        row.setBackgroundDrawable(GradientDrawable().apply {
+                            setColor(if (dark) Color.argb(62, 0, 0, 0) else Color.argb(24, 0, 0, 0))
+                            cornerRadius = 14f * scale
+                            setStroke(1, if (dark) Color.argb(34, 255, 255, 255) else Color.argb(36, 0, 0, 0))
+                        })
+                        titleTv.setTextColor(curT.textPrimaryColor)
+                        titleTv.typeface = curT.normalFont
+                        removeX.setTextColor(curT.textPrimaryColor)
+                        removeX.alpha = 0.62f
+                    }
+                }
+                val row = LinearLayout(this).apply {
+                    id = View.generateViewId()
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+                    setPadding((16 * scale).toInt(), 0, (16 * scale).toInt(), 0)
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, rowH).apply {
+                        setMargins(2, (4 * scale).toInt(), 2, (4 * scale).toInt())
+                    }
+                    addView(badge); addView(titleTv); addView(removeX)
+                    applyRowStyle(this, false)
+                    setOnFocusChangeListener { _, hasFocus ->
+                        applyRowStyle(this, hasFocus)
+                        if (hasFocus) {
+                            selectedTopModalIdx = idx
+                            resetMenuInactivityTimer()
+                        }
+                    }
+                    setOnClickListener {
+                        resetMenuInactivityTimer()
+                        topUrls.remove(ch.url)
+                        saveState(); selectCategory(currentCategoryIndex)
+                        openTopManagerSubModal(inPlace = true, keepIndex = idx.coerceAtMost((topChans.size - 2).coerceAtLeast(0)))
+                    }
+                }
+                rowViews.add(row)
+                listCol.addView(row)
             }
         }
-        if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
+
+        subModalBottomButtons.removeAllViews()
+        subModalBottomButtons.visibility = if (topChans.isNotEmpty()) View.VISIBLE else View.GONE
+        if (topChans.isNotEmpty()) {
+            btnRemoveSelected = makeUnifiedActionButton("Убрать из ТОП") {
+                val ch = topChans.getOrNull(selectedTopModalIdx) ?: return@makeUnifiedActionButton
+                topUrls.remove(ch.url)
+                saveState(); selectCategory(currentCategoryIndex)
+                openTopManagerSubModal(inPlace = true, keepIndex = selectedTopModalIdx.coerceAtMost((topChans.size - 2).coerceAtLeast(0)))
+            }.apply { id = 8991 }
+            val btnClearAll = makeUnifiedActionButton("Очистить ТОП", isDanger = true) {
+                topUrls.clear()
+                saveState(); selectCategory(currentCategoryIndex)
+                openTopManagerSubModal(inPlace = true, keepIndex = 0)
+            }.apply { id = 8992 }
+            val rmBtn = btnRemoveSelected
+            if (rmBtn != null) {
+                rmBtn.nextFocusRightId = btnClearAll.id
+                btnClearAll.nextFocusLeftId = rmBtn.id
+                if (rowViews.isNotEmpty()) {
+                    rmBtn.nextFocusUpId = rowViews.last().id
+                    btnClearAll.nextFocusUpId = rowViews.last().id
+                    rowViews.last().nextFocusDownId = rmBtn.id
+                }
+                subModalBottomButtons.addView(rmBtn)
+            }
+            subModalBottomButtons.addView(btnClearAll)
+        }
+
+        if (!inPlace) animateMenuAppear(subModalOverlay)
+        (rowViews.getOrNull(selectedTopModalIdx) ?: rowViews.firstOrNull() ?: btnRemoveSelected)?.requestFocus()
     }
 
     private fun openFullScreenChannelEpg() {
         setPlayerMiniPreviewMode(false)
-        val dm = resources.displayMetrics
-        val epgW = (dm.widthPixels * 0.84f).toInt().coerceIn(860, 1640)
-        val epgH = (dm.heightPixels * 0.80f).toInt().coerceAtLeast(420)
-        fullEpgOverlay.layoutParams = FrameLayout.LayoutParams(epgW, epgH, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply {
-            setMargins(28, 72, 28, 24)
-        }
         val ch = currentChannel
         val progs = getChannelEpgList(ch)
         val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
         val now = System.currentTimeMillis()
+        val chTitle = ch?.name?.take(26)?.ifBlank { null }
+        setSubModalHeaderTitle(if (chTitle != null) "Телегид  •  $chTitle" else "Телегид", "ТГ")
 
-        fullEpgTitle.text = "Телегид"
-        val items = mutableListOf<String>()
-        var activeIndex = 0
+        subModalInputContainer.visibility = View.GONE
+        subModalList.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalThemesGrid.visibility = View.GONE
+        subModalBottomButtons.visibility = View.GONE
+        subModalCustomBody.removeAllViews()
+        subModalCustomBody.visibility = View.VISIBLE
+        subModalCustomBody.orientation = LinearLayout.HORIZONTAL
+        subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
+        subModalCustomBody.setPadding(14, 12, 14, 12)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
 
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val dark = isThemeDarkSurface(t.panelBgColor)
+
+        val leftScroll = ScrollView(this).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.57f).apply {
+                rightMargin = (14 * scale).toInt()
+            }
+        }
+        val leftList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
+        leftScroll.addView(leftList)
+
+        val rightCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.43f)
+        }
+
+        val infoCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(if (dark) Color.argb(66, 0, 0, 0) else Color.argb(22, 0, 0, 0))
+                cornerRadius = 16f * scale
+                setStroke(1, if (dark) Color.argb(38, 255, 255, 255) else Color.argb(36, 0, 0, 0))
+            })
+            setPadding((14 * scale).toInt(), (12 * scale).toInt(), (14 * scale).toInt(), (12 * scale).toInt())
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                bottomMargin = (10 * scale).toInt()
+            }
+        }
+        val detailTitleTv = TextView(this).apply {
+            setTextColor(t.textPrimaryColor)
+            typeface = t.boldFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f * scale)
+            maxLines = 3; ellipsize = TextUtils.TruncateAt.END
+        }
+        val detailTimeTv = TextView(this).apply {
+            setTextColor(t.accentColor)
+            typeface = t.boldFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
+            setPadding(0, (6 * scale).toInt(), 0, (6 * scale).toInt())
+        }
+        val detailMetaTv = TextView(this).apply {
+            setTextColor(t.textPrimaryColor)
+            alpha = 0.80f
+            typeface = t.normalFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
+            setLineSpacing(4f, 1.0f)
+        }
+        infoCard.addView(detailTitleTv)
+        infoCard.addView(detailTimeTv)
+        infoCard.addView(detailMetaTv)
+        rightCol.addView(infoCard)
+
+        val btnRefresh = makeUnifiedActionButton("↻  Обновить EPG", fillWidth = true) {
+            Toast.makeText(this, "Обновление телепрограммы...", Toast.LENGTH_SHORT).show()
+            loadEpgOncePerDayInBackground(forceRefresh = true)
+        }.apply { id = 8751 }
+        val btnXmlUrl = makeUnifiedActionButton("Ссылка XMLTV", fillWidth = true) {
+            navigateToMenu("EPG")
+        }.apply { id = 8752 }
+        val btnEpgFile = makeUnifiedActionButton("Файл EPG", fillWidth = true) {
+            launchSystemEpgPicker()
+        }.apply { id = 8753 }
+
+        btnRefresh.nextFocusDownId = btnXmlUrl.id
+        btnXmlUrl.nextFocusUpId = btnRefresh.id
+        btnXmlUrl.nextFocusDownId = btnEpgFile.id
+        btnEpgFile.nextFocusUpId = btnXmlUrl.id
+        rightCol.addView(btnRefresh)
+        rightCol.addView(btnXmlUrl)
+        rightCol.addView(btnEpgFile)
+
+        fun updateDetailBox(prog: EpgProgram?) {
+            if (prog == null) {
+                detailTitleTv.text = ch?.name ?: "Прямой эфир"
+                detailTimeTv.text = if (ch != null) effectiveCategory(ch) else "Нет данных EPG"
+                detailMetaTv.text = "Расписание передач для этого канала пока не загружено. Нажмите «Обновить EPG» или укажите свой источник."
+                return
+            }
+            detailTitleTv.text = prog.title
+            val startStr = timeFmt.format(Date(prog.startMs))
+            val stopStr = timeFmt.format(Date(prog.stopMs))
+            detailTimeTv.text = "$startStr — $stopStr"
+            val totalMin = ((prog.stopMs - prog.startMs) / 60000L).coerceAtLeast(1L)
+            val statusLine = when {
+                now in prog.startMs..prog.stopMs -> {
+                    val passed = ((now - prog.startMs) / 60000L).coerceIn(0L, totalMin)
+                    val left = (totalMin - passed).coerceAtLeast(0L)
+                    "Идёт сейчас • прошло $passed мин, осталось $left мин"
+                }
+                prog.startMs > now -> {
+                    val waitMin = ((prog.startMs - now) / 60000L).coerceAtLeast(1L)
+                    "Скоро (через $waitMin мин) • длительность $totalMin мин"
+                }
+                else -> "Передача завершилась • длительность $totalMin мин"
+            }
+            val catPart = if (ch != null) "\nКанал: ${ch.name} (${effectiveCategory(ch)})" else ""
+            detailMetaTv.text = statusLine + catPart
+        }
+
+        val rowViews = mutableListOf<LinearLayout>()
+        var activeIdx = 0
         if (progs.isEmpty()) {
-            items.add("[?]   Программа передач обновляется...")
+            val emptyTv = TextView(this).apply {
+                text = "Программа передач обновляется или отсутствует для этого канала"
+                setTextColor(t.textPrimaryColor); alpha = 0.78f
+                typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f * scale)
+                gravity = Gravity.CENTER; setPadding(16, 44, 16, 44)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
+            leftList.addView(emptyTv)
+            updateDetailBox(null)
         } else {
             progs.forEachIndexed { idx, p ->
                 val isNow = now in p.startMs..p.stopMs
-                if (isNow) activeIndex = idx
-                val prefix = when {
-                    isNow -> "[+]   "
-                    p.stopMs < now -> "[-]   "
-                    else -> "[>]   "
+                val isPast = p.stopMs < now
+                if (isNow) activeIdx = idx
+
+                val topLine = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 }
-                val startTime = timeFmt.format(Date(p.startMs))
-                items.add("$prefix$startTime   ${p.title}")
+                val timeTv = TextView(this).apply {
+                    text = timeFmt.format(Date(p.startMs))
+                    typeface = t.boldFont
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.8f * scale)
+                    setPadding(0, 0, (10 * scale).toInt(), 0)
+                }
+                val titleTv = TextView(this).apply {
+                    text = p.title
+                    typeface = if (isNow) t.boldFont else t.normalFont
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.2f * scale)
+                    isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                topLine.addView(timeTv)
+                topLine.addView(titleTv)
+                if (isNow) {
+                    topLine.addView(makeStatusPillView("СЕЙЧАС", 3).apply {
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                            leftMargin = (8 * scale).toInt()
+                        }
+                    })
+                }
+
+                val progressTrack: FrameLayout? = if (isNow) {
+                    val pct = ((now - p.startMs).toFloat() / (p.stopMs - p.startMs).coerceAtLeast(1L).toFloat()).coerceIn(0.03f, 1f)
+                    FrameLayout(this).apply {
+                        setBackgroundDrawable(GradientDrawable().apply {
+                            setColor(Color.argb(65, 255, 255, 255))
+                            cornerRadius = 999f
+                        })
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (5 * scale).toInt().coerceAtLeast(4)).apply {
+                            topMargin = (7 * scale).toInt()
+                        }
+                        val fillRow = LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            weightSum = 1f
+                            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+                            addView(View(this@MainActivity).apply {
+                                setBackgroundDrawable(GradientDrawable().apply {
+                                    setColor(Color.WHITE)
+                                    cornerRadius = 999f
+                                })
+                                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, pct)
+                            })
+                            addView(View(this@MainActivity).apply {
+                                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, (1f - pct).coerceAtLeast(0.001f))
+                            })
+                        }
+                        addView(fillRow)
+                    }
+                } else null
+
+                fun applyEpgRowStyle(row: LinearLayout, focused: Boolean) {
+                    val curT = currentTheme()
+                    if (focused) {
+                        row.setBackgroundDrawable(GradientDrawable().apply {
+                            setColor(curT.accentColor)
+                            cornerRadius = 14f * scale
+                            setStroke(2, Color.WHITE)
+                        })
+                        timeTv.setTextColor(curT.textOnAccent)
+                        titleTv.setTextColor(curT.textOnAccent)
+                        titleTv.alpha = 1f; timeTv.alpha = 1f
+                    } else {
+                        row.setBackgroundDrawable(GradientDrawable().apply {
+                            val bg = if (isNow) Color.argb(58, Color.red(curT.accentColor), Color.green(curT.accentColor), Color.blue(curT.accentColor))
+                            else if (dark) Color.argb(54, 0, 0, 0) else Color.argb(20, 0, 0, 0)
+                            setColor(bg)
+                            cornerRadius = 14f * scale
+                            setStroke(if (isNow) 1 else 0, if (isNow) curT.accentColor else Color.TRANSPARENT)
+                        })
+                        timeTv.setTextColor(if (isNow) curT.accentColor else curT.textPrimaryColor)
+                        titleTv.setTextColor(curT.textPrimaryColor)
+                        val a = if (isPast) 0.56f else 1f
+                        timeTv.alpha = a; titleTv.alpha = a
+                    }
+                }
+
+                val row = LinearLayout(this).apply {
+                    id = View.generateViewId()
+                    orientation = LinearLayout.VERTICAL
+                    isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+                    val ph = (14 * scale).toInt()
+                    val pv = (10 * scale).toInt()
+                    setPadding(ph, pv, ph, pv)
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                        setMargins(2, (3 * scale).toInt(), 2, (3 * scale).toInt())
+                    }
+                    addView(topLine)
+                    if (progressTrack != null) addView(progressTrack)
+                    nextFocusRightId = btnRefresh.id
+                    applyEpgRowStyle(this, false)
+                    setOnFocusChangeListener { _, hasFocus ->
+                        applyEpgRowStyle(this, hasFocus)
+                        if (hasFocus) {
+                            resetMenuInactivityTimer()
+                            updateDetailBox(p)
+                        }
+                    }
+                    setOnClickListener {
+                        resetMenuInactivityTimer()
+                        updateDetailBox(p)
+                    }
+                }
+                rowViews.add(row)
+                leftList.addView(row)
             }
+            updateDetailBox(progs.getOrNull(activeIdx))
+            val focusBackRow = rowViews.getOrNull(activeIdx) ?: rowViews.first()
+            btnRefresh.nextFocusLeftId = focusBackRow.id
+            btnXmlUrl.nextFocusLeftId = focusBackRow.id
+            btnEpgFile.nextFocusLeftId = focusBackRow.id
         }
 
-        fullEpgListView.adapter = createRoundedSelectorAdapter(items, 15.5f, true, fixedRowHeight = true) { pos -> fullEpgListView.selectedItemPosition == pos }
-        animateMenuAppear(fullEpgOverlay)
-        fullEpgListView.requestFocus()
-        if (activeIndex > 0 && activeIndex < items.size) fullEpgListView.setSelection(activeIndex)
-        fullEpgListView.setOnItemSelectedListener(object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                resetMenuInactivityTimer()
-                refreshSimpleListHighlightInPlace(fullEpgListView, position)
+        subModalCustomBody.addView(leftScroll)
+        subModalCustomBody.addView(rightCol)
+        animateMenuAppear(subModalOverlay)
+
+        val targetFocus = rowViews.getOrNull(activeIdx) ?: btnRefresh
+        targetFocus.requestFocus()
+        if (rowViews.isNotEmpty()) {
+            leftScroll.post {
+                val targetView = rowViews.getOrNull(activeIdx) ?: return@post
+                val scrollY = (targetView.top - (leftScroll.height / 3)).coerceAtLeast(0)
+                leftScroll.scrollTo(0, scrollY)
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        })
+        }
     }
 
-    private fun openMoreSettingsSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        setSubModalHeaderTitle("Общие настройки")
+    private fun openMoreSettingsSubModal(inPlace: Boolean = false, keepIndex: Int = -1, focusTabs: Boolean = false) {
+        setSubModalHeaderTitle("Общие настройки", "ОБ")
         subModalInputContainer.visibility = View.GONE
-        subModalList.visibility = View.VISIBLE
+        subModalList.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalThemesGrid.visibility = View.GONE
+        subModalBottomButtons.visibility = View.GONE
+        subModalCustomBody.removeAllViews()
+        subModalCustomBody.visibility = View.VISIBLE
+        subModalCustomBody.orientation = LinearLayout.HORIZONTAL
+        subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
+        subModalCustomBody.setPadding(14, 12, 14, 12)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
 
-        val scaleText = when (uiScaleStep) {
-            0 -> "Обычный (Смартфон)"
-            1 -> "Крупный (Телевизор)"
-            else -> "Огромный (Большой ТВ)"
-        }
-        val alphaText = when (uiAlphaStep) {
-            0 -> "Плотный (96%)"
-            1 -> "Средний (84%)"
-            else -> "Стекло (65%)"
-        }
-        val ambiRow = when (ambilightMode) {
-            0 -> "[OFF]   Подсветка Ambilight   •   Выключена"
-            1 -> "[ON]   Подсветка Ambilight   •   Цвет группы"
-            2 -> "[ON]   Подсветка Ambilight   •   Спектр"
-            else -> "[ON]   Подсветка Ambilight   •   Кадр видео"
-        }
-        val aspectText = when (screenAspectMode) {
-            0 -> "По размеру экрана"
-            1 -> "Растянуть 16:9"
-            else -> "Кинозум"
-        }
-        val cutoutRow = if (cameraCutoutSafeOffset) "[ON]   Отступ под камеру слева (Смартфон)   •   Включён" else "[OFF]   Отступ под камеру слева (Смартфон)   •   Выключен"
-        val bannerRow = if (showChannelBannerOnSwitch) "[ON]   Баннер названия при переключении   •   Показывать" else "[OFF]   Баннер названия при переключении   •   Скрыт"
-        val delayRow = "[+]   Автоскрытие меню и баннера   •   Через $menuHideDelaySec сек"
-        val dualRow = if (isDualStreamActive) "[ON]   Двойной эфир (2-й экран PiP)   •   Активен" else "[OFF]   Двойной эфир (2-й экран PiP)   •   Выключен"
-        val dohRow = if (dohEnabled) "[ON]   Обход блокировок DoH (Cloudflare)   •   Включён" else "[OFF]   Обход блокировок DoH (Системный DNS)   •   Выключен"
-        val dropRow = if (onDropBehavior == 0) "[+]   При обрыве потока   •   Бесшовный перезапуск" else "[+]   При обрыве потока   •   Следующий канал"
-        val sleepRow = if (sleepTimerMinutesLeft > 0) "[ON]   Таймер сна и Выключение   •   Через $sleepTimerMinutesLeft мин" else "[>]   Таймер сна и Выключение   •   Открыть меню"
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val dark = isThemeDarkSurface(t.panelBgColor)
+        selectedMoreSettingsTab = selectedMoreSettingsTab.coerceIn(0, 2)
 
-        val items = listOf(
-            "[+]   Размер текста и меню   •   $scaleText",
-            "[+]   Прозрачность меню   •   $alphaText",
-            ambiRow,
-            "[+]   Формат изображения   •   $aspectText",
-            cutoutRow,
-            bannerRow,
-            delayRow,
-            dualRow,
-            dohRow,
-            dropRow,
-            "[>]   Яркость экрана   •   Сейчас: $brightnessPercent%",
-            "[>]   Машина времени   •   Отмотать эфир на -30 сек",
-            sleepRow,
-            "[>]   Телепрограмма EPG   •   Обновить расписание сейчас",
-            "[>]   Диагностический файл (${formatDiagFileSize()})",
-            availableUpdateInfo?.let { upd ->
-                val lbl = upd.tagName.ifBlank { upd.releaseName }.ifBlank { "новая сборка" }
-                "[+]   Обновление TiViLook   •   Доступна $lbl"
-            } ?: "[>]   Обновление TiViLook   •   Проверить и установить с GitHub"
-        )
-        updateSubModalListItems(items, smoothToggle = inPlace, preservePositionIndex = keepIndex)
+        val leftCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.TOP
+            setPadding(2, 4, (12 * scale).toInt(), 4)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.34f)
+        }
+        val rightScroll = ScrollView(this).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.66f)
+        }
+        val rightList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
+        rightScroll.addView(rightList)
 
-        subModalList.setOnItemClickListener { _, _, which, _ ->
-            when (which) {
-                0 -> { uiScaleStep = (uiScaleStep + 1) % 3; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-                1 -> { uiAlphaStep = (uiAlphaStep + 1) % 3; saveState(); animatePanelAlphaTransition(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-                2 -> { ambilightMode = (ambilightMode + 1) % 4; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-                3 -> { screenAspectMode = (screenAspectMode + 1) % 3; applyScreenAspectMode(); saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-                4 -> { cameraCutoutSafeOffset = !cameraCutoutSafeOffset; saveState(); applyCurrentThemeToAllPanels(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-                5 -> { showChannelBannerOnSwitch = !showChannelBannerOnSwitch; saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-                6 -> {
-                    menuHideDelaySec = when (menuHideDelaySec) { 4 -> 8; 8 -> 12; else -> 4 }
-                    saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which)
+        val tabTitles = listOf("Интерфейс", "Видео и сеть", "Сервис\nи обновление")
+        val tabViews = mutableListOf<TextView>()
+        val rightRowViews = mutableListOf<LinearLayout>()
+
+        fun styleTab(tv: TextView, idx: Int, focused: Boolean) {
+            val curT = currentTheme()
+            val isActive = (idx == selectedMoreSettingsTab)
+            val bg = when {
+                focused -> curT.accentColor
+                isActive -> Color.argb(66, Color.red(curT.accentColor), Color.green(curT.accentColor), Color.blue(curT.accentColor))
+                else -> Color.TRANSPARENT
+            }
+            val strokeCol = when {
+                focused -> Color.WHITE
+                isActive -> curT.accentColor
+                else -> Color.TRANSPARENT
+            }
+            tv.setBackgroundDrawable(GradientDrawable().apply {
+                setColor(bg)
+                cornerRadius = 14f * scale
+                setStroke(if (focused) 2 else if (isActive) 1 else 0, strokeCol)
+            })
+            tv.setTextColor(if (focused) curT.textOnAccent else curT.textPrimaryColor)
+            tv.typeface = if (focused || isActive) curT.boldFont else curT.normalFont
+        }
+
+        tabTitles.forEachIndexed { idx, label ->
+            val tv = TextView(this).apply {
+                id = 8600 + idx
+                text = label
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.2f * scale)
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+                val ph = (14 * scale).toInt()
+                val pv = (12 * scale).toInt()
+                setPadding(ph, pv, ph, pv)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = (6 * scale).toInt()
                 }
-                7 -> { toggleDualStreamWithCurrentOrNeighbor(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-                8 -> { dohEnabled = !dohEnabled; saveState(); initPlayer(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-                9 -> { onDropBehavior = (onDropBehavior + 1) % 2; saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = which) }
-                10 -> navigateToMenu("BRIGHTNESS_MENU")
-                11 -> { rewindLiveBufferSeconds(30); closeAllMenus() }
-                12 -> navigateToMenu("POWER_AND_SLEEP_MENU")
-                13 -> { loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu() }
-                14 -> openDiagLogInSystemFileManager()
-                15 -> checkAndInstallAppUpdateFromGithub()
+                styleTab(this, idx, false)
+                setOnFocusChangeListener { _, hasFocus ->
+                    styleTab(this, idx, hasFocus)
+                    if (hasFocus) {
+                        resetMenuInactivityTimer()
+                        if (selectedMoreSettingsTab != idx) {
+                            selectedMoreSettingsTab = idx
+                            openMoreSettingsSubModal(inPlace = true, keepIndex = 0, focusTabs = true)
+                        }
+                    }
+                }
+                setOnClickListener {
+                    resetMenuInactivityTimer()
+                    if (selectedMoreSettingsTab != idx) {
+                        selectedMoreSettingsTab = idx
+                        openMoreSettingsSubModal(inPlace = true, keepIndex = 0, focusTabs = false)
+                    } else {
+                        rightRowViews.firstOrNull()?.requestFocus()
+                    }
+                }
+            }
+            tabViews.add(tv)
+            leftCol.addView(tv)
+        }
+        for (i in tabViews.indices) {
+            tabViews[i].nextFocusUpId = tabViews[(i - 1 + tabViews.size) % tabViews.size].id
+            tabViews[i].nextFocusDownId = tabViews[(i + 1) % tabViews.size].id
+        }
+
+        val scaleText = when (uiScaleStep) { 0 -> "Смартфон"; 1 -> "Крупный ТВ"; else -> "Огромный ТВ" }
+        val alphaText = when (uiAlphaStep) { 0 -> "96%"; 1 -> "84%"; else -> "65%" }
+        val ambiText = when (ambilightMode) { 0 -> "ВЫКЛ"; 1 -> "Группа"; 2 -> "Спектр"; else -> "Кадр" }
+        val aspectText = when (screenAspectMode) { 0 -> "По экрану"; 1 -> "16:9"; else -> "Кинозум" }
+        val updLabel = availableUpdateInfo?.let { upd ->
+            "Доступна ${upd.tagName.ifBlank { upd.releaseName }.ifBlank { "новая" }}"
+        } ?: "Проверить"
+
+        data class SettingSpec(val title: String, val pill: String, val kind: Int, val action: () -> Unit)
+        val rowsSpec: List<SettingSpec> = when (selectedMoreSettingsTab) {
+            0 -> listOf(
+                SettingSpec("Размер текста и меню", scaleText, 0) {
+                    uiScaleStep = (uiScaleStep + 1) % 3; saveState(); applyCurrentThemeToAllPanels()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 0)
+                },
+                SettingSpec("Прозрачность меню", alphaText, 0) {
+                    uiAlphaStep = (uiAlphaStep + 1) % 3; saveState(); animatePanelAlphaTransition()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 1)
+                },
+                SettingSpec("Подсветка Ambilight", ambiText, if (ambilightMode == 0) 2 else 0) {
+                    ambilightMode = (ambilightMode + 1) % 4; saveState(); applyCurrentThemeToAllPanels()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 2)
+                },
+                SettingSpec("Баннер названия канала", if (showChannelBannerOnSwitch) "ВКЛ" else "ВЫКЛ", if (showChannelBannerOnSwitch) 1 else 2) {
+                    showChannelBannerOnSwitch = !showChannelBannerOnSwitch; saveState()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 3)
+                },
+                SettingSpec("Автоскрытие меню", "$menuHideDelaySec сек", 0) {
+                    menuHideDelaySec = when (menuHideDelaySec) { 4 -> 8; 8 -> 12; else -> 4 }
+                    saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = 4)
+                },
+                SettingSpec("Отступ под камеру (Смартфон)", if (cameraCutoutSafeOffset) "ВКЛ" else "ВЫКЛ", if (cameraCutoutSafeOffset) 1 else 2) {
+                    cameraCutoutSafeOffset = !cameraCutoutSafeOffset; saveState(); applyCurrentThemeToAllPanels()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 5)
+                }
+            )
+            1 -> listOf(
+                SettingSpec("Формат изображения", aspectText, 0) {
+                    screenAspectMode = (screenAspectMode + 1) % 3; applyScreenAspectMode(); saveState()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 0)
+                },
+                SettingSpec("Двойной эфир (2-й экран PiP)", if (isDualStreamActive) "ВКЛ" else "ВЫКЛ", if (isDualStreamActive) 1 else 2) {
+                    toggleDualStreamWithCurrentOrNeighbor()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 1)
+                },
+                SettingSpec("Обход блокировок DoH", if (dohEnabled) "ВКЛ" else "ВЫКЛ", if (dohEnabled) 1 else 2) {
+                    dohEnabled = !dohEnabled; saveState(); initPlayer()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 2)
+                },
+                SettingSpec("При обрыве потока", if (onDropBehavior == 0) "Перезапуск" else "След. канал", 0) {
+                    onDropBehavior = (onDropBehavior + 1) % 2; saveState()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 3)
+                },
+                SettingSpec("Яркость экрана", "$brightnessPercent%", 0) {
+                    navigateToMenu("BRIGHTNESS_MENU")
+                },
+                SettingSpec("Машина времени", "-30 сек", 0) {
+                    rewindLiveBufferSeconds(30); closeAllMenus()
+                }
+            )
+            else -> listOf(
+                SettingSpec(
+                    "Таймер сна и Выключение",
+                    if (sleepTimerMinutesLeft > 0) "${sleepTimerMinutesLeft} мин" else "Открыть",
+                    if (sleepTimerMinutesLeft > 0) 1 else 0
+                ) {
+                    navigateToMenu("POWER_AND_SLEEP_MENU")
+                },
+                SettingSpec("Телепрограмма EPG", "Обновить", 0) {
+                    Toast.makeText(this, "Обновление телепрограммы...", Toast.LENGTH_SHORT).show()
+                    loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu()
+                },
+                SettingSpec("Диагностический файл", formatDiagFileSize(), 0) {
+                    openDiagLogInSystemFileManager()
+                },
+                SettingSpec("Обновление TiViLook", updLabel, if (availableUpdateInfo != null) 3 else 0) {
+                    checkAndInstallAppUpdateFromGithub()
+                }
+            )
+        }
+
+        rowsSpec.forEachIndexed { idx, spec ->
+            val row = makeUnifiedSettingRow(spec.title, spec.pill, spec.kind, onClick = spec.action).apply {
+                id = 8620 + idx
+                nextFocusLeftId = tabViews[selectedMoreSettingsTab].id
+            }
+            rightRowViews.add(row)
+            rightList.addView(row)
+        }
+        if (rightRowViews.isNotEmpty()) {
+            for (i in rightRowViews.indices) {
+                rightRowViews[i].nextFocusUpId = rightRowViews[(i - 1 + rightRowViews.size) % rightRowViews.size].id
+                rightRowViews[i].nextFocusDownId = rightRowViews[(i + 1) % rightRowViews.size].id
+            }
+            tabViews.forEach { it.nextFocusRightId = rightRowViews.first().id }
+        }
+
+        val dividerV = View(this).apply {
+            setBackgroundColor(if (dark) Color.argb(36, 255, 255, 255) else Color.argb(32, 0, 0, 0))
+            layoutParams = LinearLayout.LayoutParams(1, LinearLayout.LayoutParams.MATCH_PARENT).apply {
+                rightMargin = (12 * scale).toInt()
             }
         }
-        if (!inPlace) {
-            animateMenuAppear(subModalOverlay)
-            subModalList.requestFocus()
+        subModalCustomBody.addView(leftCol)
+        subModalCustomBody.addView(dividerV)
+        subModalCustomBody.addView(rightScroll)
+
+        if (!inPlace) animateMenuAppear(subModalOverlay)
+        if (focusTabs) {
+            tabViews[selectedMoreSettingsTab].requestFocus()
+        } else {
+            val targetIdx = keepIndex.coerceIn(0, (rightRowViews.size - 1).coerceAtLeast(0))
+            (rightRowViews.getOrNull(targetIdx) ?: tabViews[selectedMoreSettingsTab]).requestFocus()
         }
     }
 
@@ -2781,53 +3623,314 @@ class MainActivity : AppCompatActivity() {
         subModalList.requestFocus()
     }
 
-    private fun openPlaylistsSubModal() {
+    private fun openRenamePlaylistSubModal() {
         ensureDefaultPlaylists()
-        setSubModalHeaderTitle("Плейлисты")
-        subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        val snapshot = playlists.toList()
-        val hasUrlPlaylists = snapshot.any { isExportableUrlPlaylist(it) }
-        val hasUserPlaylists = snapshot.any { it.source != "BUILTIN_OPEN_RU" }
-        val items = snapshot.mapIndexed { idx, p -> (if (idx == activePlaylistIndex) "[+]   " else "[-]   ") + p.title }.toMutableList()
-        val extraActions = mutableListOf<() -> Unit>()
-        items.add("[>]   Добавить плейлист по ссылке"); extraActions.add { navigateToMenu("ADD_URL") }
-        items.add("[>]   Выбрать файл плейлиста"); extraActions.add { launchSystemPlaylistPicker() }
-        items.add("[>]   Добавить файл ТВ программы"); extraActions.add { launchSystemEpgPicker() }
-        if (hasUrlPlaylists) {
-            items.add("[>]   Сохранить плейлист в файл"); extraActions.add { navigateToMenu("EXPORT_PLAYLIST") }
+        val idx = renamingPlaylistIdx
+        if (idx !in 1 until playlists.size || playlists[idx].source == "BUILTIN_OPEN_RU") {
+            navigateBackInMenu()
+            return
         }
-        if (hasUserPlaylists) {
-            items.add("[-]   Удалить плейлист"); extraActions.add { navigateToMenu("DELETE_PLAYLIST") }
+        val entry = playlists[idx]
+        setSubModalHeaderTitle("Переименовать плейлист", "ПЛ")
+        subModalList.visibility = View.GONE
+        subModalCustomBody.visibility = View.GONE
+        subModalBottomButtons.visibility = View.GONE
+        subModalInputContainer.removeAllViews()
+        subModalInputContainer.visibility = View.VISIBLE
+        val input = EditText(this).apply {
+            setText(entry.title)
+            setSelection(entry.title.length)
+            setTextColor(currentTheme().textPrimaryColor)
+            setSingleLine()
         }
-        updateSubModalListItems(items, preservePositionIndex = activePlaylistIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0)))
+        subModalInputContainer.addView(input)
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, 14, 0, 0)
+        }
+        btnRow.addView(makeUnifiedActionButton("Сохранить") {
+            val newTitle = input.text.toString().trim()
+            if (newTitle.isNotEmpty() && idx in playlists.indices) {
+                val old = playlists[idx]
+                playlists[idx] = PlaylistEntry(newTitle, old.source, old.isLocal)
+                saveState()
+                Toast.makeText(this, "Переименовано: $newTitle", Toast.LENGTH_SHORT).show()
+            }
+            navigateBackInMenu()
+        })
+        btnRow.addView(makeUnifiedActionButton("Назад") { navigateBackInMenu() })
+        subModalInputContainer.addView(btnRow)
+        animateMenuAppear(subModalOverlay)
+        input.requestFocus()
+    }
 
-        subModalList.setOnItemClickListener { _, _, which, _ ->
-            if (which < snapshot.size) {
-                activePlaylistIndex = which; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
-            } else {
-                extraActions.getOrNull(which - snapshot.size)?.invoke()
+    private fun openPlaylistsSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
+        ensureDefaultPlaylists()
+        setSubModalHeaderTitle("Плейлисты", "ПЛ")
+        subModalInputContainer.visibility = View.GONE
+        subModalList.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalThemesGrid.visibility = View.GONE
+        subModalCustomBody.removeAllViews()
+        subModalCustomBody.visibility = View.VISIBLE
+        subModalCustomBody.orientation = LinearLayout.HORIZONTAL
+        subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
+        subModalCustomBody.setPadding(14, 12, 14, 12)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+
+        val snapshot = playlists.toList()
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val dark = isThemeDarkSurface(t.panelBgColor)
+        selectedPlaylistModalIdx = when {
+            keepIndex in snapshot.indices -> keepIndex
+            selectedPlaylistModalIdx in snapshot.indices && inPlace -> selectedPlaylistModalIdx
+            else -> activePlaylistIndex.coerceIn(0, (snapshot.size - 1).coerceAtLeast(0))
+        }
+
+        val leftColWrap = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.56f).apply {
+                rightMargin = (14 * scale).toInt()
             }
         }
-        subModalList.setOnItemLongClickListener { _, _, which, _ ->
-            if (which in 1 until snapshot.size && snapshot[which].source != "BUILTIN_OPEN_RU") {
-                val reloaded = deleteUserPlaylistAt(which)
-                if (!reloaded) openPlaylistsSubModal()
-                true
-            } else {
-                false
+        val leftHeader = TextView(this).apply {
+            text = "Список"
+            setTextColor(t.textPrimaryColor); alpha = 0.70f
+            typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
+            setPadding((10 * scale).toInt(), 2, 4, (8 * scale).toInt())
+        }
+        val leftScroll = ScrollView(this).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+        val leftList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
+        leftScroll.addView(leftList)
+        leftColWrap.addView(leftHeader)
+        leftColWrap.addView(leftScroll)
+
+        val rightCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.44f)
+        }
+        val rightHeader = TextView(this).apply {
+            text = "Действия"
+            setTextColor(t.textPrimaryColor); alpha = 0.70f
+            typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
+            setPadding((6 * scale).toInt(), 2, 4, (8 * scale).toInt())
+        }
+        val actionsBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val selectedHintTv = TextView(this).apply {
+            setTextColor(t.textPrimaryColor); alpha = 0.62f
+            typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f * scale)
+            setPadding((6 * scale).toInt(), (8 * scale).toInt(), 4, 0)
+            maxLines = 2; ellipsize = TextUtils.TruncateAt.END
+        }
+        rightCol.addView(rightHeader)
+        rightCol.addView(actionsBox)
+        rightCol.addView(selectedHintTv)
+
+        val rowViews = mutableListOf<LinearLayout>()
+        val rowTexts = mutableListOf<TextView>()
+        val rowChecks = mutableListOf<TextView>()
+
+        var btnAddUrl: TextView? = null
+        var btnAddFile: TextView? = null
+
+        fun rebuildActionButtons(selIdx: Int) {
+            actionsBox.removeAllViews()
+            val entry = snapshot.getOrNull(selIdx) ?: return
+            val isBuiltin = (selIdx == 0 || entry.source == "BUILTIN_OPEN_RU")
+            val canExport = isExportableUrlPlaylist(entry)
+            selectedHintTv.text = when {
+                isBuiltin -> "Встроенный плейлист (только выбор)"
+                canExport -> "Сетевой плейлист по ссылке"
+                else -> "Локальный файл на устройстве"
+            }
+
+            val firstRowId = rowViews.getOrNull(selIdx)?.id ?: View.NO_ID
+            val actBtns = mutableListOf<TextView>()
+
+            val bSelect = makeUnifiedActionButton("▶  Выбрать", fillWidth = true) {
+                activePlaylistIndex = selIdx
+                saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
+            }.apply { id = 8551 }
+            actBtns.add(bSelect)
+            actionsBox.addView(bSelect)
+
+            val bExport = makeUnifiedActionButton("↓  В файл .m3u8", isEnabledState = canExport, fillWidth = true) {
+                closeAllMenus()
+                exportUrlPlaylistToFile(entry)
+            }.apply { id = 8552 }
+            if (canExport) actBtns.add(bExport)
+            actionsBox.addView(bExport)
+
+            val bRename = makeUnifiedActionButton("✎  Переименовать", isEnabledState = !isBuiltin, fillWidth = true) {
+                renamingPlaylistIdx = selIdx
+                navigateToMenu("RENAME_PLAYLIST")
+            }.apply { id = 8553 }
+            if (!isBuiltin) actBtns.add(bRename)
+            actionsBox.addView(bRename)
+
+            val bDelete = makeUnifiedActionButton("✕  Удалить", isDanger = true, isEnabledState = !isBuiltin, fillWidth = true) {
+                val reloaded = deleteUserPlaylistAt(selIdx)
+                if (!reloaded) {
+                    openPlaylistsSubModal(inPlace = true, keepIndex = (selIdx - 1).coerceAtLeast(0))
+                }
+            }.apply { id = 8554 }
+            if (!isBuiltin) actBtns.add(bDelete)
+            actionsBox.addView(bDelete)
+
+            for (i in actBtns.indices) {
+                actBtns[i].nextFocusLeftId = firstRowId
+                if (i > 0) actBtns[i].nextFocusUpId = actBtns[i - 1].id
+                if (i + 1 < actBtns.size) actBtns[i].nextFocusDownId = actBtns[i + 1].id
+                else btnAddFile?.let { actBtns[i].nextFocusDownId = it.id }
+            }
+            rowViews.forEach { rv -> rv.nextFocusRightId = bSelect.id }
+        }
+
+        fun refreshPlaylistRows(selIdx: Int) {
+            val curT = currentTheme()
+            for (i in rowViews.indices) {
+                val row = rowViews[i]
+                val tv = rowTexts[i]
+                val chk = rowChecks[i]
+                val isFocused = row.hasFocus()
+                val isSelected = (i == selIdx)
+                val isActive = (i == activePlaylistIndex)
+                chk.text = if (isActive) "✓" else ""
+                when {
+                    isFocused -> {
+                        row.setBackgroundDrawable(GradientDrawable().apply {
+                            setColor(curT.accentColor)
+                            cornerRadius = 14f * scale
+                            setStroke(2, Color.WHITE)
+                        })
+                        tv.setTextColor(curT.textOnAccent); tv.typeface = curT.boldFont
+                        chk.setTextColor(curT.textOnAccent)
+                    }
+                    isSelected -> {
+                        row.setBackgroundDrawable(GradientDrawable().apply {
+                            setColor(Color.argb(66, Color.red(curT.accentColor), Color.green(curT.accentColor), Color.blue(curT.accentColor)))
+                            cornerRadius = 14f * scale
+                            setStroke(1, curT.accentColor)
+                        })
+                        tv.setTextColor(curT.textPrimaryColor); tv.typeface = curT.boldFont
+                        chk.setTextColor(Color.parseColor("#22C55E"))
+                    }
+                    else -> {
+                        row.setBackgroundDrawable(GradientDrawable().apply {
+                            setColor(if (dark) Color.argb(56, 0, 0, 0) else Color.argb(20, 0, 0, 0))
+                            cornerRadius = 14f * scale
+                        })
+                        tv.setTextColor(curT.textPrimaryColor); tv.typeface = if (isActive) curT.boldFont else curT.normalFont
+                        chk.setTextColor(Color.parseColor("#22C55E"))
+                    }
+                }
             }
         }
-        animateMenuAppear(subModalOverlay); subModalList.requestFocus()
+
+        val rowH = (48 * scale).toInt().coerceIn(42, 64)
+        snapshot.forEachIndexed { idx, entry ->
+            val tv = TextView(this).apply {
+                text = entry.title
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.8f * scale)
+                isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val chk = TextView(this).apply {
+                typeface = t.boldFont
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f * scale)
+                setPadding((8 * scale).toInt(), 0, 2, 0)
+            }
+            val row = LinearLayout(this).apply {
+                id = View.generateViewId()
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isFocusable = true; isFocusableInTouchMode = false; isClickable = true
+                setPadding((14 * scale).toInt(), 0, (14 * scale).toInt(), 0)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, rowH).apply {
+                    setMargins(2, (3 * scale).toInt(), 2, (3 * scale).toInt())
+                }
+                addView(tv); addView(chk)
+                setOnFocusChangeListener { _, hasFocus ->
+                    if (hasFocus) {
+                        resetMenuInactivityTimer()
+                        if (selectedPlaylistModalIdx != idx) {
+                            selectedPlaylistModalIdx = idx
+                            rebuildActionButtons(idx)
+                        }
+                    }
+                    refreshPlaylistRows(selectedPlaylistModalIdx)
+                }
+                setOnClickListener {
+                    resetMenuInactivityTimer()
+                    if (controlMode == 1 && selectedPlaylistModalIdx != idx) {
+                        selectedPlaylistModalIdx = idx
+                        rebuildActionButtons(idx)
+                        refreshPlaylistRows(idx)
+                    } else {
+                        activePlaylistIndex = idx
+                        saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
+                    }
+                }
+            }
+            rowViews.add(row); rowTexts.add(tv); rowChecks.add(chk)
+            leftList.addView(row)
+        }
+
+        subModalBottomButtons.removeAllViews()
+        subModalBottomButtons.visibility = View.VISIBLE
+        val addUrlBtn = makeUnifiedActionButton("+  По ссылке") { navigateToMenu("ADD_URL") }.apply { id = 8581 }
+        val addFileBtn = makeUnifiedActionButton("+  Из файла") { launchSystemPlaylistPicker() }.apply { id = 8582 }
+        btnAddUrl = addUrlBtn
+        btnAddFile = addFileBtn
+        addUrlBtn.nextFocusRightId = addFileBtn.id
+        addFileBtn.nextFocusLeftId = addUrlBtn.id
+        if (rowViews.isNotEmpty()) {
+            for (i in rowViews.indices) {
+                if (i > 0) rowViews[i].nextFocusUpId = rowViews[i - 1].id
+                if (i + 1 < rowViews.size) rowViews[i].nextFocusDownId = rowViews[i + 1].id
+                else rowViews[i].nextFocusDownId = addUrlBtn.id
+            }
+            addUrlBtn.nextFocusUpId = rowViews.last().id
+            addFileBtn.nextFocusUpId = 8551
+        }
+        subModalBottomButtons.addView(addUrlBtn)
+        subModalBottomButtons.addView(addFileBtn)
+
+        val dividerV = View(this).apply {
+            setBackgroundColor(if (dark) Color.argb(36, 255, 255, 255) else Color.argb(32, 0, 0, 0))
+            layoutParams = LinearLayout.LayoutParams(1, LinearLayout.LayoutParams.MATCH_PARENT).apply {
+                rightMargin = (14 * scale).toInt()
+            }
+        }
+        subModalCustomBody.addView(leftColWrap)
+        subModalCustomBody.addView(dividerV)
+        subModalCustomBody.addView(rightCol)
+
+        rebuildActionButtons(selectedPlaylistModalIdx)
+        refreshPlaylistRows(selectedPlaylistModalIdx)
+
+        if (!inPlace) animateMenuAppear(subModalOverlay)
+        (rowViews.getOrNull(selectedPlaylistModalIdx) ?: btnAddUrl)?.requestFocus()
     }
 
     private fun openChannelEditorGroupsModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        setSubModalHeaderTitle("Редактор")
-        subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
-        subModalTopButtons.addView(makeModernButton("Включить все") {
-            disabledCategories.clear(); manualDisabledUrls.clear(); autoDisabledUrls.clear()
-            saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorGroupsModal(inPlace = true, keepIndex = subModalHighlightedPos)
-        })
+        setSubModalHeaderTitle("Редактор", "РД")
+        subModalInputContainer.visibility = View.GONE
+        subModalCustomBody.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalList.visibility = View.VISIBLE
+
         val snapshot = allChannels.toList()
         val editableCats = activeCategoryList().drop(2)
         val rows = editableCats.map { cat ->
@@ -2850,22 +3953,49 @@ class MainActivity : AppCompatActivity() {
                 navigateToMenu("CHANNEL_EDITOR_ITEMS")
             }
         }
+
+        subModalBottomButtons.removeAllViews()
+        subModalBottomButtons.visibility = View.VISIBLE
+        subModalBottomButtons.addView(makeUnifiedActionButton("Включить все") {
+            disabledCategories.clear(); manualDisabledUrls.clear(); autoDisabledUrls.clear()
+            saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
+            openChannelEditorGroupsModal(inPlace = true, keepIndex = subModalHighlightedPos)
+        })
+        subModalBottomButtons.addView(makeUnifiedActionButton("Вкл / Выкл группу") {
+            val cat = editableCats.getOrNull(subModalHighlightedPos) ?: return@makeUnifiedActionButton
+            if (disabledCategories.contains(cat)) disabledCategories.remove(cat) else disabledCategories.add(cat)
+            saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
+            openChannelEditorGroupsModal(inPlace = true, keepIndex = subModalHighlightedPos)
+        })
+        subModalBottomButtons.addView(makeUnifiedActionButton("Каналы группы") {
+            val cat = editableCats.getOrNull(subModalHighlightedPos) ?: return@makeUnifiedActionButton
+            selectedEditorCategory = cat
+            navigateToMenu("CHANNEL_EDITOR_ITEMS")
+        })
+
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
     }
 
     private fun openChannelEditorItemsModal(catName: String, inPlace: Boolean = false, keepIndex: Int = -1) {
         val catChannels = allChannels.filter { effectiveCategory(it) == catName }.sortedWith(safeChannelComparator)
         val isCatDisabled = disabledCategories.contains(catName)
-        setSubModalHeaderTitle(catName)
-        subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
-        subModalTopButtons.addView(makeModernButton(if (isCatDisabled) "Включить группу" else "Отключить группу") {
+        setSubModalHeaderTitle(catName, "РД")
+        subModalInputContainer.visibility = View.GONE
+        subModalCustomBody.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalList.visibility = View.VISIBLE
+
+        subModalBottomButtons.removeAllViews()
+        subModalBottomButtons.visibility = View.VISIBLE
+        subModalBottomButtons.addView(makeUnifiedActionButton(if (isCatDisabled) "Включить группу" else "Отключить группу") {
             if (disabledCategories.contains(catName)) disabledCategories.remove(catName) else disabledCategories.add(catName)
-            saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = subModalHighlightedPos)
+            saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
+            openChannelEditorItemsModal(catName, inPlace = true, keepIndex = subModalHighlightedPos)
         })
-        subModalTopButtons.addView(makeModernButton("Включить все") {
+        subModalBottomButtons.addView(makeUnifiedActionButton("Включить все") {
             catChannels.forEach { manualDisabledUrls.remove(it.url); autoDisabledUrls.remove(it.url) }
-            disabledCategories.remove(catName); saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = subModalHighlightedPos)
+            disabledCategories.remove(catName); saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
+            openChannelEditorItemsModal(catName, inPlace = true, keepIndex = subModalHighlightedPos)
         })
         updateSubModalListItems(
             catChannels.map { ch ->
@@ -2884,7 +4014,8 @@ class MainActivity : AppCompatActivity() {
                 if (manualDisabledUrls.contains(ch.url) || autoDisabledUrls.contains(ch.url)) {
                     manualDisabledUrls.remove(ch.url); autoDisabledUrls.remove(ch.url)
                 } else manualDisabledUrls.add(ch.url)
-                saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex); openChannelEditorItemsModal(catName, inPlace = true, keepIndex = idx)
+                saveState(); updateCategoriesList(); selectCategory(currentCategoryIndex)
+                openChannelEditorItemsModal(catName, inPlace = true, keepIndex = idx)
             }
         }
         if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
@@ -2894,22 +4025,29 @@ class MainActivity : AppCompatActivity() {
         val snapshot = allChannels.filter { !manualDisabledUrls.contains(it.url) }
         val hiddenChannels = snapshot.filter { autoDisabledUrls.contains(it.url) }
         val hiddenCount = hiddenChannels.size
-        setSubModalHeaderTitle("Тест каналов")
-        subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
-            subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
-            subModalTopButtons.addView(makeModernButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Запустить тест") {
+        setSubModalHeaderTitle("Тест каналов", "ТС")
+        subModalInputContainer.visibility = View.GONE
+        subModalCustomBody.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalList.visibility = View.VISIBLE
+
+        if (firstOpen || subModalBottomButtons.childCount == 0 || !isAnalyzerRunning) {
+            subModalBottomButtons.visibility = View.VISIBLE
+            subModalBottomButtons.removeAllViews()
+            subModalBottomButtons.addView(makeUnifiedActionButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Запустить тест", isDanger = isAnalyzerRunning) {
                 if (isAnalyzerRunning) { isAnalyzerRunning = false; analyzerStatusBanner.visibility = View.GONE; openAnalyzerGroupsModal(firstOpen = true) }
                 else { selectedAnalyzerCategory = "Все каналы"; startBackgroundChannelAnalyzer(snapshot, isRescanHidden = false); openAnalyzerGroupsModal(firstOpen = true) }
             })
-            if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ В фон") { collapseAnalyzerToTopBar() })
+            if (isAnalyzerRunning) {
+                subModalBottomButtons.addView(makeUnifiedActionButton("▲ В фон") { collapseAnalyzerToTopBar() })
+            }
             if (!isAnalyzerRunning && hiddenCount > 0) {
-                subModalTopButtons.addView(makeModernButton("↻ Пересканировать ($hiddenCount)") {
+                subModalBottomButtons.addView(makeUnifiedActionButton("↻ Повтор ($hiddenCount)") {
                     selectedAnalyzerCategory = "Все каналы"
                     startBackgroundChannelAnalyzer(hiddenChannels, isRescanHidden = true)
                     openAnalyzerGroupsModal(firstOpen = true)
                 })
-                subModalTopButtons.addView(makeModernButton("↺ Вернуть скрытые ($hiddenCount)") {
+                subModalBottomButtons.addView(makeUnifiedActionButton("↺ Вернуть ($hiddenCount)") {
                     hiddenChannels.forEach { ch ->
                         autoDisabledUrls.remove(ch.url)
                         if (channelHealthMap[ch.url] == false) channelHealthMap.remove(ch.url)
@@ -2946,21 +4084,28 @@ class MainActivity : AppCompatActivity() {
         val groupChans = (if (catName == "Все каналы") snapshot else snapshot.filter { effectiveCategory(it) == catName }).sortedWith(safeChannelComparator)
         val groupHidden = groupChans.filter { autoDisabledUrls.contains(it.url) }
         val groupHiddenCount = groupHidden.size
-        setSubModalHeaderTitle(catName)
-        subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
-            subModalTopButtons.visibility = View.VISIBLE; subModalTopButtons.removeAllViews()
-            subModalTopButtons.addView(makeModernButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Тест группы") {
+        setSubModalHeaderTitle(catName, "ТС")
+        subModalInputContainer.visibility = View.GONE
+        subModalCustomBody.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalList.visibility = View.VISIBLE
+
+        if (firstOpen || subModalBottomButtons.childCount == 0 || !isAnalyzerRunning) {
+            subModalBottomButtons.visibility = View.VISIBLE
+            subModalBottomButtons.removeAllViews()
+            subModalBottomButtons.addView(makeUnifiedActionButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Тест группы", isDanger = isAnalyzerRunning) {
                 if (isAnalyzerRunning) { isAnalyzerRunning = false; analyzerStatusBanner.visibility = View.GONE; openAnalyzerGroupChannelsModal(catName, firstOpen = true) }
                 else { startBackgroundChannelAnalyzer(groupChans, isRescanHidden = false); openAnalyzerGroupChannelsModal(catName, firstOpen = true) }
             })
-            if (isAnalyzerRunning) subModalTopButtons.addView(makeModernButton("▲ В фон") { collapseAnalyzerToTopBar() })
+            if (isAnalyzerRunning) {
+                subModalBottomButtons.addView(makeUnifiedActionButton("▲ В фон") { collapseAnalyzerToTopBar() })
+            }
             if (!isAnalyzerRunning && groupHiddenCount > 0) {
-                subModalTopButtons.addView(makeModernButton("↻ Пересканировать ($groupHiddenCount)") {
+                subModalBottomButtons.addView(makeUnifiedActionButton("↻ Повтор ($groupHiddenCount)") {
                     startBackgroundChannelAnalyzer(groupHidden, isRescanHidden = true)
                     openAnalyzerGroupChannelsModal(catName, firstOpen = true)
                 })
-                subModalTopButtons.addView(makeModernButton("↺ Вернуть ($groupHiddenCount)") {
+                subModalBottomButtons.addView(makeUnifiedActionButton("↺ Вернуть ($groupHiddenCount)") {
                     groupHidden.forEach { ch ->
                         autoDisabledUrls.remove(ch.url)
                         if (channelHealthMap[ch.url] == false) channelHealthMap.remove(ch.url)
@@ -3220,94 +4365,315 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openBufferSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        setSubModalHeaderTitle("Буфер")
-        subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        val opts = listOf(
-            "Стандартный   •   3–8 сек",
-            "Оптимальный   •   5–12 сек",
-            "Анти-фриз   •   8–18 сек",
-            "Максимальный   •   12–25 сек"
-        ).mapIndexed { i, t -> (if (i == bufferLevel) "[+]   " else "[-]   ") + t }.toMutableList()
-        opts.add("[>]   Отмотать эфир -20 сек")
-        opts.add("[>]   Отмотать эфир -45 сек")
-        opts.add("[>]   Лог ошибок")
-        val targetIdx = if (keepIndex >= 0) keepIndex else bufferLevel
-        updateSubModalListItems(opts, smoothToggle = inPlace, preservePositionIndex = targetIdx)
-        subModalList.setOnItemClickListener { _, _, which, _ ->
-            when (which) {
-                in 0..3 -> {
-                    bufferLevel = which
-                    CoreEngines.appendDiagLog("BUFFER_MODE", "Установлен уровень буфера: $which")
-                    saveState(); initPlayer(); openBufferSubModal(inPlace = true, keepIndex = which)
-                }
-                4 -> { rewindLiveBufferSeconds(20); closeAllMenus() }
-                5 -> { rewindLiveBufferSeconds(45); closeAllMenus() }
-                6 -> navigateToMenu("DIAG_LOG_VIEW")
-            }
+        setSubModalHeaderTitle("Буфер", "БФ")
+        subModalInputContainer.visibility = View.GONE
+        subModalList.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalThemesGrid.visibility = View.GONE
+        subModalCustomBody.removeAllViews()
+        subModalCustomBody.visibility = View.VISIBLE
+        subModalCustomBody.orientation = LinearLayout.VERTICAL
+        subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
+        subModalCustomBody.setPadding(16, 16, 16, 14)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val presets = listOf(
+            Triple("Стандарт", "3–8 сек", "Быстрое переключение каналов при стабильном соединении."),
+            Triple("Оптимальный", "5–12 сек", "Сбалансированный режим для плавного эфира в большинстве сетей."),
+            Triple("Анти-фриз", "8–18 сек", "Увеличенный запас буфера против подвисаний и потерь пакетов."),
+            Triple("Максимум", "12–25 сек", "Максимальная устойчивость при нестабильном интернете.")
+        )
+
+        val hintTv = TextView(this).apply {
+            text = presets[bufferLevel.coerceIn(0, 3)].third
+            setTextColor(t.textPrimaryColor)
+            alpha = 0.78f
+            typeface = t.normalFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f * scale)
+            gravity = Gravity.CENTER
+            setPadding(10, (12 * scale).toInt(), 10, 4)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-        if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
+
+        val cardsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            clipChildren = false; clipToPadding = false
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+
+        val cardViews = mutableListOf<LinearLayout>()
+        presets.forEachIndexed { idx, (name, range, desc) ->
+            val card = makeUnifiedPresetCard(
+                titleText = name,
+                subtitleText = range,
+                isSelected = (idx == bufferLevel),
+                onFocused = { hintTv.text = desc }
+            ) {
+                bufferLevel = idx
+                CoreEngines.appendDiagLog("BUFFER_MODE", "Установлен уровень буфера: $idx")
+                saveState(); initPlayer()
+                openBufferSubModal(inPlace = true, keepIndex = idx)
+            }.apply { id = 8300 + idx }
+            cardViews.add(card)
+            cardsRow.addView(card)
+        }
+
+        subModalCustomBody.addView(cardsRow)
+        subModalCustomBody.addView(hintTv)
+
+        subModalBottomButtons.removeAllViews()
+        subModalBottomButtons.visibility = View.VISIBLE
+        val b20 = makeUnifiedActionButton("⏪  Отмотать -20с") { rewindLiveBufferSeconds(20); closeAllMenus() }.apply { id = 8311 }
+        val b45 = makeUnifiedActionButton("⏪  Отмотать -45с") { rewindLiveBufferSeconds(45); closeAllMenus() }.apply { id = 8312 }
+        val bLog = makeUnifiedActionButton("Лог ошибок") { navigateToMenu("DIAG_LOG_VIEW") }.apply { id = 8313 }
+        b20.nextFocusRightId = b45.id; b45.nextFocusLeftId = b20.id
+        b45.nextFocusRightId = bLog.id; bLog.nextFocusLeftId = b45.id
+        val focusCardId = cardViews[bufferLevel.coerceIn(0, cardViews.lastIndex)].id
+        b20.nextFocusUpId = cardViews[0].id
+        b45.nextFocusUpId = focusCardId
+        bLog.nextFocusUpId = cardViews.last().id
+        for (i in cardViews.indices) {
+            cardViews[i].nextFocusLeftId = cardViews[(i - 1 + cardViews.size) % cardViews.size].id
+            cardViews[i].nextFocusRightId = cardViews[(i + 1) % cardViews.size].id
+            cardViews[i].nextFocusDownId = when (i) { 0 -> b20.id; 3 -> bLog.id; else -> b45.id }
+        }
+        subModalBottomButtons.addView(b20)
+        subModalBottomButtons.addView(b45)
+        subModalBottomButtons.addView(bLog)
+
+        if (!inPlace) animateMenuAppear(subModalOverlay)
+        val targetIdx = if (keepIndex in cardViews.indices) keepIndex else bufferLevel.coerceIn(0, cardViews.lastIndex)
+        cardViews[targetIdx].requestFocus()
     }
 
     private fun openDecoderSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        setSubModalHeaderTitle("Декодер")
-        subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        val opts = listOf(
-            "Аппаратный HW",
-            "Автоматический HW + FFmpeg",
-            "Программный SW"
-        ).mapIndexed { i, t -> (if (i == decoderMode) "[+]   " else "[-]   ") + t }.toMutableList()
-        opts.add(if (pixelOrbiterEnabled) "[ON]   Сдвиг пикселей   •   Вкл" else "[OFF]   Сдвиг пикселей   •   Выкл")
-        opts.add(if (afrEnabled) "[ON]   Авточастота AFR   •   Вкл" else "[OFF]   Авточастота AFR   •   Выкл")
-        val targetIdx = if (keepIndex >= 0) keepIndex else decoderMode
-        updateSubModalListItems(opts, smoothToggle = inPlace, preservePositionIndex = targetIdx)
-        subModalList.setOnItemClickListener { _, _, which, _ ->
-            when (which) {
-                in 0..2 -> { decoderMode = which; saveState(); initPlayer(); openDecoderSubModal(inPlace = true, keepIndex = which) }
-                3 -> { pixelOrbiterEnabled = !pixelOrbiterEnabled; saveState(); stepPixelOrbiter(); openDecoderSubModal(inPlace = true, keepIndex = which) }
-                4 -> { afrEnabled = !afrEnabled; saveState(); openDecoderSubModal(inPlace = true, keepIndex = which) }
+        setSubModalHeaderTitle("Декодер", "ДК")
+        subModalInputContainer.visibility = View.GONE
+        subModalList.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalThemesGrid.visibility = View.GONE
+        subModalBottomButtons.visibility = View.GONE
+        subModalCustomBody.removeAllViews()
+        subModalCustomBody.visibility = View.VISIBLE
+        subModalCustomBody.orientation = LinearLayout.VERTICAL
+        subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
+        subModalCustomBody.setPadding(16, 16, 16, 14)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val dark = isThemeDarkSurface(t.panelBgColor)
+        val modes = listOf(
+            Triple("HW", "Аппаратный", "Минимальная нагрузка на процессор при стандартных кодеках."),
+            Triple("HW + FFmpeg", "Авто", "Рекомендуется для большинства устройств и аудиодорожек AC3 / MP2."),
+            Triple("SW", "Программный", "Резервный режим, если аппаратный декодер даёт артефакты.")
+        )
+
+        val hintTv = TextView(this).apply {
+            text = modes[decoderMode.coerceIn(0, 2)].third
+            setTextColor(t.textPrimaryColor); alpha = 0.78f
+            typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.2f * scale)
+            gravity = Gravity.CENTER
+            setPadding(8, (10 * scale).toInt(), 8, (10 * scale).toInt())
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+
+        val cardsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            clipChildren = false; clipToPadding = false
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val cardViews = mutableListOf<LinearLayout>()
+        modes.forEachIndexed { idx, (name, sub, desc) ->
+            val card = makeUnifiedPresetCard(name, sub, idx == decoderMode, onFocused = { hintTv.text = desc }) {
+                decoderMode = idx; saveState(); initPlayer()
+                openDecoderSubModal(inPlace = true, keepIndex = idx)
+            }.apply { id = 8330 + idx }
+            cardViews.add(card)
+            cardsRow.addView(card)
+        }
+
+        val divider = View(this).apply {
+            setBackgroundColor(if (dark) Color.argb(36, 255, 255, 255) else Color.argb(32, 0, 0, 0))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1).apply {
+                setMargins(4, (4 * scale).toInt(), 4, (8 * scale).toInt())
             }
         }
-        if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
+
+        val rowOrbiter = makeUnifiedSettingRow(
+            "Сдвиг пикселей (защита экрана)",
+            if (pixelOrbiterEnabled) "ВКЛ" else "ВЫКЛ",
+            if (pixelOrbiterEnabled) 1 else 2
+        ) {
+            pixelOrbiterEnabled = !pixelOrbiterEnabled; saveState(); stepPixelOrbiter()
+            openDecoderSubModal(inPlace = true, keepIndex = 3)
+        }.apply { id = 8335 }
+
+        val rowAfr = makeUnifiedSettingRow(
+            "Авточастота кадров (AFR)",
+            if (afrEnabled) "ВКЛ" else "ВЫКЛ",
+            if (afrEnabled) 1 else 2
+        ) {
+            afrEnabled = !afrEnabled; saveState()
+            openDecoderSubModal(inPlace = true, keepIndex = 4)
+        }.apply { id = 8336 }
+
+        for (i in cardViews.indices) {
+            cardViews[i].nextFocusLeftId = cardViews[(i - 1 + cardViews.size) % cardViews.size].id
+            cardViews[i].nextFocusRightId = cardViews[(i + 1) % cardViews.size].id
+            cardViews[i].nextFocusDownId = rowOrbiter.id
+        }
+        rowOrbiter.nextFocusUpId = cardViews[decoderMode.coerceIn(0, 2)].id
+        rowOrbiter.nextFocusDownId = rowAfr.id
+        rowAfr.nextFocusUpId = rowOrbiter.id
+
+        subModalCustomBody.addView(cardsRow)
+        subModalCustomBody.addView(hintTv)
+        subModalCustomBody.addView(divider)
+        subModalCustomBody.addView(rowOrbiter)
+        subModalCustomBody.addView(rowAfr)
+
+        if (!inPlace) animateMenuAppear(subModalOverlay)
+        val focusTarget: View = when (keepIndex) {
+            in 0..2 -> cardViews[keepIndex]
+            3 -> rowOrbiter
+            4 -> rowAfr
+            else -> cardViews[decoderMode.coerceIn(0, 2)]
+        }
+        focusTarget.requestFocus()
     }
 
     private fun openAudioSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
         val p = player ?: return
-        setSubModalHeaderTitle("Звук")
-        subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
-        val labels = mutableListOf<String>()
-        labels.add(if (drcNightAudioEnabled) "[ON]   Выравнивание DRC   •   Вкл" else "[OFF]   Выравнивание DRC   •   Выкл")
-        labels.add("[+]   Усиление громкости   •   ${audioBoostPercent}%")
+        setSubModalHeaderTitle("Звук и DRC", "ЗВ")
+        subModalInputContainer.visibility = View.GONE
+        subModalList.visibility = View.GONE
+        subModalTopButtons.visibility = View.GONE
+        subModalThemesGrid.visibility = View.GONE
+        subModalBottomButtons.visibility = View.GONE
+        subModalCustomBody.removeAllViews()
+        subModalCustomBody.visibility = View.VISIBLE
+        subModalCustomBody.orientation = LinearLayout.VERTICAL
+        subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
+        subModalCustomBody.setPadding(16, 14, 16, 14)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+
+        val t = currentTheme()
+        val scale = uiScaleFactor()
+        val rowDrc = makeUnifiedSettingRow(
+            "Выравнивание DRC (ночной режим)",
+            if (drcNightAudioEnabled) "ВКЛ" else "ВЫКЛ",
+            if (drcNightAudioEnabled) 1 else 2
+        ) {
+            drcNightAudioEnabled = !drcNightAudioEnabled; saveState(); applyAudioEnhancements()
+            openAudioSubModal(inPlace = true, keepIndex = 0)
+        }.apply { id = 8350 }
+        subModalCustomBody.addView(rowDrc)
+
+        val boostLabel = TextView(this).apply {
+            text = "Усиление громкости"
+            setTextColor(t.textPrimaryColor); alpha = 0.74f
+            typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
+            setPadding((8 * scale).toInt(), (10 * scale).toInt(), 4, (4 * scale).toInt())
+        }
+        subModalCustomBody.addView(boostLabel)
+
+        val boostSteps = listOf(100, 130, 160, 200)
+        val boostRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            clipChildren = false; clipToPadding = false
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val boostCards = mutableListOf<LinearLayout>()
+        boostSteps.forEachIndexed { idx, pct ->
+            val card = makeUnifiedPresetCard("$pct%", "", audioBoostPercent == pct) {
+                audioBoostPercent = pct; saveState(); applyAudioEnhancements()
+                openAudioSubModal(inPlace = true, keepIndex = 1 + idx)
+            }.apply { id = 8351 + idx }
+            boostCards.add(card)
+            boostRow.addView(card)
+        }
+        subModalCustomBody.addView(boostRow)
+
+        val tracksLabel = TextView(this).apply {
+            text = "Аудиодорожки"
+            setTextColor(t.textPrimaryColor); alpha = 0.74f
+            typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
+            setPadding((8 * scale).toInt(), (10 * scale).toInt(), 4, (4 * scale).toInt())
+        }
+        subModalCustomBody.addView(tracksLabel)
 
         val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-        val overrides = mutableListOf<TrackSelectionOverride>()
+        val trackRows = mutableListOf<LinearLayout>()
+        var trackCounter = 0
         for (g in groups) {
             for (i in 0 until g.length) {
                 val fmt = g.getTrackFormat(i)
                 val codec = fmt.sampleMimeType?.substringAfter("/")?.uppercase() ?: "AUDIO"
-                val lang = fmt.language?.uppercase() ?: ("Дорожка " + (overrides.size + 1))
-                labels.add((if (g.isTrackSelected(i)) "[+]   " else "[-]   ") + "Аудиодорожка: $lang   •   $codec")
-                overrides.add(TrackSelectionOverride(g.mediaTrackGroup, i))
+                val lang = fmt.language?.uppercase() ?: ("Дорожка " + (trackCounter + 1))
+                val isSel = g.isTrackSelected(i)
+                val ov = TrackSelectionOverride(g.mediaTrackGroup, i)
+                val myTrackIdx = trackCounter
+                val tRow = makeUnifiedSettingRow(
+                    "$lang  •  $codec",
+                    if (isSel) "АКТИВНА" else "ВЫБРАТЬ",
+                    if (isSel) 1 else 0
+                ) {
+                    p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setOverrideForType(ov).build()
+                    openAudioSubModal(inPlace = true, keepIndex = 5 + myTrackIdx)
+                }.apply { id = View.generateViewId() }
+                trackRows.add(tRow)
+                subModalCustomBody.addView(tRow)
+                trackCounter++
             }
         }
-        val targetIdx = if (keepIndex >= 0) keepIndex else 0
-        updateSubModalListItems(labels, smoothToggle = inPlace, preservePositionIndex = targetIdx)
-        subModalList.setOnItemClickListener { _, _, idx, _ ->
-            when (idx) {
-                0 -> { drcNightAudioEnabled = !drcNightAudioEnabled; saveState(); applyAudioEnhancements(); openAudioSubModal(inPlace = true, keepIndex = idx) }
-                1 -> {
-                    audioBoostPercent = when (audioBoostPercent) { 100 -> 130; 130 -> 160; 160 -> 200; else -> 100 }
-                    saveState(); applyAudioEnhancements(); openAudioSubModal(inPlace = true, keepIndex = idx)
-                }
-                else -> {
-                    val ovIdx = idx - 2
-                    if (ovIdx in overrides.indices) {
-                        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setOverrideForType(overrides[ovIdx]).build()
-                        openAudioSubModal(inPlace = true, keepIndex = idx)
-                    }
-                }
+        if (trackRows.isEmpty()) {
+            subModalCustomBody.addView(TextView(this).apply {
+                text = "Используется основная аудиодорожка потока"
+                setTextColor(t.textPrimaryColor); alpha = 0.65f
+                typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.2f * scale)
+                setPadding((10 * scale).toInt(), (4 * scale).toInt(), 8, (4 * scale).toInt())
+            })
+        }
+
+        val activeBoostIdx = boostSteps.indexOf(audioBoostPercent).coerceAtLeast(0)
+        rowDrc.nextFocusDownId = boostCards[activeBoostIdx].id
+        for (i in boostCards.indices) {
+            boostCards[i].nextFocusLeftId = boostCards[(i - 1 + boostCards.size) % boostCards.size].id
+            boostCards[i].nextFocusRightId = boostCards[(i + 1) % boostCards.size].id
+            boostCards[i].nextFocusUpId = rowDrc.id
+            if (trackRows.isNotEmpty()) boostCards[i].nextFocusDownId = trackRows.first().id
+        }
+        if (trackRows.isNotEmpty()) {
+            trackRows.first().nextFocusUpId = boostCards[activeBoostIdx].id
+            for (i in trackRows.indices) {
+                if (i > 0) trackRows[i].nextFocusUpId = trackRows[i - 1].id
+                if (i + 1 < trackRows.size) trackRows[i].nextFocusDownId = trackRows[i + 1].id
             }
         }
-        if (!inPlace) { animateMenuAppear(subModalOverlay); subModalList.requestFocus() }
+
+        if (!inPlace) animateMenuAppear(subModalOverlay)
+        val focusTarget: View = when {
+            keepIndex == 0 -> rowDrc
+            keepIndex in 1..4 -> boostCards[(keepIndex - 1).coerceIn(0, boostCards.lastIndex)]
+            keepIndex >= 5 -> trackRows.getOrNull(keepIndex - 5) ?: rowDrc
+            else -> rowDrc
+        }
+        focusTarget.requestFocus()
     }
 
     private fun openInputSubModal(title: String, initialValue: String, onSave: (String) -> Unit) {
@@ -3910,17 +5276,29 @@ class MainActivity : AppCompatActivity() {
         subModalOverlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
             setPadding(26, 20, 26, 20)
-            layoutParams = FrameLayout.LayoutParams(960, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER).apply {
+            layoutParams = FrameLayout.LayoutParams(960, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER).apply {
                 setMargins(28, 20, 28, 20)
             }
         }
-        subModalTitle = TextView(this).apply {
-            setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 19.5f)
-            typeface = themeBoldFont(); gravity = Gravity.CENTER_HORIZONTAL
+        subModalHeaderRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
             setPadding(4, 2, 4, 14)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-        subModalOverlay.addView(subModalTitle)
+        subModalBadgeView = TextView(this).apply {
+            text = "TV"
+            styleModalMonogramBadge(this)
+        }
+        subModalTitle = TextView(this).apply {
+            setTextColor(currentTheme().textPrimaryColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
+            typeface = themeBoldFont(); gravity = Gravity.CENTER_VERTICAL
+            isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        subModalHeaderRow.addView(subModalBadgeView)
+        subModalHeaderRow.addView(subModalTitle)
+        subModalOverlay.addView(subModalHeaderRow)
 
         subModalTopButtons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
@@ -3930,6 +5308,14 @@ class MainActivity : AppCompatActivity() {
 
         subModalInputContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         subModalOverlay.addView(subModalInputContainer)
+
+        subModalCustomBody = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false; clipToPadding = false
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        subModalOverlay.addView(subModalCustomBody)
 
         subModalThemesGrid = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -3976,6 +5362,12 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
         subModalOverlay.addView(subModalList)
+        subModalBottomButtons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+            visibility = View.GONE; setPadding(0, 12, 0, 2)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        subModalOverlay.addView(subModalBottomButtons)
         rootFrame.addView(subModalOverlay)
 
         currentChannelBanner = TextView(this).apply {
@@ -4140,8 +5532,12 @@ class MainActivity : AppCompatActivity() {
         scheduleSilentStartupUpdateCheck()
     }
 
-    internal fun setSubModalHeaderTitle(baseTitle: String) {
+    internal fun setSubModalHeaderTitle(baseTitle: String, badgeCode: String = "") {
         subModalBaseTitleText = baseTitle
+        if (::subModalBadgeView.isInitialized) {
+            subModalBadgeView.text = badgeCode.ifBlank { resolveMonogramForTitle(baseTitle) }
+            styleModalMonogramBadge(subModalBadgeView)
+        }
         updateSubModalTitleWithCounter()
     }
 
@@ -4378,50 +5774,95 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun makeSymmetricDeviceButton(isTv: Boolean, labelText: String, onSelect: () -> Unit): LinearLayout {
+    private fun makeSymmetricDeviceButton(
+        isTv: Boolean,
+        labelText: String,
+        subtitleText: String,
+        isActiveMode: Boolean,
+        onSelect: () -> Unit
+    ): LinearLayout {
         val t = currentTheme()
         val scale = uiScaleFactor()
-        val iconSize = (76 * scale).toInt().coerceIn(60, 108)
-        val cardH = (210 * scale).toInt().coerceIn(170, 270)
+        val dark = isThemeDarkSurface(t.panelBgColor)
+        val iconSize = (64 * scale).toInt().coerceIn(52, 92)
+        val cardH = (210 * scale).toInt().coerceIn(176, 268)
+
+        val checkBadge = TextView(this).apply {
+            text = "✓"
+            setTextColor(Color.WHITE)
+            typeface = t.boldFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f * scale)
+            gravity = Gravity.CENTER
+            visibility = if (isActiveMode) View.VISIBLE else View.INVISIBLE
+            val sz = (22 * scale).toInt().coerceIn(20, 28)
+            layoutParams = LinearLayout.LayoutParams(sz, sz).apply {
+                gravity = Gravity.END
+                bottomMargin = (4 * scale).toInt()
+            }
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(Color.parseColor("#22C55E"))
+                cornerRadius = 999f
+            })
+        }
         val iconView = DeviceGlyphIconView(this, isTv).apply {
-            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply { bottomMargin = (14 * scale).toInt() }
+            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply { bottomMargin = (10 * scale).toInt() }
         }
         val labelView = TextView(this).apply {
             text = labelText
             setTextColor(t.textPrimaryColor)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17.5f * scale)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.5f * scale)
             typeface = t.boldFont
             gravity = Gravity.CENTER
             isSingleLine = true; maxLines = 1
         }
+        val subView = TextView(this).apply {
+            text = subtitleText
+            setTextColor(t.textPrimaryColor)
+            alpha = 0.76f
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.6f * scale)
+            typeface = t.normalFont
+            gravity = Gravity.CENTER
+            maxLines = 2
+            setPadding(4, (6 * scale).toInt(), 4, 0)
+        }
         fun applyCardStyle(container: LinearLayout, focused: Boolean) {
             val curT = currentTheme()
-            val bgCol = if (focused) {
-                Color.argb(65, Color.red(curT.accentColor), Color.green(curT.accentColor), Color.blue(curT.accentColor))
-            } else {
-                curT.cardBgColor
+            val bgCol = when {
+                focused -> curT.accentColor
+                isActiveMode -> Color.argb(66, Color.red(curT.accentColor), Color.green(curT.accentColor), Color.blue(curT.accentColor))
+                else -> if (dark) Color.argb(68, 0, 0, 0) else Color.argb(24, 0, 0, 0)
             }
-            val strokeCol = if (focused) curT.accentColor else curT.strokeColor
+            val strokeCol = when {
+                focused -> Color.WHITE
+                isActiveMode -> curT.accentColor
+                else -> curT.strokeColor
+            }
             container.setBackgroundDrawable(GradientDrawable().apply {
                 setColor(bgCol)
-                cornerRadius = 22f * scale
-                setStroke(if (focused) 4 else 2, strokeCol)
+                cornerRadius = 20f * scale
+                setStroke(if (focused) 3 else if (isActiveMode) 2 else 1, strokeCol)
             })
-            iconView.glyphColor = if (focused) Color.WHITE else curT.textPrimaryColor
-            labelView.setTextColor(if (focused) Color.WHITE else curT.textPrimaryColor)
+            val fg = if (focused) curT.textOnAccent else curT.textPrimaryColor
+            iconView.glyphColor = fg
+            labelView.setTextColor(fg)
+            subView.setTextColor(fg)
+            subView.alpha = if (focused) 0.92f else 0.74f
             container.animate().scaleX(if (focused) 1.03f else 1f).scaleY(if (focused) 1.03f else 1f).setDuration(140L).start()
         }
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_HORIZONTAL
             isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-            setPadding((24 * scale).toInt(), (24 * scale).toInt(), (24 * scale).toInt(), (24 * scale).toInt())
+            val p = (18 * scale).toInt().coerceAtLeast(14)
+            setPadding(p, (12 * scale).toInt(), p, p)
             layoutParams = LinearLayout.LayoutParams(0, cardH, 1f).apply {
-                val m = (14 * scale).toInt()
-                setMargins(m, 8, m, 8)
+                val m = (10 * scale).toInt()
+                setMargins(m, 6, m, 6)
             }
+            addView(checkBadge)
             addView(iconView)
             addView(labelView)
+            addView(subView)
             applyCardStyle(this, false)
             setOnFocusChangeListener { _, hasFocus -> applyCardStyle(this, hasFocus) }
             setOnClickListener { onSelect() }
@@ -4430,39 +5871,63 @@ class MainActivity : AppCompatActivity() {
 
     internal fun buildFirstRunControlPickerView() {
         firstRunModeOverlay.removeAllViews()
-        val dm = resources.displayMetrics
         val scale = uiScaleFactor()
-        val cardW = (dm.widthPixels * 0.62f).toInt().coerceIn(660, 1080)
+        val t = currentTheme()
+        val cardW = computeCenteredModalWidth(0.58f, 620, 1020)
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setBackgroundDrawable(makeThemedPanelBg()); setPadding(44, 34, 44, 38)
+            setBackgroundDrawable(makeThemedPanelBg()); setPadding(28, 22, 28, 24)
             layoutParams = FrameLayout.LayoutParams(cardW, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+        }
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
+            setPadding(4, 2, 4, 16)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val badge = TextView(this).apply {
+            text = "УП"
+            styleModalMonogramBadge(this)
         }
         val title = TextView(this).apply {
             text = "Управление"
-            setTextColor(currentTheme().accentColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f * scale)
-            typeface = themeBoldFont(); gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 24)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            setTextColor(t.textPrimaryColor); setTextSize(TypedValue.COMPLEX_UNIT_SP, 19.5f * scale)
+            typeface = themeBoldFont(); gravity = Gravity.CENTER_VERTICAL
         }
-        card.addView(title)
+        headerRow.addView(badge); headerRow.addView(title)
+        card.addView(headerRow)
 
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; weightSum = 2f
+            setBackgroundDrawable(makeThemedSubBg())
+            setPadding(12, 12, 12, 12)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-        val btnTouchMode = makeSymmetricDeviceButton(isTv = false, labelText = "Смартфон") {
-            controlMode = 1; uiScaleStep = 0; cameraCutoutSafeOffset = true; screenAspectMode = 0
-            applyScreenAspectMode(); applyCurrentThemeToAllPanels(); saveState()
-            enableTrueFullScreenImmersion(); firstRunModeOverlay.visibility = View.GONE
-        }
-        val btnRemoteMode = makeSymmetricDeviceButton(isTv = true, labelText = "Телевизор") {
+        val btnRemoteMode = makeSymmetricDeviceButton(
+            isTv = true,
+            labelText = "Пульт ТВ",
+            subtitleText = "Крупный шрифт и фокус стрелками",
+            isActiveMode = (controlMode == 2)
+        ) {
             controlMode = 2; uiScaleStep = 1; cameraCutoutSafeOffset = false
             applyCurrentThemeToAllPanels(); saveState()
             enableTrueFullScreenImmersion(); firstRunModeOverlay.visibility = View.GONE
-        }
+        }.apply { id = 8451 }
 
-        row.addView(btnTouchMode); row.addView(btnRemoteMode)
+        val btnTouchMode = makeSymmetricDeviceButton(
+            isTv = false,
+            labelText = "Смартфон / Планшет",
+            subtitleText = "Свайпы, касания и отступ под камеру",
+            isActiveMode = (controlMode == 1)
+        ) {
+            controlMode = 1; uiScaleStep = 0; cameraCutoutSafeOffset = true; screenAspectMode = 0
+            applyScreenAspectMode(); applyCurrentThemeToAllPanels(); saveState()
+            enableTrueFullScreenImmersion(); firstRunModeOverlay.visibility = View.GONE
+        }.apply { id = 8452 }
+
+        btnRemoteMode.nextFocusRightId = btnTouchMode.id
+        btnTouchMode.nextFocusLeftId = btnRemoteMode.id
+
+        row.addView(btnRemoteMode); row.addView(btnTouchMode)
         card.addView(row); firstRunModeOverlay.addView(card)
     }
 
@@ -4472,7 +5937,7 @@ class MainActivity : AppCompatActivity() {
             animateMenuAppear(firstRunModeOverlay, 0f, 20f)
             val card = firstRunModeOverlay.getChildAt(0) as? LinearLayout
             val row = card?.getChildAt(1) as? LinearLayout
-            row?.getChildAt(if (controlMode == 1) 0 else 1)?.requestFocus()
+            row?.getChildAt(if (controlMode == 1) 1 else 0)?.requestFocus()
         }
     }
 
@@ -4892,22 +6357,47 @@ class MainActivity : AppCompatActivity() {
         currentChannelBanner.visibility = View.GONE
         subModalTopButtons.visibility = View.GONE
         subModalTopButtons.removeAllViews()
+        if (::subModalInputContainer.isInitialized) {
+            subModalInputContainer.visibility = View.GONE
+            subModalInputContainer.removeAllViews()
+        }
+        if (::subModalCustomBody.isInitialized) {
+            subModalCustomBody.visibility = View.GONE
+            subModalCustomBody.removeAllViews()
+        }
+        if (::subModalBottomButtons.isInitialized) {
+            subModalBottomButtons.visibility = View.GONE
+            subModalBottomButtons.removeAllViews()
+        }
         if (::subModalThemesGrid.isInitialized) subModalThemesGrid.visibility = View.GONE
-        if (::subModalList.isInitialized) subModalList.onItemLongClickListener = null
+        if (::subModalList.isInitialized) {
+            subModalList.visibility = View.GONE
+            subModalList.onItemLongClickListener = null
+        }
 
-        val dm = resources.displayMetrics
-        val isCompactInput = (menuId == "EPG" || menuId == "ADD_URL" || menuId == "UPDATE_PROMPT")
-        val modalWidthPx = if (menuId == "UPDATE_PROMPT") {
-            (dm.widthPixels * 0.62f).toInt().coerceIn(660, 1080)
+        val isWrapHeight = menuId in listOf(
+            "BUFFER", "DECODER", "AUDIO", "EPG", "ADD_URL", "RENAME_PLAYLIST", "UPDATE_PROMPT"
+        )
+        val modalWidthPx = when (menuId) {
+            "PLAYLISTS", "FULL_EPG", "MORE_SETTINGS", "THEMES" -> computeCenteredModalWidth(0.65f, 700, 1180)
+            "DIAG_LOG_VIEW", "ANALYZER_GROUPS", "ANALYZER_GROUP_VIEW", "CHANNEL_EDITOR_GROUPS", "CHANNEL_EDITOR_ITEMS" -> computeCenteredModalWidth(0.64f, 680, 1160)
+            else -> computeCenteredModalWidth(0.58f, 620, 1060)
+        }
+        val modalHeightPx = if (isWrapHeight) {
+            FrameLayout.LayoutParams.WRAP_CONTENT
         } else {
-            (dm.widthPixels * 0.84f).toInt().coerceIn(860, 1640)
+            when (menuId) {
+                "BRIGHTNESS_MENU", "CHANNEL_ACTIONS" -> computeCenteredModalHeight(0.46f, 340, 520)
+                "POWER_AND_SLEEP_MENU", "TOP_MANAGER" -> computeCenteredModalHeight(0.58f, 400, 660)
+                else -> computeCenteredModalHeight(0.68f, 440, 760)
+            }
         }
         subModalOverlay.layoutParams = FrameLayout.LayoutParams(
             modalWidthPx,
-            if (isCompactInput) FrameLayout.LayoutParams.WRAP_CONTENT else FrameLayout.LayoutParams.MATCH_PARENT,
+            modalHeightPx,
             Gravity.CENTER
         ).apply {
-            setMargins(28, 66, 28, 24)
+            setMargins(24, 36, 24, 24)
         }
 
         when (menuId) {
@@ -4971,6 +6461,7 @@ class MainActivity : AppCompatActivity() {
                 if (newVal.isNotEmpty()) { epgUrl = newVal; saveState(); loadEpgOncePerDayInBackground(forceRefresh = true) }
             }
             "ADD_URL" -> openAddUrlSubModal()
+            "RENAME_PLAYLIST" -> openRenamePlaylistSubModal()
             "UPDATE_PROMPT" -> openUpdateAvailablePromptModal()
         }
     }
@@ -5757,7 +7248,7 @@ class MainActivity : AppCompatActivity() {
                             epgById.putAll(mergedById); epgByName.putAll(mergedByName)
                             epgLoadedCount = totalProgramsCount
                             if (centerOsdPanel.visibility == View.VISIBLE) updateCenterOsdContent()
-                            if (fullEpgOverlay.visibility == View.VISIBLE) openFullScreenChannelEpg()
+                            if (menuHistory.lastOrNull() == "FULL_EPG") openFullScreenChannelEpg()
                         }
                         break
                     }
@@ -6576,7 +8067,7 @@ class MainActivity : AppCompatActivity() {
         updateSignalIndicator()
         if (centerOsdPanel.visibility == View.VISIBLE) updateCenterOsdContent()
         if (infoPanel.visibility == View.VISIBLE) updateStreamInfoText()
-        if (fullEpgOverlay.visibility == View.VISIBLE) openFullScreenChannelEpg()
+        if (menuHistory.lastOrNull() == "FULL_EPG") openFullScreenChannelEpg()
     }
 
     internal val preloadNeighborsRunnable = Runnable { currentChannel?.let { preloadNeighboringChannels(it) } }
@@ -7613,8 +9104,9 @@ class StructuredStatsRowView(context: Context) : LinearLayout(context) {
                 progressBar.redFraction = 0f
             }
         } else {
-            rightSecondaryTv.visibility = GONE
-            rightPrimaryTv.text = "${data.primaryCount} / ${data.secondaryCount}"
+            rightSecondaryTv.visibility = VISIBLE
+            rightPrimaryTv.text = "${data.primaryCount}/${data.secondaryCount}"
+            rightSecondaryTv.text = if (data.isEnabled) "ВКЛ" else "ВЫКЛ"
             progressBar.greenFraction = if (total > 0 && data.isEnabled) {
                 data.primaryCount.toFloat() / total.toFloat()
             } else {
@@ -7659,10 +9151,20 @@ class StructuredStatsRowView(context: Context) : LinearLayout(context) {
             progressBar.redColor = Color.parseColor("#EF4444")
 
             if (data?.isAnalyzerMode == true) {
+                rightSecondaryTv.setBackgroundDrawable(null)
+                rightSecondaryTv.setPadding(0, 0, 0, 0)
                 rightPrimaryTv.setTextColor(if (accentIsLight) Color.parseColor("#0B5D2E") else Color.parseColor("#86EFAC"))
                 rightSecondaryTv.setTextColor(if (accentIsLight) Color.parseColor("#991B1B") else Color.parseColor("#FCA5A5"))
             } else {
                 rightPrimaryTv.setTextColor(theme.textOnAccent)
+                val enabled = data?.isEnabled == true
+                rightSecondaryTv.gravity = Gravity.CENTER
+                rightSecondaryTv.setPadding((10 * scale).toInt(), (3 * scale).toInt(), (10 * scale).toInt(), (3 * scale).toInt())
+                rightSecondaryTv.setBackgroundDrawable(GradientDrawable().apply {
+                    setColor(if (enabled) Color.parseColor("#22C55E") else Color.argb(120, 15, 23, 42))
+                    cornerRadius = 999f
+                })
+                rightSecondaryTv.setTextColor(if (enabled) Color.parseColor("#052E16") else Color.WHITE)
             }
         } else {
             val darkSurface = isDarkColor(theme.panelBgColor)
@@ -7677,10 +9179,20 @@ class StructuredStatsRowView(context: Context) : LinearLayout(context) {
             progressBar.redColor = Color.parseColor("#EF4444")
 
             if (data?.isAnalyzerMode == true) {
+                rightSecondaryTv.setBackgroundDrawable(null)
+                rightSecondaryTv.setPadding(0, 0, 0, 0)
                 rightPrimaryTv.setTextColor(if (darkSurface) Color.parseColor("#4ADE80") else Color.parseColor("#15803D"))
                 rightSecondaryTv.setTextColor(if (darkSurface) Color.parseColor("#F87171") else Color.parseColor("#DC2626"))
             } else {
                 rightPrimaryTv.setTextColor(theme.textPrimaryColor)
+                val enabled = data?.isEnabled == true
+                rightSecondaryTv.gravity = Gravity.CENTER
+                rightSecondaryTv.setPadding((10 * scale).toInt(), (3 * scale).toInt(), (10 * scale).toInt(), (3 * scale).toInt())
+                rightSecondaryTv.setBackgroundDrawable(GradientDrawable().apply {
+                    setColor(if (enabled) Color.parseColor("#22C55E") else if (darkSurface) Color.argb(72, 148, 163, 184) else Color.argb(65, 100, 116, 139))
+                    cornerRadius = 999f
+                })
+                rightSecondaryTv.setTextColor(if (enabled) Color.parseColor("#052E16") else if (darkSurface) Color.parseColor("#E2E8F0") else Color.parseColor("#334155"))
             }
         }
     }
