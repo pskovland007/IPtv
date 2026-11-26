@@ -2588,26 +2588,224 @@ class MainActivity : AppCompatActivity() {
         subModalList.requestFocus()
     }
 
+    private fun isExportableUrlPlaylist(p: PlaylistEntry): Boolean {
+        if (p.isLocal) return false
+        if (p.source == "BUILTIN_OPEN_RU" || p.source == "BUILTIN_STRICT_RU_ONLY") return false
+        return p.source.startsWith("http://", ignoreCase = true) || p.source.startsWith("https://", ignoreCase = true)
+    }
+
+    private fun buildSafePlaylistFileName(title: String, sourceUrl: String): String {
+        val cleaned = title
+            .replace(Regex("[\\\\/:*?\"<>|\\r\\n\\t]+"), "_")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .trim('.')
+            .take(64)
+            .ifBlank { "TiViLook_playlist" }
+        val lowName = cleaned.lowercase(Locale.US)
+        if (lowName.endsWith(".m3u8") || lowName.endsWith(".m3u")) return cleaned
+        val urlPath = sourceUrl.substringBefore("?").substringBefore("#").lowercase(Locale.US)
+        val ext = if (urlPath.endsWith(".m3u")) ".m3u" else ".m3u8"
+        return cleaned + ext
+    }
+
+    private fun writePlaylistBytesToDownloadsSafely(fileName: String, contentBytes: ByteArray): Pair<Boolean, String> {
+        val ext = fileName.substringAfterLast('.', "m3u8").lowercase(Locale.US)
+        val mimeType = android.webkit.MimeTypeMap.getSingleton()
+            .getMimeTypeFromExtension(ext)
+            ?: "application/octet-stream"
+
+        // 1. Android 10–16: сохраняем в публичный Download через MediaStore с перезаписью без дублей
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                var existingUri: Uri? = null
+                try {
+                    contentResolver.query(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        arrayOf(MediaStore.Downloads._ID),
+                        "${MediaStore.Downloads.DISPLAY_NAME}=?",
+                        arrayOf(fileName),
+                        null
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val id = cursor.getLong(0)
+                            existingUri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id.toString())
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                if (existingUri != null) {
+                    try {
+                        contentResolver.openOutputStream(existingUri!!, "wt")?.use { output ->
+                            output.write(contentBytes)
+                            output.flush()
+                        } ?: throw IOException("openOutputStream returned null")
+                        return Pair(true, "Download/$fileName")
+                    } catch (_: Exception) {
+                        try { contentResolver.delete(existingUri!!, null, null) } catch (_: Exception) {}
+                    }
+                }
+
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                    put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + File.separator)
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri != null) {
+                    contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                        output.write(contentBytes)
+                        output.flush()
+                    } ?: throw IOException("openOutputStream returned null")
+                    val doneValues = ContentValues().apply {
+                        put(MediaStore.Downloads.IS_PENDING, 0)
+                    }
+                    contentResolver.update(uri, doneValues, null, null)
+                    val actualName = resolveUriDisplayName(uri).ifBlank { fileName }
+                    return Pair(true, "Download/$actualName")
+                }
+            } catch (e: Exception) {
+                CoreEngines.appendDiagLog("PLAYLIST_EXPORT_ERR", "MediaStore fail ($fileName): ${e.message}")
+            }
+        } else {
+            // 2. Android 9 и ниже (Mi Box TV): прямой путь /storage/emulated/0/Download
+            try {
+                @Suppress("DEPRECATION")
+                val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                if (pubDir != null && (pubDir.exists() || pubDir.mkdirs())) {
+                    val dst = File(pubDir, fileName)
+                    FileOutputStream(dst, false).use { output ->
+                        output.write(contentBytes)
+                        output.flush()
+                    }
+                    if (dst.exists() && dst.length() > 0L) {
+                        try {
+                            MediaScannerConnection.scanFile(this, arrayOf(dst.absolutePath), arrayOf(mimeType), null)
+                        } catch (_: Exception) {}
+                        return Pair(true, "Download/$fileName")
+                    }
+                }
+            } catch (e: Exception) {
+                CoreEngines.appendDiagLog("PLAYLIST_EXPORT_ERR", "Public Download fail ($fileName): ${e.message}")
+            }
+        }
+
+        // 3. Резерв во внутреннюю папку программы, если ОС отказала в доступе к Download
+        return try {
+            val fallbackDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: getExternalFilesDir(null) ?: filesDir
+            if (!fallbackDir.exists()) fallbackDir.mkdirs()
+            val outFile = File(fallbackDir, fileName)
+            FileOutputStream(outFile, false).use { output ->
+                output.write(contentBytes)
+                output.flush()
+            }
+            Pair(false, outFile.absolutePath)
+        } catch (_: Exception) {
+            Pair(false, "")
+        }
+    }
+
+    private fun exportUrlPlaylistToFile(entry: PlaylistEntry) {
+        ensurePublicStoragePermission {
+            val fileName = buildSafePlaylistFileName(entry.title, entry.source)
+            Toast.makeText(this, "Скачивание плейлиста «${entry.title}»...", Toast.LENGTH_SHORT).show()
+            thread {
+                try {
+                    val rawBytes = CoreEngines.openStreamWithBypass(entry.source, userAgentIndex, dohEnabled, 15000).use { input ->
+                        input.readBytes()
+                    }
+                    if (rawBytes.isEmpty()) {
+                        runOnUiThread {
+                            Toast.makeText(this, "Плейлист по ссылке оказался пустым", Toast.LENGTH_LONG).show()
+                        }
+                        return@thread
+                    }
+                    val finalBytes = if (rawBytes.size >= 2 && rawBytes[0] == 0x1F.toByte() && rawBytes[1] == 0x8B.toByte()) {
+                        try {
+                            GZIPInputStream(java.io.ByteArrayInputStream(rawBytes)).use { it.readBytes() }
+                        } catch (_: Exception) {
+                            rawBytes
+                        }
+                    } else {
+                        rawBytes
+                    }
+                    val previewHead = String(finalBytes, 0, finalBytes.size.coerceAtMost(512), Charsets.UTF_8)
+                    if (previewHead.contains("<html", ignoreCase = true) || previewHead.contains("<!doctype html", ignoreCase = true)) {
+                        CoreEngines.appendDiagLog("PLAYLIST_EXPORT_ERR", "Сервер вернул HTML вместо плейлиста для '${entry.title}'")
+                        runOnUiThread {
+                            Toast.makeText(this, "Сервер вернул страницу ошибки вместо плейлиста", Toast.LENGTH_LONG).show()
+                        }
+                        return@thread
+                    }
+                    val (savedToPublic, savedPath) = writePlaylistBytesToDownloadsSafely(fileName, finalBytes)
+                    val sizeLabel = formatByteSizeRu(finalBytes.size.toLong())
+                    CoreEngines.appendDiagLog("PLAYLIST_EXPORT", "title='${entry.title}' size=$sizeLabel public=$savedToPublic path='$savedPath'")
+                    runOnUiThread {
+                        val msg = when {
+                            savedToPublic -> "Плейлист сохранён: $savedPath ($sizeLabel)"
+                            savedPath.isNotBlank() -> "Нет прав на Download (сохранено: $savedPath)"
+                            else -> "Не удалось сохранить файл плейлиста"
+                        }
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    CoreEngines.appendDiagLog("PLAYLIST_EXPORT_ERR", "Ошибка сохранения '${entry.title}': ${e.message}")
+                    runOnUiThread {
+                        Toast.makeText(this, "Ошибка скачивания плейлиста: ${e.message ?: "нет ответа"}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun openExportPlaylistSubModal() {
+        ensureDefaultPlaylists()
+        val urlEntries = playlists.filter { isExportableUrlPlaylist(it) }
+        if (urlEntries.isEmpty()) {
+            navigateBackInMenu()
+            return
+        }
+        setSubModalHeaderTitle("Сохранить плейлист в файл")
+        subModalInputContainer.visibility = View.GONE
+        subModalList.visibility = View.VISIBLE
+        val items = urlEntries.map { "[>]   ${it.title}" }
+        updateSubModalListItems(items, preservePositionIndex = 0)
+
+        subModalList.setOnItemClickListener { _, _, which, _ ->
+            val target = urlEntries.getOrNull(which) ?: return@setOnItemClickListener
+            closeAllMenus()
+            exportUrlPlaylistToFile(target)
+        }
+        animateMenuAppear(subModalOverlay)
+        subModalList.requestFocus()
+    }
+
     private fun openPlaylistsSubModal() {
         ensureDefaultPlaylists()
         setSubModalHeaderTitle("Плейлисты")
         subModalInputContainer.visibility = View.GONE; subModalList.visibility = View.VISIBLE
         val snapshot = playlists.toList()
+        val hasUrlPlaylists = snapshot.any { isExportableUrlPlaylist(it) }
         val hasUserPlaylists = snapshot.any { it.source != "BUILTIN_OPEN_RU" }
         val items = snapshot.mapIndexed { idx, p -> (if (idx == activePlaylistIndex) "[+]   " else "[-]   ") + p.title }.toMutableList()
-        items.add("[>]   Добавить плейлист по ссылке")
-        items.add("[>]   Выбрать файл плейлиста")
-        items.add("[>]   Добавить файл ТВ программы")
-        if (hasUserPlaylists) items.add("[-]   Удалить плейлист")
+        val extraActions = mutableListOf<() -> Unit>()
+        items.add("[>]   Добавить плейлист по ссылке"); extraActions.add { navigateToMenu("ADD_URL") }
+        items.add("[>]   Выбрать файл плейлиста"); extraActions.add { launchSystemPlaylistPicker() }
+        items.add("[>]   Добавить файл ТВ программы"); extraActions.add { launchSystemEpgPicker() }
+        if (hasUrlPlaylists) {
+            items.add("[>]   Сохранить плейлист в файл"); extraActions.add { navigateToMenu("EXPORT_PLAYLIST") }
+        }
+        if (hasUserPlaylists) {
+            items.add("[-]   Удалить плейлист"); extraActions.add { navigateToMenu("DELETE_PLAYLIST") }
+        }
         updateSubModalListItems(items, preservePositionIndex = activePlaylistIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0)))
 
         subModalList.setOnItemClickListener { _, _, which, _ ->
-            when {
-                which < snapshot.size -> { activePlaylistIndex = which; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false) }
-                which == snapshot.size -> navigateToMenu("ADD_URL")
-                which == snapshot.size + 1 -> launchSystemPlaylistPicker()
-                which == snapshot.size + 2 -> launchSystemEpgPicker()
-                hasUserPlaylists && which == snapshot.size + 3 -> navigateToMenu("DELETE_PLAYLIST")
+            if (which < snapshot.size) {
+                activePlaylistIndex = which; saveState(); closeAllMenus(); loadActivePlaylist(autoPlayLast = false)
+            } else {
+                extraActions.getOrNull(which - snapshot.size)?.invoke()
             }
         }
         subModalList.setOnItemLongClickListener { _, _, which, _ ->
@@ -4758,6 +4956,7 @@ class MainActivity : AppCompatActivity() {
             "TOP_MANAGER" -> openTopManagerSubModal(inPlace = false)
             "MORE_SETTINGS" -> openMoreSettingsSubModal(inPlace = false)
             "PLAYLISTS" -> openPlaylistsSubModal()
+            "EXPORT_PLAYLIST" -> openExportPlaylistSubModal()
             "DELETE_PLAYLIST" -> openDeletePlaylistSubModal()
             "CHANNEL_EDITOR_GROUPS" -> openChannelEditorGroupsModal(inPlace = false)
             "CHANNEL_EDITOR_ITEMS" -> openChannelEditorItemsModal(selectedEditorCategory, inPlace = false)
