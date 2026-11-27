@@ -139,8 +139,19 @@ class MainActivity : AppCompatActivity() {
     private var cachedShareTargets: List<ResolveInfo> = emptyList()
     private var cachedShareFileUri: Uri? = null
     private var lastDiagExportTriggerMs: Long = 0L
-    @Volatile private var availableUpdateInfo: GithubApkReleaseInfo? = null
-    private var hasTriggeredStartupUpdateCheck: Boolean = false
+    private val updateManager: UpdateManager by lazy { UpdateManager(this) }
+    private var autoCheckUpdatesEnabled: Boolean = true
+    @Volatile private var availableUpdateInfo: UpdateManager.ReleaseInfo? = null
+    @Volatile private var updateModalRelease: UpdateManager.ReleaseInfo? = null
+    private var updateModalManualCheck: Boolean = false
+    @Volatile private var pendingUpdateRelease: UpdateManager.ReleaseInfo? = null
+    @Volatile private var isUpdateCheckInFlight: Boolean = false
+    private var lastSuccessfulUpdateCheckMs: Long = 0L
+    private var lastPromptedUpdateKey: String = ""
+    private var activeUpdateDownloadHandle: UpdateManager.DownloadHandle? = null
+    private var isUpdateDownloading: Boolean = false
+    private var downloadedUpdateApkFile: File? = null
+    private var onUpdatePermissionResume: (() -> Unit)? = null
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -650,6 +661,8 @@ class MainActivity : AppCompatActivity() {
             val currentMenu = menuHistory.last()
             if ((currentMenu == "ANALYZER_GROUP_VIEW" || currentMenu == "ANALYZER_GROUPS") && isAnalyzerRunning) {
                 collapseAnalyzerToTopBar()
+            } else if (currentMenu == "UPDATE_PROMPT" && (isUpdateDownloading || downloadedUpdateApkFile != null || updateModalManualCheck)) {
+                // Не закрываем окно обновления во время загрузки или ручной проверки
             } else if (currentMenu !in listOf("EPG", "ADD_URL", "RENAME_PLAYLIST", "MANUAL_PATH")) {
                 closeAllMenus()
             }
@@ -865,7 +878,7 @@ class MainActivity : AppCompatActivity() {
             val cur = menuHistory.last()
             val delay = when {
                 (cur == "ANALYZER_GROUP_VIEW" || cur == "ANALYZER_GROUPS") && isAnalyzerRunning -> 5000L
-                cur == "UPDATE_PROMPT" -> 18000L
+                cur == "UPDATE_PROMPT" -> 24000L
                 else -> menuHideDelaySec * 1000L
             }
             uiHandler.postDelayed(autoHideMenuRunnable, delay)
@@ -1058,9 +1071,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyCenteredModalDimensions(menuId: String) {
         val isWrapHeight = menuId in listOf(
-            "EPG", "ADD_URL", "RENAME_PLAYLIST", "UPDATE_PROMPT"
+            "EPG", "ADD_URL", "RENAME_PLAYLIST"
         )
-        val isScrollCardModal = menuId in listOf("BUFFER", "DECODER", "AUDIO")
+        val isScrollCardModal = menuId in listOf("BUFFER", "DECODER", "AUDIO", "UPDATE_PROMPT")
         val modalWidthPx = when (menuId) {
             "PLAYLISTS", "FULL_EPG", "MORE_SETTINGS", "THEMES" -> computeCenteredModalWidth(0.79f)
             "DIAG_LOG_VIEW", "ANALYZER_GROUPS", "ANALYZER_GROUP_VIEW", "CHANNEL_EDITOR_GROUPS", "CHANNEL_EDITOR_ITEMS" -> computeCenteredModalWidth(0.78f)
@@ -2352,7 +2365,7 @@ class MainActivity : AppCompatActivity() {
         val ambiText = when (ambilightMode) { 0 -> "ВЫКЛ"; 1 -> "Группа"; 2 -> "Спектр"; else -> "Кадр" }
         val aspectText = when (screenAspectMode) { 0 -> "По экрану"; 1 -> "16:9"; else -> "Кинозум" }
         val updLabel = availableUpdateInfo?.let { upd ->
-            "Доступна ${upd.tagName.ifBlank { upd.releaseName }.ifBlank { "новая" }}"
+            "Доступна ${upd.versionLabel.ifBlank { upd.tagName }.ifBlank { "новая" }}"
         } ?: "Проверить"
 
         data class SettingSpec(val title: String, val pill: String, val kind: Int, val action: () -> Unit)
@@ -2421,6 +2434,16 @@ class MainActivity : AppCompatActivity() {
                 },
                 SettingSpec("Диагностический файл", formatDiagFileSize(), 0) {
                     openDiagLogInSystemFileManager()
+                },
+                SettingSpec(
+                    "Автопроверка обновлений",
+                    if (autoCheckUpdatesEnabled) "ВКЛ" else "ВЫКЛ",
+                    if (autoCheckUpdatesEnabled) 1 else 2
+                ) {
+                    autoCheckUpdatesEnabled = !autoCheckUpdatesEnabled
+                    saveState()
+                    if (autoCheckUpdatesEnabled) scheduleSilentStartupUpdateCheck(initialDelayMs = 1200L)
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 3)
                 },
                 SettingSpec("Обновление TiViLook", updLabel, if (availableUpdateInfo != null) 3 else 0) {
                     checkAndInstallAppUpdateFromGithub()
@@ -2899,519 +2922,434 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private data class GithubApkReleaseInfo(
-        val tagName: String,
-        val releaseName: String,
-        val apkUrl: String,
-        val apkFileName: String,
-        val updatedAtMs: Long,
-        val sizeBytes: Long
-    )
-
-    private fun parseIso8601UtcMillis(raw: String?): Long {
-        if (raw.isNullOrBlank()) return 0L
-        val clean = raw.trim()
-        val formats = listOf("yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-        for (fmt in formats) {
-            try {
-                val sdf = SimpleDateFormat(fmt, Locale.US)
-                sdf.timeZone = TimeZone.getTimeZone("UTC")
-                val parsed = sdf.parse(clean)
-                if (parsed != null) return parsed.time
-            } catch (_: Exception) {}
-        }
-        return 0L
+    private fun cancelActiveUpdateDownloadIfAny() {
+        activeUpdateDownloadHandle?.cancel()
+        activeUpdateDownloadHandle = null
+        isUpdateDownloading = false
     }
 
-    private fun extractDottedVersionParts(raw: String): List<Int>? {
-        val m = Regex("(\\d+(?:\\.\\d+)+)").find(raw) ?: return null
-        return m.groupValues[1].split('.').mapNotNull { it.toIntOrNull() }.takeIf { it.size >= 2 }
+    private fun showPendingUpdateIfReady() {
+        val pending = pendingUpdateRelease ?: return
+        if (isFinishing || isDestroyed) return
+        if (splashOverlay.visibility == View.VISIBLE || firstRunModeOverlay.visibility == View.VISIBLE) return
+        if (menuHistory.isNotEmpty()) return
+        val relKey = updateManager.releaseUniqueKey(pending)
+        if (relKey == lastPromptedUpdateKey) {
+            pendingUpdateRelease = null
+            return
+        }
+        pendingUpdateRelease = null
+        lastPromptedUpdateKey = relKey
+        updateModalRelease = pending
+        updateModalManualCheck = false
+        navigateToMenu("UPDATE_PROMPT")
     }
 
-    private fun compareVersionParts(a: List<Int>, b: List<Int>): Int {
-        val maxLen = maxOf(a.size, b.size)
-        for (i in 0 until maxLen) {
-            val av = if (i < a.size) a[i] else 0
-            val bv = if (i < b.size) b[i] else 0
-            if (av != bv) return av.compareTo(bv)
-        }
-        return 0
-    }
+    private fun scheduleSilentStartupUpdateCheck(initialDelayMs: Long = 3500L) {
+        if (!autoCheckUpdatesEnabled) return
+        if (isUpdateCheckInFlight) return
+        val nowMs = System.currentTimeMillis()
+        val cooldownMs = 15L * 60L * 1000L
+        if (lastSuccessfulUpdateCheckMs > 0L && (nowMs - lastSuccessfulUpdateCheckMs) < cooldownMs) return
 
-    private fun isGithubReleaseAlreadyInstalled(info: GithubApkReleaseInfo): Pair<Boolean, String> {
-        return try {
-            @Suppress("DEPRECATION")
-            val pInfo = packageManager.getPackageInfo(packageName, 0)
-            val localVerName = (pInfo.versionName ?: "").trim()
-            val localVerCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                pInfo.longVersionCode
-            } else {
-                @Suppress("DEPRECATION")
-                pInfo.versionCode.toLong()
-            }
-            val localInstalledMs = pInfo.lastUpdateTime
-
-            val localSemVer = extractDottedVersionParts(localVerName)
-            val remoteSemVer = extractDottedVersionParts(info.tagName)
-                ?: extractDottedVersionParts(info.releaseName)
-                ?: extractDottedVersionParts(info.apkFileName)
-
-            CoreEngines.appendDiagLog(
-                "UPDATE",
-                "Проверка версии: local=$localVerName (code=$localVerCode, installedMs=$localInstalledMs) vs remoteTag=${info.tagName} (updatedMs=${info.updatedAtMs})"
-            )
-
-            // 1. Если у релиза и у приложения есть числовая версия вида X.Y(.Z) — сравниваем её
-            if (localSemVer != null && remoteSemVer != null) {
-                val cmp = compareVersionParts(remoteSemVer, localSemVer)
-                return if (cmp <= 0) {
-                    Pair(true, localVerName.ifBlank { info.tagName })
-                } else {
-                    Pair(false, localVerName)
-                }
-            }
-
-            // 2. Если тег вида build-28 / v28 и у приложения задан versionCode > 1
-            val remoteBuild = Regex("(?:^|[^0-9])(?:v|r|build[-_]?)(\\d{1,7})(?:$|[^0-9])", RegexOption.IGNORE_CASE)
-                .find(info.tagName)?.groupValues?.getOrNull(1)?.toLongOrNull()
-            if (remoteBuild != null && localVerCode > 1L && remoteBuild <= localVerCode) {
-                return Pair(true, localVerName.ifBlank { "build $localVerCode" })
-            }
-
-            // 3. Плавающий тег (например latest / TiViLook-latest.apk): сравниваем дату сборки на GitHub с датой установки APK на ТВ
-            if (info.updatedAtMs > 0L && localInstalledMs >= info.updatedAtMs) {
-                return Pair(true, localVerName.ifBlank { "актуальная сборка" })
-            }
-
-            Pair(false, localVerName)
-        } catch (e: Exception) {
-            CoreEngines.appendDiagLog("UPDATE", "Не удалось проверить локальную версию: ${e.message}")
-            Pair(false, "")
-        }
-    }
-
-    private fun findLatestApkFromReleaseJson(rel: JSONObject): GithubApkReleaseInfo? {
-        val tagName = rel.optString("tag_name", "").trim()
-        val releaseName = rel.optString("name", "").trim()
-        val publishedAtMs = parseIso8601UtcMillis(rel.optString("published_at", ""))
-        val assets = rel.optJSONArray("assets") ?: return null
-        for (i in 0 until assets.length()) {
-            val asset = assets.optJSONObject(i) ?: continue
-            val url = asset.optString("browser_download_url", "").trim()
-            val name = asset.optString("name", "").trim()
-            if (url.endsWith(".apk", true) || name.endsWith(".apk", true)) {
-                val cleanTag = tagName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-                val safeName = name.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifBlank {
-                    if (cleanTag.isNotEmpty()) "TiViLook_$cleanTag.apk" else "TiViLook_update.apk"
-                }
-                val finalName = if (safeName.endsWith(".apk", true)) safeName else "$safeName.apk"
-                val assetUpdatedMs = parseIso8601UtcMillis(asset.optString("updated_at", ""))
-                    .let { if (it > 0L) it else publishedAtMs }
-                val assetSize = asset.optLong("size", 0L)
-                return GithubApkReleaseInfo(
-                    tagName = tagName,
-                    releaseName = releaseName,
-                    apkUrl = url,
-                    apkFileName = finalName,
-                    updatedAtMs = assetUpdatedMs,
-                    sizeBytes = assetSize
-                )
-            }
-        }
-        return null
-    }
-
-    private fun downloadApkFallbackDirect(apkUrl: String, fileName: String): Pair<Boolean, String> {
-        return try {
-            val conn = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
-                setRequestProperty("User-Agent", "TiViLook-Updater")
-                instanceFollowRedirects = true
-                connectTimeout = 12000
-                readTimeout = 35000
-            }
-            if (conn.responseCode !in 200..299) {
-                conn.disconnect()
-                return Pair(false, "")
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                try {
-                    contentResolver.delete(
-                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                        "${MediaStore.Downloads.DISPLAY_NAME}=?",
-                        arrayOf(fileName)
-                    )
-                } catch (_: Exception) {}
-                val values = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                    put(MediaStore.Downloads.MIME_TYPE, "application/vnd.android.package-archive")
-                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                    put(MediaStore.Downloads.IS_PENDING, 1)
-                }
-                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return Pair(false, "")
-                conn.inputStream.use { input ->
-                    contentResolver.openOutputStream(uri)?.use { output ->
-                        input.copyTo(output)
-                    } ?: return Pair(false, "")
-                }
-                values.clear()
-                values.put(MediaStore.Downloads.IS_PENDING, 0)
-                contentResolver.update(uri, values, null, null)
-                Pair(true, "Download/$fileName")
-            } else {
-                // На Android 9 и ниже (Mi Box TV) сначала пробуем публичную папку /storage/emulated/0/Download
-                try {
-                    @Suppress("DEPRECATION")
-                    val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    if (pubDir != null && (pubDir.exists() || pubDir.mkdirs())) {
-                        val pubOut = File(pubDir, fileName)
-                        if (pubOut.exists()) pubOut.delete()
-                        conn.inputStream.use { input ->
-                            FileOutputStream(pubOut).use { output -> input.copyTo(output) }
-                        }
-                        if (pubOut.exists() && pubOut.length() > 0L) {
-                            try {
-                                MediaScannerConnection.scanFile(
-                                    this,
-                                    arrayOf(pubOut.absolutePath),
-                                    arrayOf("application/vnd.android.package-archive"),
-                                    null
-                                )
-                            } catch (_: Exception) {}
-                            return Pair(true, pubOut.absolutePath)
-                        }
-                    }
-                } catch (ePub: Exception) {
-                    CoreEngines.appendDiagLog("UPDATE_ERR", "Нет записи в публичный Download: ${ePub.message}")
-                }
-                // Если прав на публичный Download всё же нет — резерв во внутреннюю папку программы
-                val dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-                val outFile = File(dir, fileName)
-                val conn2 = (URL(apkUrl).openConnection() as HttpURLConnection).apply {
-                    setRequestProperty("User-Agent", "TiViLook-Updater")
-                    instanceFollowRedirects = true
-                    connectTimeout = 12000
-                    readTimeout = 35000
-                }
-                if (conn2.responseCode in 200..299) {
-                    conn2.inputStream.use { input ->
-                        FileOutputStream(outFile).use { output -> input.copyTo(output) }
-                    }
-                }
-                conn2.disconnect()
-                Pair(outFile.exists() && outFile.length() > 0L, outFile.absolutePath)
-            }
-        } catch (e: Exception) {
-            CoreEngines.appendDiagLog("UPDATE_ERR", "Direct download fail: ${e.message}")
-            Pair(false, "")
-        }
-    }
-
-    private fun releaseUniqueKey(info: GithubApkReleaseInfo): String {
-        val tagPart = info.tagName.trim()
-        return if (tagPart.isNotEmpty() && !tagPart.equals("latest", ignoreCase = true)) {
-            tagPart
-        } else {
-            "${tagPart.ifBlank { info.apkFileName }}_${info.updatedAtMs}"
-        }
-    }
-
-    private fun fetchLatestGithubApkRelease(): GithubApkReleaseInfo? {
-        var found: GithubApkReleaseInfo? = null
-        // 1. Проверяем последний стабильный релиз
-        try {
-            val latestConn = (URL("https://api.github.com/repos/pskovland007/IPtv/releases/latest").openConnection() as HttpURLConnection).apply {
-                setRequestProperty("Accept", "application/vnd.github+json")
-                setRequestProperty("User-Agent", "TiViLook-Updater")
-                connectTimeout = 8000; readTimeout = 8000
-            }
-            if (latestConn.responseCode == 200) {
-                val json = JSONObject(latestConn.inputStream.bufferedReader().readText())
-                found = findLatestApkFromReleaseJson(json)
-            }
-            latestConn.disconnect()
-        } catch (_: Exception) {}
-
-        // 2. Если в /latest нет APK (например, pre-release) — ищем в последних 10 релизах
-        if (found == null) {
-            try {
-                val listConn = (URL("https://api.github.com/repos/pskovland007/IPtv/releases?per_page=10").openConnection() as HttpURLConnection).apply {
-                    setRequestProperty("Accept", "application/vnd.github+json")
-                    setRequestProperty("User-Agent", "TiViLook-Updater")
-                    connectTimeout = 8000; readTimeout = 8000
-                }
-                if (listConn.responseCode == 200) {
-                    val arr = JSONArray(listConn.inputStream.bufferedReader().readText())
-                    for (i in 0 until arr.length()) {
-                        val rel = arr.optJSONObject(i) ?: continue
-                        val hit = findLatestApkFromReleaseJson(rel)
-                        if (hit != null) {
-                            found = hit
-                            break
-                        }
-                    }
-                }
-                listConn.disconnect()
-            } catch (_: Exception) {}
-        }
-        return found
-    }
-
-    private fun startDownloadGithubApkRelease(target: GithubApkReleaseInfo) {
-        val apkUrl = target.apkUrl
-        val apkFileName = target.apkFileName
-        CoreEngines.appendDiagLog("UPDATE", "Старт автозагрузки APK: $apkFileName ($apkUrl)")
-
-        // Пробуем системный DownloadManager в публичный Download (если есть права записи)
-        var queuedId = -1L
-        val canWritePublic = hasPublicDownloadWritePermission()
-        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
-        if (dm != null && canWritePublic) {
-            try {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                    @Suppress("DEPRECATION")
-                    val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    val stale = if (pubDir != null) File(pubDir, apkFileName) else null
-                    if (stale != null && stale.exists()) stale.delete()
-                }
-                val req = DownloadManager.Request(Uri.parse(apkUrl)).apply {
-                    setTitle(apkFileName)
-                    setDescription("Загрузка обновления TiViLook")
-                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                    setAllowedOverMetered(true)
-                    setAllowedOverRoaming(true)
-                    addRequestHeader("User-Agent", "TiViLook-Updater")
-                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, apkFileName)
-                }
-                queuedId = dm.enqueue(req)
-            } catch (e: Exception) {
-                CoreEngines.appendDiagLog("UPDATE_ERR", "DownloadManager error: ${e.message}")
-                queuedId = -1L
-            }
-        } else if (!canWritePublic) {
-            CoreEngines.appendDiagLog("UPDATE_ERR", "Нет разрешения WRITE_EXTERNAL_STORAGE для записи в публичный Download")
-        }
-
-        if (queuedId > 0L && dm != null) {
-            runOnUiThread {
-                Toast.makeText(this, "Скачивание $apkFileName в папку Download...", Toast.LENGTH_LONG).show()
-            }
-            val deadline = System.currentTimeMillis() + 120_000L
-            while (System.currentTimeMillis() < deadline) {
-                try { Thread.sleep(1500L) } catch (_: Exception) { break }
-                val q = DownloadManager.Query().setFilterById(queuedId)
-                var status = -1
-                dm.query(q)?.use { c ->
-                    if (c.moveToFirst()) {
-                        val col = c.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                        if (col >= 0) status = c.getInt(col)
-                    }
-                }
-                if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                    CoreEngines.appendDiagLog("UPDATE", "Успешно скачано в Download: $apkFileName")
-                    runOnUiThread {
-                        Toast.makeText(this, "Обновление скачано в Download: $apkFileName", Toast.LENGTH_LONG).show()
-                    }
-                    break
-                } else if (status == DownloadManager.STATUS_FAILED) {
-                    val (directOk, savedPath) = downloadApkFallbackDirect(apkUrl, apkFileName)
-                    runOnUiThread {
-                        val msg = if (directOk) "Обновление скачано: $savedPath" else "Ошибка скачивания обновления"
-                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-                    }
-                    break
-                }
-            }
-        } else {
-            runOnUiThread {
-                Toast.makeText(this, "Скачивание $apkFileName...", Toast.LENGTH_LONG).show()
-            }
-            val (directOk, savedPath) = downloadApkFallbackDirect(apkUrl, apkFileName)
-            runOnUiThread {
-                val msg = if (directOk) "Обновление скачано: $savedPath" else "Не удалось скачать APK обновления"
-                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    private fun downloadPreparedAppUpdate(target: GithubApkReleaseInfo) {
-        ensurePublicStoragePermission {
-            thread {
-                try {
-                    startDownloadGithubApkRelease(target)
-                } catch (e: Exception) {
-                    CoreEngines.appendDiagLog("UPDATE_ERR", "Prepared download fail: ${e.message}")
-                    runOnUiThread { Toast.makeText(this, "Ошибка скачивания обновления", Toast.LENGTH_SHORT).show() }
-                }
-            }
-        }
-    }
-
-    private fun scheduleSilentStartupUpdateCheck() {
-        if (hasTriggeredStartupUpdateCheck) return
-        hasTriggeredStartupUpdateCheck = true
+        isUpdateCheckInFlight = true
         uiHandler.postDelayed({
-            if (isFinishing || isDestroyed) return@postDelayed
-            val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
-            val nowMs = System.currentTimeMillis()
-            val lastCheckMs = prefs.getLong("last_silent_update_check_ms", 0L)
-            if (lastCheckMs > 0L && (nowMs - lastCheckMs) < 3_600_000L) return@postDelayed
-
-            thread(priority = Thread.MIN_PRIORITY) {
+            if (isFinishing || isDestroyed || !autoCheckUpdatesEnabled) {
+                isUpdateCheckInFlight = false
+                return@postDelayed
+            }
+            thread(priority = Thread.MIN_PRIORITY, name = "TiViLook-AutoUpdate") {
                 try {
-                    val target = fetchLatestGithubApkRelease() ?: return@thread
-                    prefs.edit().putLong("last_silent_update_check_ms", System.currentTimeMillis()).apply()
+                    var result = updateManager.checkLatestReleaseDetailed()
+                    if (result.release == null) {
+                        // Одна тихая повторная попытка через 6 сек (например, если Wi-Fi на приставке ещё поднимался)
+                        try { Thread.sleep(6000L) } catch (_: Exception) {}
+                        if (isFinishing || isDestroyed || !autoCheckUpdatesEnabled) return@thread
+                        result = updateManager.checkLatestReleaseDetailed()
+                    }
+                    val release = result.release ?: return@thread
+                    lastSuccessfulUpdateCheckMs = System.currentTimeMillis()
 
-                    val (alreadyLatest, _) = isGithubReleaseAlreadyInstalled(target)
-                    if (alreadyLatest) {
+                    if (!updateManager.isNewerRelease(release)) {
                         availableUpdateInfo = null
                         return@thread
                     }
 
-                    availableUpdateInfo = target
-                    val relKey = releaseUniqueKey(target)
-                    val skippedKey = prefs.getString("skipped_update_tag_v32", "") ?: ""
-                    CoreEngines.appendDiagLog("UPDATE", "Тихая проверка: найдена новая сборка ${target.tagName.ifBlank { target.apkFileName }} (skipped=${relKey == skippedKey})")
-                    if (relKey == skippedKey) return@thread
+                    availableUpdateInfo = release
+                    val relKey = updateManager.releaseUniqueKey(release)
+                    val prefs = getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
+                    val skippedKey = prefs.getString("skipped_update_tag_v37", "") ?: ""
+                    if (relKey == skippedKey || relKey == lastPromptedUpdateKey) return@thread
 
                     runOnUiThread {
-                        if (isFinishing || isDestroyed) return@runOnUiThread
-                        if (splashOverlay.visibility == View.VISIBLE || firstRunModeOverlay.visibility == View.VISIBLE) return@runOnUiThread
-                        if (menuHistory.isNotEmpty()) return@runOnUiThread
-                        navigateToMenu("UPDATE_PROMPT")
+                        if (isFinishing || isDestroyed || !autoCheckUpdatesEnabled) return@runOnUiThread
+                        val busy = splashOverlay.visibility == View.VISIBLE ||
+                            firstRunModeOverlay.visibility == View.VISIBLE ||
+                            menuHistory.isNotEmpty()
+                        if (busy) {
+                            pendingUpdateRelease = release
+                        } else {
+                            lastPromptedUpdateKey = relKey
+                            updateModalRelease = release
+                            updateModalManualCheck = false
+                            navigateToMenu("UPDATE_PROMPT")
+                        }
                     }
                 } catch (_: Exception) {
                     // Тихая проверка никогда не показывает ошибок пользователю
+                } finally {
+                    isUpdateCheckInFlight = false
                 }
             }
-        }, 5500L)
+        }, initialDelayMs)
     }
 
     private fun openUpdateAvailablePromptModal() {
-        val info = availableUpdateInfo
+        val info = updateModalRelease ?: availableUpdateInfo
         if (info == null) {
             navigateBackInMenu()
             return
         }
         val t = currentTheme()
         val scale = uiScaleFactor()
-        setSubModalHeaderTitle("Доступно обновление")
+        val dark = isThemeDarkSurface(t.panelBgColor)
+        val isNewer = updateManager.isNewerRelease(info)
+        val localVer = updateManager.getInstalledVersionName().ifBlank { "текущая" }
+        val remoteVer = info.versionLabel.ifBlank { info.tagName }.ifBlank { info.apkName }
+
+        downloadedUpdateApkFile = null
+        onUpdatePermissionResume = null
+        cancelActiveUpdateDownloadIfAny()
+
+        setSubModalHeaderTitle("Обновление TiViLook", "ОБ")
+        subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.GONE
         subModalTopButtons.visibility = View.GONE
         subModalThemesGrid.visibility = View.GONE
-        subModalInputContainer.removeAllViews()
-        subModalInputContainer.visibility = View.VISIBLE
+        subModalCustomBody.removeAllViews()
+        subModalCustomBody.visibility = View.VISIBLE
+        subModalCustomBody.orientation = LinearLayout.VERTICAL
+        subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
+        val pBox = dpPx(14f)
+        subModalCustomBody.setPadding(pBox, pBox, pBox, pBox)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
 
-        val verTitle = info.tagName.ifBlank { info.releaseName }.ifBlank { info.apkFileName }
-        val sizePart = if (info.sizeBytes > 0L) "  •  ${formatByteSizeRu(info.sizeBytes)}" else ""
-        val localVer = try {
-            @Suppress("DEPRECATION")
-            packageManager.getPackageInfo(packageName, 0).versionName?.trim().orEmpty()
-        } catch (_: Exception) { "" }
-        val detailsLine = buildString {
-            append("Вышла новая сборка TiViLook: $verTitle$sizePart")
-            if (localVer.isNotEmpty() && !localVer.equals(verTitle, ignoreCase = true)) {
-                append("\nУстановлена: $localVer")
+        val bodyScroll = ScrollView(this).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isFillViewport = true
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+        val bodyInner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
+        bodyScroll.addView(bodyInner)
+        subModalCustomBody.addView(bodyScroll)
+
+        val badgePill = makeStatusPillView(
+            if (isNewer) "НОВАЯ ВЕРСИЯ" else "АКТУАЛЬНАЯ ВЕРСИЯ",
+            if (isNewer) 1 else 0
+        ).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpPx(10f * scale)
             }
         }
+        bodyInner.addView(badgePill)
 
-        val infoTv = TextView(this).apply {
-            text = detailsLine
+        val versionsTv = TextView(this).apply {
+            text = "Установлена: $localVer  →  GitHub: $remoteVer"
             setTextColor(t.textPrimaryColor)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.5f * scale)
+            typeface = t.boldFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15.2f * scale)
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        bodyInner.addView(versionsTv)
+
+        val sizePart = if (info.apkSizeBytes > 0L) "  •  ${UpdateManager.formatBytes(info.apkSizeBytes)}" else ""
+        val metaTv = TextView(this).apply {
+            text = "${info.apkName}$sizePart  (${info.tagName})"
+            setTextColor(t.textPrimaryColor)
+            alpha = 0.72f
             typeface = t.normalFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
             gravity = Gravity.CENTER
-            setLineSpacing(6f, 1.0f)
-            setPadding(16, 6, 16, 22)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
+            setPadding(0, dpPx(4f * scale), 0, dpPx(10f * scale))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-        subModalInputContainer.addView(infoTv)
+        bodyInner.addView(metaTv)
 
-        val btnRow = LinearLayout(this).apply {
+        val notesCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(if (dark) Color.argb(66, 0, 0, 0) else Color.argb(22, 0, 0, 0))
+                cornerRadius = themeInnerCornerRadiusPx(scale)
+                setStroke(dpPx(1f), themeCardBorderColor())
+            })
+            val np = dpPx(12f * scale)
+            setPadding(np, dpPx(10f * scale), np, dpPx(10f * scale))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dpPx(10f * scale)
+            }
+        }
+        val notesTv = TextView(this).apply {
+            text = info.body.ifBlank { "Описание изменений не указано." }
+            setTextColor(t.textPrimaryColor)
+            alpha = 0.88f
+            typeface = t.normalFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.2f * scale)
+            setLineSpacing(4f, 1.0f)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        notesCard.addView(notesTv)
+        bodyInner.addView(notesCard)
+
+        val progressWrap = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dpPx(4f * scale)
+                bottomMargin = dpPx(4f * scale)
+            }
+        }
+        val progressStatusTv = TextView(this).apply {
+            text = "Подготовка загрузки..."
+            setTextColor(t.accentColor)
+            typeface = t.boldFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.8f * scale)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dpPx(6f * scale))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val progressTrack = FrameLayout(this).apply {
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(if (dark) Color.argb(65, 255, 255, 255) else Color.argb(48, 0, 0, 0))
+                cornerRadius = 999f
+            })
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpPx(9f * scale))
+        }
+        val progressFillRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
+            weightSum = 100f
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
+        val progressFillView = View(this).apply {
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(themeOnPillBgColor())
+                cornerRadius = 999f
+            })
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0f)
+        }
+        val progressRemainView = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 100f)
+        }
+        progressFillRow.addView(progressFillView)
+        progressFillRow.addView(progressRemainView)
+        progressTrack.addView(progressFillRow)
+
+        val permHintTv = TextView(this).apply {
+            text = "Для автоматической установки разрешите установку неизвестных приложений для TiViLook и вернитесь назад."
+            setTextColor(Color.parseColor("#FBBF24"))
+            typeface = t.normalFont
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.8f * scale)
             gravity = Gravity.CENTER
-            setPadding(0, 4, 0, 8)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
+            visibility = View.GONE
+            setPadding(dpPx(6f), dpPx(8f * scale), dpPx(6f), 0)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
 
-        val btnDownload = makeModernButton("Скачать") {
-            closeAllMenus()
-            downloadPreparedAppUpdate(info)
+        progressWrap.addView(progressStatusTv)
+        progressWrap.addView(progressTrack)
+        progressWrap.addView(permHintTv)
+        bodyInner.addView(progressWrap)
+
+        fun setProgressBarFraction(pct: Int) {
+            val clamped = pct.coerceIn(0, 100).toFloat()
+            progressFillView.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, clamped)
+            progressRemainView.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, (100f - clamped).coerceAtLeast(0.01f))
+            progressFillRow.requestLayout()
+        }
+
+        subModalBottomButtons.removeAllViews()
+        subModalBottomButtons.visibility = View.VISIBLE
+
+        lateinit var btnPrimary: TextView
+        lateinit var btnSecondary: TextView
+        var btnSkip: TextView? = null
+
+        fun tryInstallOrRequestPermission(apkFile: File) {
+            if (!updateManager.canInstallUnknownApps()) {
+                permHintTv.visibility = View.VISIBLE
+                progressStatusTv.text = "Обновление загружено — нужно разрешение на установку"
+                progressStatusTv.setTextColor(Color.parseColor("#FBBF24"))
+                btnPrimary.text = "Разрешить установку"
+                btnPrimary.isEnabled = true
+                btnPrimary.alpha = 1f
+                btnSecondary.text = "Закрыть"
+                btnPrimary.requestFocus()
+                onUpdatePermissionResume = {
+                    if (menuHistory.lastOrNull() == "UPDATE_PROMPT" && downloadedUpdateApkFile != null && updateManager.canInstallUnknownApps()) {
+                        permHintTv.visibility = View.GONE
+                        progressStatusTv.text = "Разрешение выдано — запуск установки..."
+                        progressStatusTv.setTextColor(themeOnPillBgColor())
+                        btnPrimary.text = "Установить"
+                        onUpdatePermissionResume = null
+                        updateManager.launchPackageInstaller(this, apkFile)
+                    }
+                }
+                return
+            }
+            permHintTv.visibility = View.GONE
+            onUpdatePermissionResume = null
+            progressStatusTv.text = "Запуск установщика Android..."
+            progressStatusTv.setTextColor(themeOnPillBgColor())
+            btnPrimary.text = "Установить"
+            updateManager.launchPackageInstaller(this, apkFile)
+        }
+
+        btnPrimary = makeUnifiedActionButton(if (isNewer) "Скачать и установить" else "Установить заново") {
+            if (isUpdateDownloading) return@makeUnifiedActionButton
+
+            val readyApk = downloadedUpdateApkFile
+            if (readyApk != null && readyApk.exists() && readyApk.length() > 0L) {
+                if (!updateManager.canInstallUnknownApps()) {
+                    updateManager.openUnknownSourcesSettings(this)
+                } else {
+                    tryInstallOrRequestPermission(readyApk)
+                }
+                return@makeUnifiedActionButton
+            }
+
+            isUpdateDownloading = true
+            uiHandler.removeCallbacks(autoHideMenuRunnable)
+            progressWrap.visibility = View.VISIBLE
+            permHintTv.visibility = View.GONE
+            setProgressBarFraction(0)
+            progressStatusTv.setTextColor(t.accentColor)
+            progressStatusTv.text = "Подключение к GitHub..."
+            btnPrimary.isEnabled = false
+            btnPrimary.alpha = 0.5f
+            btnSkip?.visibility = View.GONE
+            btnSecondary.text = "Отмена"
+            btnSecondary.requestFocus()
+
+            activeUpdateDownloadHandle = updateManager.startApkDownload(
+                release = info,
+                onProgress = { downBytes, totalBytes, pct ->
+                    if (menuHistory.lastOrNull() != "UPDATE_PROMPT") return@startApkDownload
+                    if (pct >= 0 && totalBytes > 0L) {
+                        setProgressBarFraction(pct)
+                        progressStatusTv.text = "Загрузка: $pct%  (${UpdateManager.formatBytes(downBytes)} / ${UpdateManager.formatBytes(totalBytes)})"
+                    } else {
+                        setProgressBarFraction(((downBytes / 65536L) % 100L).toInt().coerceAtLeast(8))
+                        progressStatusTv.text = "Загрузка: ${UpdateManager.formatBytes(downBytes)}"
+                    }
+                },
+                onSuccess = { readyFile ->
+                    isUpdateDownloading = false
+                    activeUpdateDownloadHandle = null
+                    downloadedUpdateApkFile = readyFile
+                    if (menuHistory.lastOrNull() != "UPDATE_PROMPT") return@startApkDownload
+                    setProgressBarFraction(100)
+                    btnPrimary.isEnabled = true
+                    btnPrimary.alpha = 1f
+                    btnSecondary.text = "Закрыть"
+                    tryInstallOrRequestPermission(readyFile)
+                },
+                onCancelled = {
+                    isUpdateDownloading = false
+                    activeUpdateDownloadHandle = null
+                    if (menuHistory.lastOrNull() != "UPDATE_PROMPT") return@startApkDownload
+                    setProgressBarFraction(0)
+                    progressStatusTv.setTextColor(Color.parseColor("#FBBF24"))
+                    progressStatusTv.text = "Загрузка отменена"
+                    btnPrimary.isEnabled = true
+                    btnPrimary.alpha = 1f
+                    btnPrimary.text = if (isNewer) "Скачать и установить" else "Установить заново"
+                    btnSecondary.text = "Закрыть"
+                    if (isNewer && !updateModalManualCheck) btnSkip?.visibility = View.VISIBLE
+                    btnPrimary.requestFocus()
+                },
+                onFailure = { errMsg ->
+                    isUpdateDownloading = false
+                    activeUpdateDownloadHandle = null
+                    if (menuHistory.lastOrNull() != "UPDATE_PROMPT") return@startApkDownload
+                    setProgressBarFraction(0)
+                    progressStatusTv.setTextColor(Color.parseColor("#F87171"))
+                    progressStatusTv.text = "Ошибка загрузки: $errMsg"
+                    btnPrimary.isEnabled = true
+                    btnPrimary.alpha = 1f
+                    btnPrimary.text = "Повторить загрузку"
+                    btnSecondary.text = "Закрыть"
+                    btnPrimary.requestFocus()
+                }
+            )
         }.apply { id = 8801 }
 
-        val btnLater = makeModernButton("Позже") {
-            navigateBackInMenu()
+        btnSecondary = makeUnifiedActionButton(if (isNewer && !updateModalManualCheck) "Позже" else "Закрыть") {
+            if (isUpdateDownloading) {
+                cancelActiveUpdateDownloadIfAny()
+            } else {
+                navigateBackInMenu()
+            }
         }.apply { id = 8802 }
 
-        val btnSkip = makeModernButton("Пропустить") {
-            getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
-                .edit()
-                .putString("skipped_update_tag_v32", releaseUniqueKey(info))
-                .apply()
-            navigateBackInMenu()
-        }.apply { id = 8803 }
+        subModalBottomButtons.addView(btnPrimary)
+        subModalBottomButtons.addView(btnSecondary)
 
-        btnDownload.nextFocusLeftId = btnSkip.id
-        btnDownload.nextFocusRightId = btnLater.id
-        btnLater.nextFocusLeftId = btnDownload.id
-        btnLater.nextFocusRightId = btnSkip.id
-        btnSkip.nextFocusLeftId = btnLater.id
-        btnSkip.nextFocusRightId = btnDownload.id
+        if (isNewer && !updateModalManualCheck) {
+            btnSkip = makeUnifiedActionButton("Пропустить") {
+                getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("skipped_update_tag_v37", updateManager.releaseUniqueKey(info))
+                    .apply()
+                navigateBackInMenu()
+            }.apply { id = 8803 }
+            subModalBottomButtons.addView(btnSkip)
 
-        btnRow.addView(btnDownload)
-        btnRow.addView(btnLater)
-        btnRow.addView(btnSkip)
-        subModalInputContainer.addView(btnRow)
+            btnPrimary.nextFocusLeftId = btnSkip!!.id
+            btnPrimary.nextFocusRightId = btnSecondary.id
+            btnSecondary.nextFocusLeftId = btnPrimary.id
+            btnSecondary.nextFocusRightId = btnSkip!!.id
+            btnSkip!!.nextFocusLeftId = btnSecondary.id
+            btnSkip!!.nextFocusRightId = btnPrimary.id
+        } else {
+            btnPrimary.nextFocusLeftId = btnSecondary.id
+            btnPrimary.nextFocusRightId = btnSecondary.id
+            btnSecondary.nextFocusLeftId = btnPrimary.id
+            btnSecondary.nextFocusRightId = btnPrimary.id
+        }
 
         animateMenuAppear(subModalOverlay)
-        btnDownload.requestFocus()
+        if (isNewer) btnPrimary.requestFocus() else btnSecondary.requestFocus()
     }
 
     private fun checkAndInstallAppUpdateFromGithub() {
-        ensurePublicStoragePermission {
-            runCheckAndDownloadAppUpdateFromGithub()
-        }
-    }
-
-    private fun runCheckAndDownloadAppUpdateFromGithub() {
         Toast.makeText(this, "Проверка новой сборки TiViLook...", Toast.LENGTH_SHORT).show()
-        thread {
-            try {
-                val target = fetchLatestGithubApkRelease()
-                if (target == null) {
-                    CoreEngines.appendDiagLog("UPDATE", "APK не найден в релизах GitHub")
-                    runOnUiThread {
-                        Toast.makeText(this, "В релизах GitHub пока нет готового APK", Toast.LENGTH_LONG).show()
-                    }
-                    return@thread
+        thread(name = "TiViLook-ManualUpdate") {
+            val result = updateManager.checkLatestReleaseDetailed()
+            val release = result.release
+            if (release == null) {
+                runOnUiThread {
+                    val err = result.error?.take(60) ?: "нет ответа"
+                    Toast.makeText(this, "Не удалось проверить обновления: $err", Toast.LENGTH_LONG).show()
                 }
+                return@thread
+            }
 
-                getSharedPreferences("iptv_v4_prefs", Context.MODE_PRIVATE)
-                    .edit()
-                    .putLong("last_silent_update_check_ms", System.currentTimeMillis())
-                    .apply()
+            lastSuccessfulUpdateCheckMs = System.currentTimeMillis()
+            val isNewer = updateManager.isNewerRelease(release)
+            availableUpdateInfo = if (isNewer) release else null
 
-                val (alreadyLatest, localLabel) = isGithubReleaseAlreadyInstalled(target)
-                if (alreadyLatest) {
-                    availableUpdateInfo = null
-                    CoreEngines.appendDiagLog("UPDATE", "Уже установлена последняя версия ($localLabel) — загрузка отменена")
-                    runOnUiThread {
-                        val labelPart = if (localLabel.isNotBlank()) " ($localLabel)" else ""
-                        Toast.makeText(this, "У вас уже установлена последняя версия$labelPart", Toast.LENGTH_LONG).show()
-                    }
-                    return@thread
-                }
-
-                availableUpdateInfo = target
-                startDownloadGithubApkRelease(target)
-            } catch (e: Exception) {
-                CoreEngines.appendDiagLog("UPDATE_ERR", "Exception: ${e.message}")
-                runOnUiThread { Toast.makeText(this, "Ошибка проверки обновлений", Toast.LENGTH_SHORT).show() }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                updateModalRelease = release
+                updateModalManualCheck = true
+                navigateToMenu("UPDATE_PROMPT")
             }
         }
     }
@@ -6492,6 +6430,7 @@ class MainActivity : AppCompatActivity() {
                             val star = if (favoriteUrls.contains(ch.url)) "★ " else ""
                             showBanner(topBadge + star + ch.name + "  •  " + effectiveCategory(ch))
                         }
+                        uiHandler.postDelayed({ showPendingUpdateIfReady() }, 400L)
                     }.start()
                 }
             }
@@ -6515,9 +6454,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun closeAllMenus() {
+        if (menuHistory.lastOrNull() == "UPDATE_PROMPT") {
+            cancelActiveUpdateDownloadIfAny()
+            onUpdatePermissionResume = null
+        }
         menuHistory.clear()
         uiHandler.removeCallbacks(autoHideMenuRunnable)
         hideAllMenuViews()
+        uiHandler.postDelayed({ showPendingUpdateIfReady() }, 350L)
     }
 
     internal fun navigateToMenu(menuId: String) {
@@ -6538,6 +6482,10 @@ class MainActivity : AppCompatActivity() {
         }
         if (menuHistory.isEmpty()) return false
         val leaving = menuHistory.removeAt(menuHistory.lastIndex)
+        if (leaving == "UPDATE_PROMPT") {
+            cancelActiveUpdateDownloadIfAny()
+            onUpdatePermissionResume = null
+        }
         if ((leaving == "ANALYZER_GROUP_VIEW" || leaving == "ANALYZER_GROUPS") && isAnalyzerRunning) {
             analyzerStatusBanner.visibility = View.VISIBLE
         }
@@ -6545,6 +6493,7 @@ class MainActivity : AppCompatActivity() {
         if (prev == null) {
             uiHandler.removeCallbacks(autoHideMenuRunnable)
             hideAllMenuViews()
+            uiHandler.postDelayed({ showPendingUpdateIfReady() }, 350L)
         } else {
             subModalHighlightedPos = 0
             renderMenuById(prev)
@@ -8335,6 +8284,7 @@ class MainActivity : AppCompatActivity() {
             .putInt("on_drop_v23", onDropBehavior)
             .putInt("menu_hide_sec_v23", menuHideDelaySec)
             .putBoolean("show_banner_v32", showChannelBannerOnSwitch)
+            .putBoolean("auto_check_updates_v37", autoCheckUpdatesEnabled)
             .putBoolean("anti_block_ru", antiBlockEnabled)
             .putInt("ua_index", userAgentIndex)
             .putString("epg_url", epgUrl)
@@ -8370,6 +8320,7 @@ class MainActivity : AppCompatActivity() {
         onDropBehavior = prefs.getInt("on_drop_v23", 0)
         menuHideDelaySec = prefs.getInt("menu_hide_sec_v23", 8)
         showChannelBannerOnSwitch = prefs.getBoolean("show_banner_v32", true)
+        autoCheckUpdatesEnabled = prefs.getBoolean("auto_check_updates_v37", true)
         antiBlockEnabled = prefs.getBoolean("anti_block_ru", true)
         userAgentIndex = prefs.getInt("ua_index", 0)
         activePlaylistIndex = prefs.getInt("active_playlist", 0)
@@ -8573,6 +8524,9 @@ class MainActivity : AppCompatActivity() {
             player?.play()
         }
         if (allChannels.isEmpty()) loadActivePlaylist(autoPlayLast = true)
+        onUpdatePermissionResume?.invoke()
+        showPendingUpdateIfReady()
+        scheduleSilentStartupUpdateCheck(initialDelayMs = 1500L)
     }
 
     override fun onStop() {
