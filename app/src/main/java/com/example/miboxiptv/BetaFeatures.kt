@@ -184,10 +184,13 @@ object CatchupHelper {
             }
             return template
                 .replace("\${start}", startSec.toString())
+                .replace("\${timestamp}", startSec.toString())
                 .replace("{utc}", startSec.toString())
+                .replace("{start}", startSec.toString())
                 .replace("{lutc}", nowSec.toString())
                 .replace("\${end}", stopSec.toString())
                 .replace("{utcend}", stopSec.toString())
+                .replace("{end}", stopSec.toString())
                 .replace("\${duration}", durSec.toString())
                 .replace("{duration}", durSec.toString())
                 .replace("\${offset}", offsetSec.toString())
@@ -240,5 +243,13 @@ object CatchupHelper {
                 "${baseUrl}${sep}utc=$startSec&lutc=$nowSec"
             }
         }
+    }
+
+    fun buildRewindArchiveUrl(ch: Channel, rewindSec: Int): String? {
+        val nowMs = System.currentTimeMillis()
+        val startMs = (nowMs - rewindSec.toLong() * 1000L).coerceAtLeast(0L)
+        val stopMs = startMs + 7200_000L
+        val synthetic = EpgProgram("Перемотка", "", startMs, stopMs)
+        return buildArchiveUrl(ch, synthetic)
     }
 }

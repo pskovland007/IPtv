@@ -729,6 +729,14 @@ class ThemedTileView(
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f; paint.color = Color.WHITE
                 canvas.drawCircle(cx, cy, r * 0.32f, paint)
             }
+            "HISTORY" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#0D9488")
+                canvas.drawCircle(cx, cy, r * 0.78f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 5.5f; paint.color = Color.WHITE
+                canvas.drawCircle(cx, cy, r * 0.46f, paint)
+                canvas.drawLine(cx, cy, cx, cy - r * 0.26f, paint)
+                canvas.drawLine(cx, cy, cx + r * 0.22f, cy + r * 0.08f, paint)
+            }
             "SEARCH" -> {
                 paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#0284C7")
                 canvas.drawCircle(cx, cy, r * 0.78f, paint)
@@ -895,6 +903,11 @@ class ThemedTileView(
                     canvas.drawLine(cx + (r * 0.48f * cos(rad)).toFloat(), cy + (r * 0.48f * sin(rad)).toFloat(), cx + (r * 0.72f * cos(rad)).toFloat(), cy + (r * 0.72f * sin(rad)).toFloat(), paint)
                 }
             }
+            "HISTORY" -> {
+                canvas.drawCircle(cx, cy, r * 0.62f, paint)
+                canvas.drawLine(cx, cy, cx, cy - r * 0.34f, paint)
+                canvas.drawLine(cx, cy, cx + r * 0.28f, cy + r * 0.10f, paint)
+            }
             "SEARCH" -> {
                 canvas.drawCircle(cx - r * 0.14f, cy - r * 0.14f, r * 0.42f, paint)
                 canvas.drawLine(cx + r * 0.16f, cy + r * 0.16f, cx + r * 0.56f, cy + r * 0.56f, paint)
@@ -1035,6 +1048,11 @@ class ThemedTileView(
             "SETTINGS_GEAR" -> {
                 canvas.drawCircle(cx, cy, r * 0.46f, paint)
                 canvas.drawCircle(cx, cy, r * 0.20f, paint)
+            }
+            "HISTORY" -> {
+                canvas.drawCircle(cx, cy, r * 0.62f, paint)
+                canvas.drawLine(cx, cy, cx, cy - r * 0.34f, paint)
+                canvas.drawLine(cx, cy, cx + r * 0.28f, cy + r * 0.10f, paint)
             }
             "SEARCH" -> {
                 canvas.drawCircle(cx - r * 0.14f, cy - r * 0.14f, r * 0.42f, paint)
@@ -1182,6 +1200,12 @@ class ThemedTileView(
                 paint.style = Paint.Style.FILL
                 canvas.drawCircle(cx, cy - r * 0.12f, r * 0.14f, paint)
             }
+            "HISTORY" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f
+                canvas.drawCircle(cx, cy, r * 0.56f, paint)
+                canvas.drawLine(cx, cy, cx, cy - r * 0.30f, paint)
+                canvas.drawLine(cx, cy, cx + r * 0.24f, cy + r * 0.10f, paint)
+            }
             "SEARCH" -> {
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f
                 canvas.drawCircle(cx - r * 0.12f, cy - r * 0.12f, r * 0.36f, paint)
@@ -1326,6 +1350,12 @@ class ThemedTileView(
                 canvas.drawLine(cx, cy + r * 0.18f, cx + r * 0.24f, cy - r * 0.42f, paint)
                 paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#E63926")
                 canvas.drawCircle(cx + r * 0.24f, cy - r * 0.46f, r * 0.20f, paint)
+            }
+            "HISTORY" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 6.5f; paint.color = cream
+                canvas.drawCircle(cx, cy, r * 0.56f, paint)
+                canvas.drawLine(cx, cy, cx, cy - r * 0.28f, paint)
+                canvas.drawLine(cx, cy, cx + r * 0.24f, cy + r * 0.10f, paint)
             }
             "SEARCH" -> {
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 7f; paint.color = cream
@@ -1511,6 +1541,12 @@ class ThemedTileView(
                 canvas.drawRoundRect(rect, 12f, 12f, paint)
                 paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
                 canvas.drawCircle(cx, topCy - r * 0.12f, r * 0.16f, paint)
+            }
+            "HISTORY" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.2f; paint.color = Color.WHITE
+                canvas.drawCircle(cx, topCy, r * 0.52f, paint)
+                canvas.drawLine(cx, topCy, cx, topCy - r * 0.28f, paint)
+                canvas.drawLine(cx, topCy, cx + r * 0.22f, topCy + r * 0.08f, paint)
             }
             "SEARCH" -> {
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.5f; paint.color = Color.WHITE

@@ -413,6 +413,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private var onDropBehavior = 0
+    private var rewindStepSec = 30
+    private val recentChannelUrls = ArrayList<String>()
     private var menuHideDelaySec = 8
     private var showChannelBannerOnSwitch = true
     private var isDualStreamActive = false
@@ -442,11 +444,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var reloadIconIndicator: TextView
     private val signalBars = mutableListOf<View>()
 
-    private lateinit var railTilePlaylists: ThemedTileView
-    private lateinit var railTileSettings: ThemedTileView
-    private lateinit var railTileAnalyzer: ThemedTileView
-    private lateinit var railTileSearch: ThemedTileView
-    private lateinit var railTileSwapGroups: ThemedTileView
+    private lateinit var railBtnSearch: LinearLayout
+    private lateinit var railBtnHistory: LinearLayout
+    private lateinit var railBtnFavorites: LinearLayout
+    private lateinit var railBtnPlaylists: LinearLayout
+    private lateinit var railBtnAnalyzer: LinearLayout
+    private lateinit var railBtnSettings: LinearLayout
+    private val railCaptionViews = mutableListOf<TextView>()
 
     private lateinit var osdChannelTitle: TextView
     private lateinit var osdEpgCurrentTitle: TextView
@@ -459,6 +463,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnOsdRewind: TextView
     private lateinit var btnOsdEpgList: TextView
     private lateinit var btnOsdSettings: TextView
+    private lateinit var btnOsdAspect: TextView
     private lateinit var btnOsdNightMode: TextView
     private lateinit var btnOsdSearch: TextView
     private lateinit var btnOsdChannelActions: TextView
@@ -688,13 +693,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun sidePanelWidthPx(): Int {
         val dm = resources.displayMetrics
+        val availW = (dm.widthPixels - leftSafeMarginPx() - dpPx(16f)).coerceAtLeast(dpPx(260f))
         val fraction = when (uiScaleStep) {
-            0 -> 0.50f
-            1 -> 0.56f
-            else -> 0.62f
+            0 -> 0.37f
+            1 -> 0.43f
+            else -> 0.49f
         }
-        val minW = dpPx(350f).coerceAtMost((dm.widthPixels * 0.66f).toInt())
-        val maxW = (dm.widthPixels * 0.66f).toInt().coerceAtLeast(minW)
+        val minW = dpPx(265f * uiScaleFactor()).coerceAtMost((availW * 0.62f).toInt())
+        val maxW = (availW * 0.58f).toInt().coerceAtLeast(minW)
         return (dm.widthPixels * fraction).toInt().coerceIn(minW, maxW)
     }
 
@@ -1253,6 +1259,7 @@ class MainActivity : AppCompatActivity() {
             low.contains("сон") || low.contains("сна") || low.contains("таймер") -> "СН"
             low.contains("лог") || low.contains("поделить") -> "ЛО"
             low.contains("групп") -> "ГР"
+            low.contains("истор") || low.contains("недавн") -> "ИС"
             low.contains("поиск") -> "ПК"
             low.contains("канал") -> "КН"
             else -> title.trim().take(2).uppercase(Locale.getDefault()).ifBlank { "TV" }
@@ -1604,15 +1611,16 @@ class MainActivity : AppCompatActivity() {
         currentChannelBanner.setTextColor(t.textPrimaryColor); currentChannelBanner.typeface = t.boldFont
         currentChannelBanner.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f * scale)
 
-        btnOsdDualToggle.text = if (isDualStreamActive) "⧉ Выкл 2-й экран" else "⧉ 2-й экран"
-        btnOsdRewind.text = "⏪ -20с"
+        btnOsdDualToggle.text = if (isDualStreamActive) "⧉ Выкл 2-й" else "⧉ 2-й"
+        btnOsdRewind.text = formatRewindButtonLabel(rewindStepSec)
         btnOsdEpgList.text = "▤ Гид"
+        btnOsdAspect.text = formatAspectShortLabel(screenAspectMode)
         btnOsdSettings.text = "⚙ Меню"
         btnOsdNightMode.text = "🌙 $brightnessPercent%"
         btnOsdSearch.text = "🔍 Поиск"
         btnOsdChannelActions.text = "✎ Канал"
 
-        for (btn in listOf(btnOsdTop, btnOsdFav, btnOsdDualToggle, btnOsdRewind, btnOsdEpgList, btnOsdSearch, btnOsdSettings, btnOsdNightMode, btnOsdChannelActions)) {
+        for (btn in listOf(btnOsdTop, btnOsdFav, btnOsdDualToggle, btnOsdRewind, btnOsdEpgList, btnOsdSearch, btnOsdAspect, btnOsdSettings, btnOsdNightMode, btnOsdChannelActions)) {
             btn.typeface = t.boldFont
             btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f * scale)
             styleButtonForCurrentTheme(btn, btn.hasFocus())
@@ -1623,6 +1631,11 @@ class MainActivity : AppCompatActivity() {
             cap.typeface = t.normalFont
             cap.setTextColor(t.textPrimaryColor)
             cap.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f * scale)
+        }
+        for (rc in railCaptionViews) {
+            rc.typeface = t.boldFont
+            rc.setTextColor(t.textPrimaryColor)
+            rc.setTextSize(TypedValue.COMPLEX_UNIT_SP, (10.2f * scale).coerceIn(9.5f, 13.5f))
         }
 
         fitSideListsExactRows()
@@ -1749,7 +1762,7 @@ class MainActivity : AppCompatActivity() {
             if (which in targetCats.indices) {
                 val newCat = targetCats[which]
                 customCategoryMap[ch.url] = newCat
-                currentChannel = Channel(ch.name, ch.url, newCat, ch.tvgId)
+                currentChannel = ch.copy(category = newCat)
                 saveState(); updateCategoriesList()
                 selectCategory(activeCategoryList().indexOf(newCat).takeIf { it >= 2 } ?: currentCategoryIndex)
                 closeAllMenus()
@@ -2168,6 +2181,34 @@ class MainActivity : AppCompatActivity() {
         infoCard.addView(detailMetaTv)
         rightCol.addView(infoCard)
 
+        val dayFmt = SimpleDateFormat("dd.MM", Locale.getDefault())
+        val todayDayStr = dayFmt.format(Date(now))
+        val yesterdayDayStr = dayFmt.format(Date(now - 24L * 3600_000L))
+        fun dayLabelFor(ms: Long): String {
+            val d = dayFmt.format(Date(ms))
+            return when (d) {
+                todayDayStr -> ""
+                yesterdayDayStr -> "Вчера "
+                else -> "$d "
+            }
+        }
+
+        var selectedEpgProg: EpgProgram? = null
+        val channelSupportsArchive = CatchupHelper.hasCatchup(ch)
+
+        val btnArchive = makeUnifiedActionButton("⏪  Смотреть архив", fillWidth = true) {
+            val targetProg = selectedEpgProg
+            if (ch == null || targetProg == null) {
+                Toast.makeText(this, "Нет выбранной передачи", Toast.LENGTH_SHORT).show()
+                return@makeUnifiedActionButton
+            }
+            if (targetProg.stopMs < System.currentTimeMillis()) {
+                playCatchupArchiveProgram(ch, targetProg)
+            } else {
+                Toast.makeText(this, "Выберите прошедшую передачу в списке слева", Toast.LENGTH_SHORT).show()
+            }
+        }.apply { id = 8749 }
+
         val btnBackLive: TextView? = if (isPlayingArchiveStream && ch != null) {
             makeUnifiedActionButton("▶  В прямой эфир", fillWidth = true) {
                 playChannelObj(ch, immediate = true)
@@ -2185,30 +2226,35 @@ class MainActivity : AppCompatActivity() {
             launchSystemEpgPicker()
         }.apply { id = 8753 }
 
-        if (btnBackLive != null) {
-            btnBackLive.nextFocusDownId = btnRefresh.id
-            btnRefresh.nextFocusUpId = btnBackLive.id
-            rightCol.addView(btnBackLive)
+        val rightBtnsChain = mutableListOf<TextView>(btnArchive)
+        if (btnBackLive != null) rightBtnsChain.add(btnBackLive)
+        rightBtnsChain.add(btnRefresh)
+        rightBtnsChain.add(btnXmlUrl)
+        rightBtnsChain.add(btnEpgFile)
+        for (i in rightBtnsChain.indices) {
+            if (i > 0) rightBtnsChain[i].nextFocusUpId = rightBtnsChain[i - 1].id
+            if (i + 1 < rightBtnsChain.size) rightBtnsChain[i].nextFocusDownId = rightBtnsChain[i + 1].id
+            rightCol.addView(rightBtnsChain[i])
         }
-        btnRefresh.nextFocusDownId = btnXmlUrl.id
-        btnXmlUrl.nextFocusUpId = btnRefresh.id
-        btnXmlUrl.nextFocusDownId = btnEpgFile.id
-        btnEpgFile.nextFocusUpId = btnXmlUrl.id
-        rightCol.addView(btnRefresh)
-        rightCol.addView(btnXmlUrl)
-        rightCol.addView(btnEpgFile)
 
         fun updateDetailBox(prog: EpgProgram?) {
+            selectedEpgProg = prog
             if (prog == null) {
                 detailTitleTv.text = ch?.name ?: "Прямой эфир"
                 detailTimeTv.text = if (ch != null) effectiveCategory(ch) else "Нет данных EPG"
                 detailMetaTv.text = "Расписание передач для этого канала пока не загружено. Нажмите «Обновить EPG» или укажите свой источник."
+                btnArchive.text = "⏪  Архив"
+                btnArchive.alpha = 0.65f
                 return
             }
             detailTitleTv.text = prog.title
+            val dayPrefix = dayLabelFor(prog.startMs)
             val startStr = timeFmt.format(Date(prog.startMs))
             val stopStr = timeFmt.format(Date(prog.stopMs))
-            detailTimeTv.text = "$startStr — $stopStr"
+            detailTimeTv.text = "$dayPrefix$startStr — $stopStr"
+            val isProgPast = prog.stopMs < now
+            btnArchive.text = if (isProgPast) "⏪  Смотреть архив" else "⏪  Архив (прошлые)"
+            btnArchive.alpha = if (isProgPast) 1f else 0.72f
             val totalMin = ((prog.stopMs - prog.startMs) / 60000L).coerceAtLeast(1L)
             val statusLine = when {
                 now in prog.startMs..prog.stopMs -> {
@@ -2220,7 +2266,10 @@ class MainActivity : AppCompatActivity() {
                     val waitMin = ((prog.startMs - now) / 60000L).coerceAtLeast(1L)
                     "Скоро (через $waitMin мин) • длительность $totalMin мин"
                 }
-                else -> "Передача завершилась • длительность $totalMin мин"
+                else -> {
+                    val archHint = if (channelSupportsArchive) " • доступен архив (OK)" else " • нажмите «Смотреть архив»"
+                    "Завершилась • $totalMin мин$archHint"
+                }
             }
             val catPart = if (ch != null) "\nКанал: ${ch.name} (${effectiveCategory(ch)})" else ""
             detailMetaTv.text = statusLine + catPart
@@ -2250,7 +2299,7 @@ class MainActivity : AppCompatActivity() {
                     layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 }
                 val timeTv = TextView(this).apply {
-                    text = timeFmt.format(Date(p.startMs))
+                    text = dayLabelFor(p.startMs) + timeFmt.format(Date(p.startMs))
                     typeface = t.boldFont
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.8f * scale)
                     setPadding(0, 0, (10 * scale).toInt(), 0)
@@ -2348,7 +2397,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     addView(topLine)
                     if (progressTrack != null) addView(progressTrack)
-                    nextFocusRightId = btnRefresh.id
+                    nextFocusRightId = btnArchive.id
                     applyEpgRowStyle(this, false)
                     setOnFocusChangeListener { _, hasFocus ->
                         applyEpgRowStyle(this, hasFocus)
@@ -2360,7 +2409,7 @@ class MainActivity : AppCompatActivity() {
                     setOnClickListener {
                         resetMenuInactivityTimer()
                         updateDetailBox(p)
-                        if (canPlayArchive && ch != null) {
+                        if (isPast && ch != null) {
                             playCatchupArchiveProgram(ch, p)
                         } else if (isNow && isPlayingArchiveStream && ch != null) {
                             playChannelObj(ch, immediate = true)
@@ -2373,9 +2422,7 @@ class MainActivity : AppCompatActivity() {
             }
             updateDetailBox(progs.getOrNull(activeIdx))
             val focusBackRow = rowViews.getOrNull(activeIdx) ?: rowViews.first()
-            btnRefresh.nextFocusLeftId = focusBackRow.id
-            btnXmlUrl.nextFocusLeftId = focusBackRow.id
-            btnEpgFile.nextFocusLeftId = focusBackRow.id
+            rightBtnsChain.forEach { it.nextFocusLeftId = focusBackRow.id }
         }
 
         subModalCustomBody.addView(leftScroll)
@@ -2569,8 +2616,13 @@ class MainActivity : AppCompatActivity() {
                 SettingSpec("Яркость экрана", "$brightnessPercent%", 0) {
                     navigateToMenu("BRIGHTNESS_MENU")
                 },
-                SettingSpec("Машина времени", "-30 сек", 0) {
-                    rewindLiveBufferSeconds(30); closeAllMenus()
+                SettingSpec("Шаг перемотки (Машина времени)", formatRewindStepLabel(rewindStepSec), 0) {
+                    val steps = listOf(15, 30, 60, 120, 300)
+                    val curIdx = steps.indexOf(rewindStepSec).coerceAtLeast(0)
+                    rewindStepSec = steps[(curIdx + 1) % steps.size]
+                    saveState()
+                    if (::btnOsdRewind.isInitialized) btnOsdRewind.text = formatRewindButtonLabel(rewindStepSec)
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 7)
                 }
             )
             else -> listOf(
@@ -2585,8 +2637,8 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Обновление телепрограммы...", Toast.LENGTH_SHORT).show()
                     loadEpgOncePerDayInBackground(forceRefresh = true); navigateBackInMenu()
                 },
-                SettingSpec("Диагностический файл", formatDiagFileSize(), 0) {
-                    openDiagLogInSystemFileManager()
+                SettingSpec("Лог ошибок", formatDiagFileSize(), 0) {
+                    navigateToMenu("DIAG_LOG_VIEW")
                 },
                 SettingSpec("Бэкап настроек в файл", "Сохранить", 0) {
                     exportFullBackupToFile()
@@ -2764,6 +2816,7 @@ class MainActivity : AppCompatActivity() {
             put("networkProxyUrl", networkProxyUrl)
             put("touchEdgeGesturesEnabled", touchEdgeGesturesEnabled)
             put("onDropBehavior", onDropBehavior)
+            put("rewindStepSec", rewindStepSec)
             put("menuHideDelaySec", menuHideDelaySec)
             put("showChannelBannerOnSwitch", showChannelBannerOnSwitch)
             put("autoCheckUpdatesEnabled", autoCheckUpdatesEnabled)
@@ -2834,6 +2887,7 @@ class MainActivity : AppCompatActivity() {
         networkProxyUrl = st.optString("networkProxyUrl", networkProxyUrl).trim()
         touchEdgeGesturesEnabled = st.optBoolean("touchEdgeGesturesEnabled", touchEdgeGesturesEnabled)
         onDropBehavior = st.optInt("onDropBehavior", onDropBehavior).coerceIn(0, 1)
+        rewindStepSec = st.optInt("rewindStepSec", rewindStepSec).takeIf { it in listOf(15, 30, 60, 120, 300) } ?: 30
         menuHideDelaySec = st.optInt("menuHideDelaySec", menuHideDelaySec).coerceIn(4, 12)
         showChannelBannerOnSwitch = st.optBoolean("showChannelBannerOnSwitch", showChannelBannerOnSwitch)
         autoCheckUpdatesEnabled = st.optBoolean("autoCheckUpdatesEnabled", autoCheckUpdatesEnabled)
@@ -4461,26 +4515,30 @@ class MainActivity : AppCompatActivity() {
         setSubModalHeaderTitle("Тест каналов", "ТС")
         subModalInputContainer.visibility = View.GONE
         subModalCustomBody.visibility = View.GONE
-        subModalTopButtons.visibility = View.GONE
+        subModalBottomButtons.visibility = View.GONE
+        subModalBottomButtons.removeAllViews()
         subModalList.visibility = View.VISIBLE
 
-        if (firstOpen || subModalBottomButtons.childCount == 0 || !isAnalyzerRunning) {
-            subModalBottomButtons.visibility = View.VISIBLE
-            subModalBottomButtons.removeAllViews()
-            subModalBottomButtons.addView(makeUnifiedActionButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Запустить тест", isDanger = isAnalyzerRunning) {
+        var primaryTopBtn: View? = null
+        if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
+            subModalTopButtons.visibility = View.VISIBLE
+            subModalTopButtons.removeAllViews()
+            val startBtn = makeUnifiedActionButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Запустить тест", isDanger = isAnalyzerRunning) {
                 if (isAnalyzerRunning) { isAnalyzerRunning = false; analyzerStatusBanner.visibility = View.GONE; openAnalyzerGroupsModal(firstOpen = true) }
                 else { selectedAnalyzerCategory = "Все каналы"; startBackgroundChannelAnalyzer(snapshot, isRescanHidden = false); openAnalyzerGroupsModal(firstOpen = true) }
-            })
+            }
+            primaryTopBtn = startBtn
+            subModalTopButtons.addView(startBtn)
             if (isAnalyzerRunning) {
-                subModalBottomButtons.addView(makeUnifiedActionButton("▲ В фон") { collapseAnalyzerToTopBar() })
+                subModalTopButtons.addView(makeUnifiedActionButton("▲ В фон") { collapseAnalyzerToTopBar() })
             }
             if (!isAnalyzerRunning && hiddenCount > 0) {
-                subModalBottomButtons.addView(makeUnifiedActionButton("↻ Повтор ($hiddenCount)") {
+                subModalTopButtons.addView(makeUnifiedActionButton("↻ Повтор ($hiddenCount)") {
                     selectedAnalyzerCategory = "Все каналы"
                     startBackgroundChannelAnalyzer(hiddenChannels, isRescanHidden = true)
                     openAnalyzerGroupsModal(firstOpen = true)
                 })
-                subModalBottomButtons.addView(makeUnifiedActionButton("↺ Вернуть ($hiddenCount)") {
+                subModalTopButtons.addView(makeUnifiedActionButton("↺ Вернуть ($hiddenCount)") {
                     hiddenChannels.forEach { ch ->
                         autoDisabledUrls.remove(ch.url)
                         if (channelHealthMap[ch.url] == false) channelHealthMap.remove(ch.url)
@@ -4509,7 +4567,7 @@ class MainActivity : AppCompatActivity() {
         subModalList.setOnItemClickListener { _, _, idx, _ ->
             if (idx in groupNames.indices) { selectedAnalyzerCategory = groupNames[idx]; navigateToMenu("ANALYZER_GROUP_VIEW") }
         }
-        if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
+        if (firstOpen) { animateMenuAppear(subModalOverlay); (primaryTopBtn ?: subModalList).requestFocus(); resetMenuInactivityTimer() }
     }
 
     private fun openAnalyzerGroupChannelsModal(catName: String, firstOpen: Boolean = false) {
@@ -4520,25 +4578,29 @@ class MainActivity : AppCompatActivity() {
         setSubModalHeaderTitle(catName, "ТС")
         subModalInputContainer.visibility = View.GONE
         subModalCustomBody.visibility = View.GONE
-        subModalTopButtons.visibility = View.GONE
+        subModalBottomButtons.visibility = View.GONE
+        subModalBottomButtons.removeAllViews()
         subModalList.visibility = View.VISIBLE
 
-        if (firstOpen || subModalBottomButtons.childCount == 0 || !isAnalyzerRunning) {
-            subModalBottomButtons.visibility = View.VISIBLE
-            subModalBottomButtons.removeAllViews()
-            subModalBottomButtons.addView(makeUnifiedActionButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Тест группы", isDanger = isAnalyzerRunning) {
+        var primaryTopBtn: View? = null
+        if (firstOpen || subModalTopButtons.childCount == 0 || !isAnalyzerRunning) {
+            subModalTopButtons.visibility = View.VISIBLE
+            subModalTopButtons.removeAllViews()
+            val startBtn = makeUnifiedActionButton(if (isAnalyzerRunning) "■ Стоп" else "▶ Тест группы", isDanger = isAnalyzerRunning) {
                 if (isAnalyzerRunning) { isAnalyzerRunning = false; analyzerStatusBanner.visibility = View.GONE; openAnalyzerGroupChannelsModal(catName, firstOpen = true) }
                 else { startBackgroundChannelAnalyzer(groupChans, isRescanHidden = false); openAnalyzerGroupChannelsModal(catName, firstOpen = true) }
-            })
+            }
+            primaryTopBtn = startBtn
+            subModalTopButtons.addView(startBtn)
             if (isAnalyzerRunning) {
-                subModalBottomButtons.addView(makeUnifiedActionButton("▲ В фон") { collapseAnalyzerToTopBar() })
+                subModalTopButtons.addView(makeUnifiedActionButton("▲ В фон") { collapseAnalyzerToTopBar() })
             }
             if (!isAnalyzerRunning && groupHiddenCount > 0) {
-                subModalBottomButtons.addView(makeUnifiedActionButton("↻ Повтор ($groupHiddenCount)") {
+                subModalTopButtons.addView(makeUnifiedActionButton("↻ Повтор ($groupHiddenCount)") {
                     startBackgroundChannelAnalyzer(groupHidden, isRescanHidden = true)
                     openAnalyzerGroupChannelsModal(catName, firstOpen = true)
                 })
-                subModalBottomButtons.addView(makeUnifiedActionButton("↺ Вернуть ($groupHiddenCount)") {
+                subModalTopButtons.addView(makeUnifiedActionButton("↺ Вернуть ($groupHiddenCount)") {
                     groupHidden.forEach { ch ->
                         autoDisabledUrls.remove(ch.url)
                         if (channelHealthMap[ch.url] == false) channelHealthMap.remove(ch.url)
@@ -4557,7 +4619,7 @@ class MainActivity : AppCompatActivity() {
             "$status   •   ${ch.name}"
         }, preservePositionIndex = subModalHighlightedPos)
         subModalList.setOnItemClickListener { _, _, idx, _ -> if (idx in groupChans.indices) { playChannelObj(groupChans[idx], immediate = true); closeAllMenus() } }
-        if (firstOpen) { animateMenuAppear(subModalOverlay); subModalList.requestFocus(); resetMenuInactivityTimer() }
+        if (firstOpen) { animateMenuAppear(subModalOverlay); (primaryTopBtn ?: subModalList).requestFocus(); resetMenuInactivityTimer() }
     }
 
     private fun startBackgroundChannelAnalyzer(rawTargetChannels: List<Channel>, isRescanHidden: Boolean = false) {
@@ -4871,24 +4933,11 @@ class MainActivity : AppCompatActivity() {
         bufInner.addView(hintTv)
 
         subModalBottomButtons.removeAllViews()
-        subModalBottomButtons.visibility = View.VISIBLE
-        val b20 = makeUnifiedActionButton("⏪  Отмотать -20с") { rewindLiveBufferSeconds(20); closeAllMenus() }.apply { id = 8311 }
-        val b45 = makeUnifiedActionButton("⏪  Отмотать -45с") { rewindLiveBufferSeconds(45); closeAllMenus() }.apply { id = 8312 }
-        val bLog = makeUnifiedActionButton("Лог ошибок") { navigateToMenu("DIAG_LOG_VIEW") }.apply { id = 8313 }
-        b20.nextFocusRightId = b45.id; b45.nextFocusLeftId = b20.id
-        b45.nextFocusRightId = bLog.id; bLog.nextFocusLeftId = b45.id
-        val focusCardId = cardViews[bufferLevel.coerceIn(0, cardViews.lastIndex)].id
-        b20.nextFocusUpId = cardViews[0].id
-        b45.nextFocusUpId = focusCardId
-        bLog.nextFocusUpId = cardViews.last().id
+        subModalBottomButtons.visibility = View.GONE
         for (i in cardViews.indices) {
             cardViews[i].nextFocusLeftId = cardViews[(i - 1 + cardViews.size) % cardViews.size].id
             cardViews[i].nextFocusRightId = cardViews[(i + 1) % cardViews.size].id
-            cardViews[i].nextFocusDownId = when (i) { 0 -> b20.id; 3 -> bLog.id; else -> b45.id }
         }
-        subModalBottomButtons.addView(b20)
-        subModalBottomButtons.addView(b45)
-        subModalBottomButtons.addView(bLog)
 
         if (!inPlace) animateMenuAppear(subModalOverlay)
         val targetIdx = if (keepIndex in cardViews.indices) keepIndex else bufferLevel.coerceIn(0, cardViews.lastIndex)
@@ -5354,6 +5403,88 @@ class MainActivity : AppCompatActivity() {
         animateMenuAppear(subModalOverlay); nameInput.requestFocus()
     }
 
+
+    private fun formatRewindStepLabel(sec: Int): String = when (sec) {
+        15 -> "15 сек"
+        30 -> "30 сек"
+        60 -> "60 сек"
+        120 -> "2 мин"
+        300 -> "5 мин"
+        else -> "$sec сек"
+    }
+
+    private fun formatRewindButtonLabel(sec: Int): String = when (sec) {
+        15 -> "⏪ -15с"
+        30 -> "⏪ -30с"
+        60 -> "⏪ -1м"
+        120 -> "⏪ -2м"
+        300 -> "⏪ -5м"
+        else -> "⏪ -${sec}с"
+    }
+
+    private fun formatAspectShortLabel(mode: Int): String = when (mode) {
+        0 -> "⤢ Авто"
+        1 -> "⤢ 16:9"
+        else -> "⤢ Зум"
+    }
+
+    private fun recordChannelInRecentHistory(ch: Channel) {
+        val url = ch.url
+        if (url.isBlank()) return
+        recentChannelUrls.remove(url)
+        recentChannelUrls.add(0, url)
+        while (recentChannelUrls.size > 20) {
+            recentChannelUrls.removeAt(recentChannelUrls.lastIndex)
+        }
+    }
+
+    private fun openRecentChannelsModal() {
+        setSubModalHeaderTitle("История просмотров", "ИС")
+        subModalThemesGrid.visibility = View.GONE
+        subModalCustomBody.visibility = View.GONE
+        subModalInputContainer.visibility = View.GONE
+        subModalBottomButtons.visibility = View.GONE
+        subModalBottomButtons.removeAllViews()
+        subModalList.visibility = View.VISIBLE
+
+        val byUrl = allChannels.filter { isChannelActive(it) }.associateBy { it.url }
+        val recentChs = recentChannelUrls.mapNotNull { byUrl[it] }
+
+        subModalTopButtons.removeAllViews()
+        if (recentChs.isNotEmpty()) {
+            subModalTopButtons.visibility = View.VISIBLE
+            subModalTopButtons.addView(makeUnifiedActionButton("🗑 Очистить историю", isDanger = true) {
+                recentChannelUrls.clear()
+                saveState()
+                openRecentChannelsModal()
+            })
+        } else {
+            subModalTopButtons.visibility = View.GONE
+        }
+
+        val rows = if (recentChs.isEmpty()) {
+            listOf("[-]   История просмотров пока пуста")
+        } else {
+            recentChs.map { ch ->
+                val mono = extractTwoLetters(ch.name)
+                val playOrb = if (ch.url == currentChannel?.url) "[+] " else ""
+                val star = if (favoriteUrls.contains(ch.url)) "★ " else ""
+                "[B:$mono] $playOrb$star${ch.name}   •   ${effectiveCategory(ch)}"
+            }
+        }
+        updateSubModalListItems(rows, smoothToggle = false, preservePositionIndex = 0)
+        subModalList.setOnItemClickListener { _, _, which, _ ->
+            val target = recentChs.getOrNull(which) ?: return@setOnItemClickListener
+            val targetCat = effectiveCategory(target)
+            val catIdx = activeCategoryList().indexOf(targetCat)
+            if (catIdx >= 2) selectCategory(catIdx) else selectCategory(1)
+            playChannelObj(target, immediate = true)
+            closeAllMenus()
+        }
+        animateMenuAppear(subModalOverlay)
+        subModalList.requestFocus()
+    }
+
     private fun playCatchupArchiveProgram(ch: Channel, prog: EpgProgram) {
         val archiveUrl = CatchupHelper.buildArchiveUrl(ch, prog)
         if (archiveUrl.isNullOrBlank()) {
@@ -5529,14 +5660,70 @@ class MainActivity : AppCompatActivity() {
 
 
 
-    internal fun makeVerticalRail3DIconButton(iconType: String, baseHex: String, accentHex: String, onClick: () -> Unit): ThemedTileView {
+    internal fun makeVerticalRailLabeledButton(
+        iconType: String,
+        captionText: String,
+        baseHex: String,
+        accentHex: String,
+        onClick: () -> Unit
+    ): LinearLayout {
+        val scale = uiScaleFactor()
+        val t = currentTheme()
+        val iconSz = dpPx(38f * scale).coerceIn(dpPx(34f), dpPx(56f))
         val tile = ThemedTileView(this, iconType, baseHex, accentHex).apply {
-            themeStyleId = currentTheme().id
+            themeStyleId = t.id
+            isFocusable = false
+            isClickable = false
+            layoutParams = LinearLayout.LayoutParams(iconSz, iconSz)
+        }
+        allGridTiles.add(tile)
+
+        val capTv = TextView(this).apply {
+            text = captionText
+            setTextColor(t.textPrimaryColor)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, (10.2f * scale).coerceIn(9.5f, 13.5f))
+            typeface = t.boldFont
+            gravity = Gravity.CENTER
+            isSingleLine = true
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            includeFontPadding = false
+            setPadding(dpPx(2f), dpPx(2f), dpPx(2f), 0)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        railCaptionViews.add(capTv)
+
+        fun applyItemFocusStyle(box: LinearLayout, focused: Boolean) {
+            val curT = currentTheme()
+            tile.isTileFocused = focused
+            if (focused) {
+                box.setBackgroundDrawable(GradientDrawable().apply {
+                    setColor(Color.argb(85, Color.red(curT.accentColor), Color.green(curT.accentColor), Color.blue(curT.accentColor)))
+                    cornerRadius = dpPx(12f).toFloat()
+                    setStroke(dpPx(2f), themeFocusStrokeColor())
+                })
+                capTv.setTextColor(curT.accentColor)
+            } else {
+                box.setBackgroundDrawable(null)
+                capTv.setTextColor(curT.textPrimaryColor)
+            }
+        }
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
             isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-            layoutParams = LinearLayout.LayoutParams(86, 86).apply { setMargins(6, 10, 6, 10) }
+            setPadding(dpPx(3f), dpPx(4f), dpPx(3f), dpPx(4f))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                val mv = dpPx(2f)
+                setMargins(dpPx(2f), mv, dpPx(2f), mv)
+            }
+            addView(tile)
+            addView(capTv)
+            applyItemFocusStyle(this, false)
             setOnFocusChangeListener { v, hasFocus ->
-                isTileFocused = hasFocus
-                v.animate().scaleX(if (hasFocus) 1.12f else 1.0f).scaleY(if (hasFocus) 1.12f else 1.0f).setDuration(160L).start()
+                applyItemFocusStyle(this, hasFocus)
+                v.animate().scaleX(if (hasFocus) 1.06f else 1.0f).scaleY(if (hasFocus) 1.06f else 1.0f).setDuration(160L).start()
                 if (hasFocus) resetMenuInactivityTimer()
             }
             setOnClickListener {
@@ -5555,8 +5742,6 @@ class MainActivity : AppCompatActivity() {
                 } else false
             }
         }
-        allGridTiles.add(tile)
-        return tile
     }
 
     internal fun makeModernButton(label: String, isIconOnly: Boolean = false, onClick: () -> Unit): TextView {
@@ -5774,25 +5959,28 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
         }
 
+        railCaptionViews.clear()
         leftIconRail = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setBackgroundDrawable(makeThemedSubBg()); visibility = View.VISIBLE; setPadding(10, 16, 10, 16)
-            layoutParams = FrameLayout.LayoutParams(108, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START or Gravity.CENTER_VERTICAL)
+            setBackgroundDrawable(makeThemedSubBg()); visibility = View.VISIBLE
+            setPadding(dpPx(4f), dpPx(8f), dpPx(4f), dpPx(8f))
+            layoutParams = FrameLayout.LayoutParams(dpPx(74f), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START or Gravity.CENTER_VERTICAL)
             setOnClickListener {
                 resetMenuInactivityTimer()
                 if (!isLeftRailVisible) showLeftIconRailFromGroups()
             }
         }
 
-        railTileSearch = makeVerticalRail3DIconButton("SEARCH", "#0284C7", "#38BDF8") { navigateToMenu("SEARCH") }.apply { id = 7100 }
-        railTilePlaylists = makeVerticalRail3DIconButton("PLAYLISTS", "#1B8A6B", "#FFB300") { navigateToMenu("PLAYLISTS") }.apply { id = 7101 }
-        railTileSettings = makeVerticalRail3DIconButton("SETTINGS_GEAR", "#1E4E79", "#00E5FF") { navigateToMenu("SETTINGS") }.apply { id = 7102 }
-        railTileAnalyzer = makeVerticalRail3DIconButton("ANALYZER", "#5E35B1", "#00E676") { navigateToMenu("ANALYZER_GROUPS") }.apply { id = 7103 }
-        railTileSwapGroups = makeVerticalRail3DIconButton("SWAP_GROUPS", "#D84315", "#FFD54F") {
-            if (isSideShowingChannels) showSideGroupsMode() else showSideChannelsMode(focusCurrentChannelIfSameGroup = true)
-        }.apply { id = 7104 }
+        railBtnSearch = makeVerticalRailLabeledButton("SEARCH", "Поиск", "#0284C7", "#38BDF8") { navigateToMenu("SEARCH") }.apply { id = 7100 }
+        railBtnHistory = makeVerticalRailLabeledButton("HISTORY", "История", "#0D9488", "#5EEAD4") { navigateToMenu("RECENT") }.apply { id = 7101 }
+        railBtnFavorites = makeVerticalRailLabeledButton("FAVORITES", "Избран.", "#AD1457", "#FFD54F") {
+            selectCategory(0); showSideChannelsMode(focusCurrentChannelIfSameGroup = false)
+        }.apply { id = 7102 }
+        railBtnPlaylists = makeVerticalRailLabeledButton("PLAYLISTS", "Списки", "#1B8A6B", "#FFB300") { navigateToMenu("PLAYLISTS") }.apply { id = 7103 }
+        railBtnAnalyzer = makeVerticalRailLabeledButton("ANALYZER", "Тест", "#5E35B1", "#00E676") { navigateToMenu("ANALYZER_GROUPS") }.apply { id = 7104 }
+        railBtnSettings = makeVerticalRailLabeledButton("SETTINGS_GEAR", "Меню", "#1E4E79", "#00E5FF") { navigateToMenu("SETTINGS") }.apply { id = 7105 }
 
-        val railButtons = listOf(railTileSearch, railTilePlaylists, railTileSettings, railTileAnalyzer, railTileSwapGroups)
+        val railButtons = listOf(railBtnSearch, railBtnHistory, railBtnFavorites, railBtnPlaylists, railBtnAnalyzer, railBtnSettings)
         for (i in railButtons.indices) {
             val cur = railButtons[i]
             cur.nextFocusUpId = railButtons[(i - 1 + railButtons.size) % railButtons.size].id
@@ -5888,17 +6076,31 @@ class MainActivity : AppCompatActivity() {
         }
         centerOsdPanel.addView(osdEpgNextAndDesc)
 
+        val osdButtonsScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
         val osdButtonsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL)
         }
 
         btnOsdTop = makeModernButton("▲ В ТОП") { currentChannel?.let { toggleTopChannel(it) }; updateCenterOsdContent() }
         btnOsdFav = makeModernButton("★ Избр.") { currentChannel?.let { toggleFavorite(it) }; updateCenterOsdContent() }
-        btnOsdDualToggle = makeModernButton("⧉ 2-й экран") { toggleDualStreamWithCurrentOrNeighbor(); updateCenterOsdContent() }
-        btnOsdRewind = makeModernButton("⏪ -20с") { rewindLiveBufferSeconds(20) }
+        btnOsdDualToggle = makeModernButton("⧉ 2-й") { toggleDualStreamWithCurrentOrNeighbor(); updateCenterOsdContent() }
+        btnOsdRewind = makeModernButton(formatRewindButtonLabel(rewindStepSec)) { rewindLiveBufferSeconds(rewindStepSec) }
         btnOsdEpgList = makeModernButton("▤ Гид") { navigateToMenu("FULL_EPG") }
         btnOsdSearch = makeModernButton("🔍 Поиск") { navigateToMenu("SEARCH") }
+        btnOsdAspect = makeModernButton(formatAspectShortLabel(screenAspectMode)) {
+            screenAspectMode = (screenAspectMode + 1) % 3
+            applyScreenAspectMode()
+            saveState()
+            updateCenterOsdContent()
+            val aspectName = when (screenAspectMode) { 0 -> "По экрану"; 1 -> "Растянуть 16:9"; else -> "Кинозум" }
+            showEdgeGestureHud("⤢ Экран: $aspectName")
+        }
         btnOsdSettings = makeModernButton("⚙ Меню") { navigateToMenu("SETTINGS") }
         btnOsdNightMode = makeModernButton("🌙 $brightnessPercent%") { navigateToMenu("BRIGHTNESS_MENU") }
         btnOsdChannelActions = makeModernButton("✎ Канал") { navigateToMenu("CHANNEL_ACTIONS") }
@@ -5906,7 +6108,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(54, 54).apply { setMargins(10, 2, 4, 2) }
         }
 
-        val textOsdBtns = listOf(btnOsdTop, btnOsdFav, btnOsdDualToggle, btnOsdRewind, btnOsdEpgList, btnOsdSearch, btnOsdSettings, btnOsdNightMode, btnOsdChannelActions)
+        val textOsdBtns = listOf(btnOsdTop, btnOsdFav, btnOsdDualToggle, btnOsdRewind, btnOsdEpgList, btnOsdSearch, btnOsdAspect, btnOsdSettings, btnOsdNightMode, btnOsdChannelActions)
         for (b in textOsdBtns) {
             b.setOnKeyListener { v, keyCode, event ->
                 if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
@@ -5925,7 +6127,8 @@ class MainActivity : AppCompatActivity() {
             } else false
         }
         osdButtonsRow.addView(btnOsdPowerRedCircle)
-        centerOsdPanel.addView(osdButtonsRow)
+        osdButtonsScroll.addView(osdButtonsRow)
+        centerOsdPanel.addView(osdButtonsScroll)
 
         zappingRowContainer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER
@@ -6421,7 +6624,7 @@ class MainActivity : AppCompatActivity() {
         updateSideSlidingTiles(animate = true)
         refreshSimpleListHighlightInPlace(categoryListView, -1)
         refreshSimpleListHighlightInPlace(channelListView, -1)
-        railTilePlaylists.requestFocus()
+        railBtnSearch.requestFocus()
     }
 
     internal fun hideLeftIconRailToGroups() {
@@ -6844,6 +7047,11 @@ class MainActivity : AppCompatActivity() {
             override fun onLongPress(e: MotionEvent) {
                 lastSwipeLeftFromIdleMs = 0L
                 if (firstRunModeOverlay.visibility == View.VISIBLE || menuHistory.isNotEmpty()) return
+                if (edgeGestureActiveMode != 0) return
+                if (touchEdgeGesturesEnabled) {
+                    val screenW = resources.displayMetrics.widthPixels.coerceAtLeast(1).toFloat()
+                    if (e.rawX < screenW * 0.25f || e.rawX > screenW * 0.75f) return
+                }
                 navigateToMenu("SETTINGS")
             }
             override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -6948,12 +7156,12 @@ class MainActivity : AppCompatActivity() {
         val exactRows = (maxH / stepH).coerceAtLeast(4)
         val exactH = (exactRows * rowH + (exactRows - 1).coerceAtLeast(0) * divH + dpPx(12f)).coerceAtMost(maxH)
 
-        val innerW = (sidePanelWidthPx() - pad * 2).coerceAtLeast(dpPx(260f))
-        val gap = dpPx(8f)
-        val peekW = (innerW * 0.14f).toInt().coerceIn(dpPx(36f), dpPx(78f))
-        val railW = dpPx(64f * uiScaleFactor()).coerceIn(dpPx(54f), dpPx(92f))
-        val groupsW = (innerW - 2 * peekW - 2 * gap).coerceAtLeast(dpPx(170f))
-        val channelsW = (innerW - peekW - gap).coerceAtLeast(dpPx(190f))
+        val innerW = (sidePanelWidthPx() - pad * 2).coerceAtLeast(dpPx(220f))
+        val gap = dpPx(6f)
+        val peekW = dpPx(14f)
+        val railW = dpPx(72f * uiScaleFactor()).coerceIn(dpPx(64f), dpPx(100f))
+        val groupsW = (innerW - 2 * peekW - 2 * gap).coerceAtLeast(dpPx(160f))
+        val channelsW = (innerW - peekW - gap).coerceAtLeast(dpPx(180f))
 
         categoryListView.isVerticalScrollBarEnabled = (!isSideShowingChannels && !isLeftRailVisible && activeCategoryList().size > exactRows)
         channelListView.isVerticalScrollBarEnabled = (isSideShowingChannels && displayedChannels.size > exactRows)
@@ -6974,11 +7182,11 @@ class MainActivity : AppCompatActivity() {
 
     internal fun updateSideSlidingTiles(animate: Boolean) {
         val pad = sidePanelPadPx()
-        val innerW = (sidePanelWidthPx() - pad * 2).coerceAtLeast(dpPx(260f))
-        val gap = dpPx(8f)
-        val peekW = (innerW * 0.14f).toInt().coerceIn(dpPx(36f), dpPx(78f))
-        val railW = dpPx(64f * uiScaleFactor()).coerceIn(dpPx(54f), dpPx(92f))
-        val groupsW = (innerW - 2 * peekW - 2 * gap).coerceAtLeast(dpPx(170f))
+        val innerW = (sidePanelWidthPx() - pad * 2).coerceAtLeast(dpPx(220f))
+        val gap = dpPx(6f)
+        val peekW = dpPx(14f)
+        val railW = dpPx(72f * uiScaleFactor()).coerceIn(dpPx(64f), dpPx(100f))
+        val groupsW = (innerW - 2 * peekW - 2 * gap).coerceAtLeast(dpPx(160f))
 
         leftIconRail.visibility = View.VISIBLE
         categoryListView.visibility = View.VISIBLE
@@ -6991,8 +7199,8 @@ class MainActivity : AppCompatActivity() {
         when {
             isLeftRailVisible -> {
                 railX = 0f; railAlpha = 1f; railScaleY = 1f
-                groupsX = (railW + gap).toFloat(); groupsAlpha = 0.60f; groupsScaleY = 0.96f
-                channelsX = (railW + gap + groupsW + gap).toFloat(); channelsAlpha = 0f; channelsScaleY = 0.94f
+                groupsX = (railW + gap).toFloat(); groupsAlpha = 0.52f; groupsScaleY = 0.97f
+                channelsX = (railW + gap + groupsW + gap).toFloat(); channelsAlpha = 0f; channelsScaleY = 0.95f
                 leftIconRail.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
                 categoryListView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 channelListView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -7000,9 +7208,9 @@ class MainActivity : AppCompatActivity() {
                 channelListView.isFocusable = false
             }
             !isSideShowingChannels -> {
-                railX = -(railW - peekW).toFloat(); railAlpha = 0.76f; railScaleY = 0.96f
+                railX = -(railW - peekW).toFloat(); railAlpha = 0.48f; railScaleY = 0.97f
                 groupsX = (peekW + gap).toFloat(); groupsAlpha = 1f; groupsScaleY = 1f
-                channelsX = (innerW - peekW).toFloat(); channelsAlpha = 0.84f; channelsScaleY = 0.96f
+                channelsX = (innerW - peekW).toFloat(); channelsAlpha = 0.52f; channelsScaleY = 0.97f
                 leftIconRail.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 categoryListView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
                 channelListView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -7010,8 +7218,8 @@ class MainActivity : AppCompatActivity() {
                 channelListView.isFocusable = false
             }
             else -> {
-                railX = -(railW + groupsW).toFloat(); railAlpha = 0f; railScaleY = 0.94f
-                groupsX = -(groupsW - peekW).toFloat(); groupsAlpha = 0.78f; groupsScaleY = 0.96f
+                railX = -(railW + groupsW).toFloat(); railAlpha = 0f; railScaleY = 0.95f
+                groupsX = -(groupsW - peekW).toFloat(); groupsAlpha = 0.50f; groupsScaleY = 0.97f
                 channelsX = (peekW + gap).toFloat(); channelsAlpha = 1f; channelsScaleY = 1f
                 leftIconRail.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 categoryListView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -7028,8 +7236,8 @@ class MainActivity : AppCompatActivity() {
                     .translationX(tx)
                     .alpha(al)
                     .scaleY(sy)
-                    .setDuration(240L)
-                    .setInterpolator(DecelerateInterpolator(1.4f))
+                    .setDuration(320L)
+                    .setInterpolator(DecelerateInterpolator(1.9f))
                     .start()
             } else {
                 v.translationX = tx
@@ -7321,21 +7529,59 @@ class MainActivity : AppCompatActivity() {
                 currentChannel?.let { playChannelObj(it, immediate = true, silentSwap = true, updateSavedUrl = false) }
             }
             "SEARCH" -> openChannelSearchModal()
+            "RECENT" -> openRecentChannelsModal()
             "UPDATE_PROMPT" -> openUpdateAvailablePromptModal()
         }
     }
 
     internal fun rewindLiveBufferSeconds(sec: Int) {
+        val ch = currentChannel
+        val canArchive = CatchupHelper.hasCatchup(ch)
         if (isVlcEngineActive()) {
             val vlc = vlcPlayer ?: return
             val cur = runCatching { vlc.time }.getOrDefault(0L)
+            if (cur >= sec * 1000L && sec <= 60) {
+                runCatching { vlc.setTime((cur - sec * 1000L).coerceAtLeast(0L)) }
+                showEdgeGestureHud("⏪ -${formatRewindStepLabel(sec)}")
+                return
+            }
+            if (canArchive && ch != null) {
+                val archUrl = CatchupHelper.buildRewindArchiveUrl(ch, sec)
+                if (!archUrl.isNullOrBlank()) {
+                    isPlayingArchiveStream = true
+                    activeArchiveProgramTitle = "Назад ${formatRewindStepLabel(sec)}"
+                    playChannelInVlc(archUrl)
+                    showEdgeGestureHud("⏪ Архив -${formatRewindStepLabel(sec)}")
+                    return
+                }
+            }
             if (cur > 0L) runCatching { vlc.setTime((cur - sec * 1000L).coerceAtLeast(0L)) }
+            showEdgeGestureHud("⏪ -${formatRewindStepLabel(sec)}")
             return
         }
         val p = player ?: return
         val cur = p.currentPosition
+        if (cur < sec * 1000L && canArchive && ch != null) {
+            val archUrl = CatchupHelper.buildRewindArchiveUrl(ch, sec)
+            if (!archUrl.isNullOrBlank()) {
+                isPlayingArchiveStream = true
+                activeArchiveProgramTitle = "Назад ${formatRewindStepLabel(sec)}"
+                lastChannelSwitchMs = System.currentTimeMillis()
+                runCatching {
+                    p.stop()
+                    p.clearMediaItems()
+                    applyHeadersToDataSourceForUrl(archUrl)
+                    p.setMediaItem(MediaItem.fromUri(archUrl), true)
+                    p.prepare()
+                    p.play()
+                }
+                showEdgeGestureHud("⏪ Архив -${formatRewindStepLabel(sec)}")
+                return
+            }
+        }
         val target = (cur - sec * 1000L).coerceAtLeast(0L)
         p.seekTo(target)
+        showEdgeGestureHud("⏪ -${formatRewindStepLabel(sec)}")
     }
 
     internal fun stopDualStreamMode() {
@@ -8034,7 +8280,7 @@ class MainActivity : AppCompatActivity() {
             2 -> 32 * 1024 * 1024
             else -> 44 * 1024 * 1024
         }
-        val backBufferMs = if (bufferLevel == 0) 30_000 else 45_000
+        val backBufferMs = if (bufferLevel == 0) 45_000 else 60_000
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
             .setTargetBufferBytes(targetBytes)
@@ -8487,7 +8733,9 @@ class MainActivity : AppCompatActivity() {
         val isTop = topUrls.contains(ch.url)
         btnOsdTop.text = if (isTop) "▲ Убрать ТОП" else "▲ В ТОП"
         btnOsdFav.text = if (isFav) "★ В Избр." else "★ Избр."
-        btnOsdDualToggle.text = if (isDualStreamActive) "⧉ Выкл 2-й экран" else "⧉ 2-й экран"
+        btnOsdDualToggle.text = if (isDualStreamActive) "⧉ Выкл 2-й" else "⧉ 2-й"
+        btnOsdRewind.text = formatRewindButtonLabel(rewindStepSec)
+        btnOsdAspect.text = formatAspectShortLabel(screenAspectMode)
         btnOsdNightMode.text = "🌙 $brightnessPercent%"
 
         val badges = (if (isTop) "▲ " else "") + (if (isFav) "★ " else "")
@@ -9376,6 +9624,7 @@ class MainActivity : AppCompatActivity() {
         pendingDebouncedChannel = channel
         isPlayingArchiveStream = false
         activeArchiveProgramTitle = ""
+        recordChannelInRecentHistory(channel)
         if (updateSavedUrl) {
             lastSavedChannelUrl = channel.url
             lastSavedChannelName = channel.name
@@ -9495,6 +9744,8 @@ class MainActivity : AppCompatActivity() {
             .putBoolean("subtitles_enabled_v38", subtitlesEnabled)
             .putBoolean("edge_gestures_v38", touchEdgeGesturesEnabled)
             .putInt("on_drop_v23", onDropBehavior)
+            .putInt("rewind_step_sec_v39", rewindStepSec)
+            .putString("recent_urls_v39", JSONArray(recentChannelUrls).toString())
             .putInt("menu_hide_sec_v23", menuHideDelaySec)
             .putBoolean("show_banner_v32", showChannelBannerOnSwitch)
             .putBoolean("auto_check_updates_v37", autoCheckUpdatesEnabled)
@@ -9537,6 +9788,17 @@ class MainActivity : AppCompatActivity() {
         subtitlesEnabled = prefs.getBoolean("subtitles_enabled_v38", false)
         touchEdgeGesturesEnabled = prefs.getBoolean("edge_gestures_v38", false)
         onDropBehavior = prefs.getInt("on_drop_v23", 0)
+        rewindStepSec = prefs.getInt("rewind_step_sec_v39", 30).takeIf { it in listOf(15, 30, 60, 120, 300) } ?: 30
+        recentChannelUrls.clear()
+        prefs.getString("recent_urls_v39", null)?.let { raw ->
+            runCatching {
+                val arr = JSONArray(raw)
+                for (i in 0 until arr.length()) {
+                    val u = arr.optString(i, "").trim()
+                    if (u.isNotEmpty() && !recentChannelUrls.contains(u)) recentChannelUrls.add(u)
+                }
+            }
+        }
         menuHideDelaySec = prefs.getInt("menu_hide_sec_v23", 8)
         showChannelBannerOnSwitch = prefs.getBoolean("show_banner_v32", true)
         autoCheckUpdatesEnabled = prefs.getBoolean("auto_check_updates_v37", true)
@@ -9631,8 +9893,13 @@ class MainActivity : AppCompatActivity() {
                     val inSafeY = edgeGestureStartY > edgeGuard && edgeGestureStartY < (screenH - edgeGuard)
                     val inLeftZone = edgeGestureStartX < screenW * 0.25f
                     val inRightZone = edgeGestureStartX > screenW * 0.75f
-                    if (inSafeY && (inLeftZone || inRightZone) && abs(dy) > slop * 1.4f && abs(dy) > abs(dx) * 1.4f) {
+                    if (inSafeY && (inLeftZone || inRightZone) && abs(dy) > slop * 1.2f && abs(dy) > abs(dx) * 1.3f) {
                         edgeGestureActiveMode = if (inLeftZone) 1 else 2
+                        if (::gestureDetector.isInitialized) {
+                            val cancelEv = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
+                            gestureDetector.onTouchEvent(cancelEv)
+                            cancelEv.recycle()
+                        }
                     }
                 }
                 if (edgeGestureActiveMode == 1) {

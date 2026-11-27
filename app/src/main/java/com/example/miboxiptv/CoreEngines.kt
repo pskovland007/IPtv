@@ -240,7 +240,7 @@ object CoreEngines {
     private val REGEX_TVG_ID: Regex = Regex("tvg-id=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
     private val REGEX_CATCHUP_TYPE: Regex = Regex("(?:catchup|catchup-type)=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
     private val REGEX_CATCHUP_SOURCE: Regex = Regex("catchup-source=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
-    private val REGEX_CATCHUP_DAYS: Regex = Regex("(?:catchup-days|tvg-rec)=\"?(\\d+)\"?", RegexOption.IGNORE_CASE)
+    private val REGEX_CATCHUP_DAYS: Regex = Regex("(?:catchup-days|tvg-rec|timeshift)=\"?(\\d+)\"?", RegexOption.IGNORE_CASE)
 
     val russianSmartTvAgents = listOf(
         "Televizo/1.9.7.14 (Linux; Android 11; Xiaomi Mi Box S)",
