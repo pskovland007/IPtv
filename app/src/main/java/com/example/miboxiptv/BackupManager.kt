@@ -90,7 +90,7 @@ class BackupManager(private val context: Context) {
         }.getOrDefault("?" to 0L)
 
         return buildString {
-            append("=== TiViLook Diagnostic Log ===\n")
+            append("=== TiViLook Beta Diagnostic Log ===\n")
             append("Generated: ").append(ts).append('\n')
             append("App: ").append(verName).append(" (code ").append(verCode).append(")\n")
             append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n')
@@ -192,10 +192,14 @@ class BackupManager(private val context: Context) {
             }
         }
 
-        // 2. Legacy public Download/TiViLook/tivilook_backup.json (and root Download/tivilook_backup.json)
+        // 2. Legacy public Download/TiViLook/tivilook_beta_backup.json (plus optional fallback from main backup)
         @Suppress("DEPRECATION")
         val pubRoot = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        for (f in listOf(File(File(pubRoot, "TiViLook"), BACKUP_FILE_NAME), File(pubRoot, BACKUP_FILE_NAME))) {
+        for (f in listOf(
+            File(File(pubRoot, "TiViLook"), BACKUP_FILE_NAME),
+            File(pubRoot, BACKUP_FILE_NAME),
+            File(File(pubRoot, "TiViLook"), LEGACY_BACKUP_FILE_NAME)
+        )) {
             if (f.exists() && f.isFile && f.canRead() && f.length() > 0L) {
                 candidates.add(Triple(f.lastModified(), "Download/${f.parentFile?.name}/${f.name}") {
                     runCatching { f.readText(Charsets.UTF_8) }.getOrNull()
@@ -222,6 +226,7 @@ class BackupManager(private val context: Context) {
 
     companion object {
         private const val FORMAT_TAG = "tivilook_backup_v1"
-        const val BACKUP_FILE_NAME = "tivilook_backup.json"
+        const val BACKUP_FILE_NAME = "tivilook_beta_backup.json"
+        private const val LEGACY_BACKUP_FILE_NAME = "tivilook_backup.json"
     }
 }

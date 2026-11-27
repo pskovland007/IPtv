@@ -22,6 +22,7 @@ import java.security.cert.X509Certificate
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
@@ -29,25 +30,34 @@ import javax.net.ssl.X509TrustManager
 
 object CoreEngines {
     private val dohDnsCache = ConcurrentHashMap<String, String>()
+    const val DIAG_FILE_NAME = "TiViLook_beta_diag.txt"
+    const val CRASH_FILE_NAME = "TiViLook_beta_crash.txt"
     private val diagLock = Any()
     private val diagTimeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    private val diagExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "TiViLook-DiagIO").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
+    }
     @Volatile var diagAppContext: Context? = null
 
     fun resolveDiagLogFile(ctx: Context? = diagAppContext): File {
-        // Рабочий лог всегда хранится строго в приватной папке приложения,
-        // чтобы не конфликтовать с экспортом в публичную папку Download.
         val extDir = ctx?.getExternalFilesDir(null)
         if (extDir != null) {
             if (!extDir.exists()) extDir.mkdirs()
-            return File(extDir, "TiViLook_diag.txt")
+            return File(extDir, DIAG_FILE_NAME)
         }
         val intDir = ctx?.filesDir
         if (intDir != null) {
             if (!intDir.exists()) intDir.mkdirs()
-            return File(intDir, "TiViLook_diag.txt")
+            return File(intDir, DIAG_FILE_NAME)
         }
         val tmpDir = File(System.getProperty("java.io.tmpdir") ?: "/data/local/tmp")
-        return File(tmpDir, "TiViLook_diag.txt")
+        return File(tmpDir, DIAG_FILE_NAME)
+    }
+
+    fun resolveCrashLogFile(ctx: Context? = diagAppContext): File {
+        val base = ctx?.getExternalFilesDir(null) ?: ctx?.filesDir ?: File(System.getProperty("java.io.tmpdir") ?: "/data/local/tmp")
+        if (!base.exists()) base.mkdirs()
+        return File(base, CRASH_FILE_NAME)
     }
 
     fun readDiagLogBytes(ctx: Context? = diagAppContext): ByteArray? {
@@ -61,19 +71,41 @@ object CoreEngines {
         }
     }
 
+    private fun writeDiagLineLocked(tag: String, msg: String, ts: String) {
+        val f = resolveDiagLogFile()
+        f.parentFile?.let { if (!it.exists()) it.mkdirs() }
+        if (f.exists() && f.length() > 1_500_000L) {
+            val tail = f.readText().takeLast(450_000)
+            f.writeText("--- [ЛОГ УСЕЧЁН ПО ЛИМИТУ 1.5 МБ] ---\n" + tail)
+        }
+        FileWriter(f, true).use { fw ->
+            fw.write("$ts [$tag] $msg\n")
+        }
+    }
+
     fun appendDiagLog(tag: String, msg: String) {
+        val nowDate = Date()
+        runCatching {
+            diagExecutor.execute {
+                try {
+                    synchronized(diagLock) {
+                        val ts = diagTimeFmt.format(nowDate)
+                        writeDiagLineLocked(tag, msg, ts)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    fun appendCrashLogSync(ctx: Context?, threadName: String, throwable: Throwable) {
         try {
+            val stackText = android.util.Log.getStackTraceString(throwable)
             synchronized(diagLock) {
-                val f = resolveDiagLogFile()
-                f.parentFile?.let { if (!it.exists()) it.mkdirs() }
-                if (f.exists() && f.length() > 1_500_000L) {
-                    val tail = f.readText().takeLast(450_000)
-                    f.writeText("--- [ЛОГ УСЕЧЁН ПО ЛИМИТУ 1.5 МБ] ---\n" + tail)
-                }
                 val ts = diagTimeFmt.format(Date())
-                FileWriter(f, true).use { fw ->
-                    fw.write("$ts [$tag] $msg\n")
-                }
+                val entry = "$ts [CRASH] thread=$threadName ${throwable.javaClass.name}: ${throwable.message}\n$stackText\n"
+                val crashFile = resolveCrashLogFile(ctx ?: diagAppContext)
+                FileWriter(crashFile, true).use { it.write(entry) }
+                writeDiagLineLocked("CRASH", "thread=$threadName ${throwable.javaClass.simpleName}: ${throwable.message}", ts)
             }
         } catch (_: Exception) {}
     }
@@ -83,11 +115,11 @@ object CoreEngines {
             synchronized(diagLock) {
                 val f = resolveDiagLogFile()
                 f.parentFile?.let { if (!it.exists()) it.mkdirs() }
-                f.writeText("${diagTimeFmt.format(Date())} [INIT] Диагностический лог TiViLook очищен пользователем\n")
+                f.writeText("${diagTimeFmt.format(Date())} [INIT] Диагностический лог TiViLook Beta очищен пользователем\n")
                 f.absolutePath
             }
         } catch (_: Exception) {
-            "TiViLook_diag.txt"
+            DIAG_FILE_NAME
         }
     }
 
@@ -97,7 +129,7 @@ object CoreEngines {
             val kb = if (f.exists()) (f.length() / 1024L).coerceAtLeast(1L) else 0L
             "${f.name} (${kb} КБ)"
         } catch (_: Exception) {
-            "TiViLook_diag.txt"
+            DIAG_FILE_NAME
         }
     }
 
@@ -125,7 +157,7 @@ object CoreEngines {
                 if (src.exists() && src.length() > 0L) src.readBytes()
                 else "${diagTimeFmt.format(Date())} [INIT] Лог пуст\n".toByteArray(Charsets.UTF_8)
             }
-            val fileName = "TiViLook_diag.txt"
+            val fileName = DIAG_FILE_NAME
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val resolver = ctx.contentResolver
                 try {
@@ -206,6 +238,9 @@ object CoreEngines {
     private val REGEX_RESOLUTION: Regex = Regex("(\\d{3,4})x(\\d{3,4})")
     private val REGEX_GROUP_TITLE: Regex = Regex("group-title=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
     private val REGEX_TVG_ID: Regex = Regex("tvg-id=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
+    private val REGEX_CATCHUP_TYPE: Regex = Regex("(?:catchup|catchup-type)=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
+    private val REGEX_CATCHUP_SOURCE: Regex = Regex("catchup-source=\"([^\"]+)\"", RegexOption.IGNORE_CASE)
+    private val REGEX_CATCHUP_DAYS: Regex = Regex("(?:catchup-days|tvg-rec)=\"?(\d+)\"?", RegexOption.IGNORE_CASE)
 
     val russianSmartTvAgents = listOf(
         "Televizo/1.9.7.14 (Linux; Android 11; Xiaomi Mi Box S)",
@@ -661,16 +696,29 @@ object CoreEngines {
         var currentGroup = ""
         var currentTvgId = ""
         var currentRawInfLine = ""
+        var currentCatchupType = ""
+        var currentCatchupSource = ""
+        var currentCatchupDays = 0
+        var defaultCatchupType = ""
+        var defaultCatchupSource = ""
+        var defaultCatchupDays = 0
         var line: String? = reader.readLine()
         while (line != null) {
             val l = line.trim()
-            if (l.startsWith("#EXTINF", ignoreCase = true)) {
+            if (l.startsWith("#EXTM3U", ignoreCase = true)) {
+                defaultCatchupType = REGEX_CATCHUP_TYPE.find(l)?.groupValues?.get(1)?.trim() ?: defaultCatchupType
+                defaultCatchupSource = REGEX_CATCHUP_SOURCE.find(l)?.groupValues?.get(1)?.trim() ?: defaultCatchupSource
+                defaultCatchupDays = REGEX_CATCHUP_DAYS.find(l)?.groupValues?.get(1)?.toIntOrNull() ?: defaultCatchupDays
+            } else if (l.startsWith("#EXTINF", ignoreCase = true)) {
                 currentRawInfLine = l
                 currentName = cleanChannelDisplayName(l.substringAfterLast(",", "Канал").trim())
                 val groupMatch = REGEX_GROUP_TITLE.find(l)
                 currentGroup = groupMatch?.groupValues?.get(1)?.trim() ?: ""
                 val idMatch = REGEX_TVG_ID.find(l)
                 currentTvgId = idMatch?.groupValues?.get(1)?.trim() ?: ""
+                currentCatchupType = REGEX_CATCHUP_TYPE.find(l)?.groupValues?.get(1)?.trim() ?: ""
+                currentCatchupSource = REGEX_CATCHUP_SOURCE.find(l)?.groupValues?.get(1)?.trim() ?: ""
+                currentCatchupDays = REGEX_CATCHUP_DAYS.find(l)?.groupValues?.get(1)?.toIntOrNull() ?: 0
             } else if (l.startsWith("#EXTGRP:", ignoreCase = true)) {
                 val extGrp = l.substringAfter(":").trim()
                 if (extGrp.isNotEmpty() && currentGroup.isEmpty()) {
@@ -747,13 +795,22 @@ object CoreEngines {
                             normalizeName(currentName) + "_" + category
                         }
                         if (!targetMap.containsKey(dedupKey)) {
-                            targetMap[dedupKey] = Channel(currentName, l, category, currentTvgId)
+                            val effCatchupType = currentCatchupType.ifEmpty { defaultCatchupType }
+                            val effCatchupSource = currentCatchupSource.ifEmpty { defaultCatchupSource }
+                            val effCatchupDays = if (currentCatchupDays > 0) currentCatchupDays else defaultCatchupDays
+                            targetMap[dedupKey] = Channel(
+                                currentName, l, category, currentTvgId,
+                                effCatchupType, effCatchupSource, effCatchupDays
+                            )
                         }
                     }
                     currentName = ""
                     currentGroup = ""
                     currentTvgId = ""
                     currentRawInfLine = ""
+                    currentCatchupType = ""
+                    currentCatchupSource = ""
+                    currentCatchupDays = 0
                 }
             }
             line = reader.readLine()
@@ -761,25 +818,40 @@ object CoreEngines {
         reader.close()
     }
 
-    fun saveEpgToStreamCache(cacheFile: File, mapByName: Map<String, List<EpgProgram>>) {
+    fun saveEpgToStreamCache(
+        cacheFile: File,
+        mapByName: Map<String, List<EpgProgram>>,
+        mapById: Map<String, List<EpgProgram>> = emptyMap()
+    ) {
         try {
             val tmpFile = File(cacheFile.parentFile, cacheFile.name + ".tmp")
+            fun writeEntry(writer: BufferedWriter, kind: String, key: String, progs: List<EpgProgram>) {
+                if (key.isEmpty() || progs.isEmpty()) return
+                val row = JSONObject()
+                row.put("g", kind)
+                row.put("k", key)
+                val pArr = JSONArray()
+                for (p in progs) {
+                    val po = JSONObject()
+                    po.put("t", p.title)
+                    po.put("s", p.startMs)
+                    po.put("e", p.stopMs)
+                    pArr.put(po)
+                }
+                row.put("p", pArr)
+                writer.write(row.toString())
+                writer.newLine()
+            }
             BufferedWriter(FileWriter(tmpFile)).use { writer ->
                 for ((normName, progs) in mapByName) {
-                    if (normName.isEmpty() || progs.isEmpty()) continue
-                    val row = JSONObject()
-                    row.put("k", normName)
-                    val pArr = JSONArray()
-                    for (p in progs) {
-                        val po = JSONObject()
-                        po.put("t", p.title)
-                        po.put("s", p.startMs)
-                        po.put("e", p.stopMs)
-                        pArr.put(po)
+                    writeEntry(writer, "nm", normName, progs)
+                }
+                val writtenIds = HashSet<String>()
+                for ((idKey, progs) in mapById) {
+                    val lowId = idKey.lowercase(Locale.ROOT)
+                    if (writtenIds.add(lowId)) {
+                        writeEntry(writer, "id", lowId, progs)
                     }
-                    row.put("p", pArr)
-                    writer.write(row.toString())
-                    writer.newLine()
                 }
             }
             if (cacheFile.exists()) cacheFile.delete()
@@ -787,17 +859,22 @@ object CoreEngines {
         } catch (_: Exception) {}
     }
 
-    fun restoreEpgFromStreamCache(cacheFile: File, outByName: ConcurrentHashMap<String, MutableList<EpgProgram>>): Int {
+    fun restoreEpgFromStreamCache(
+        cacheFile: File,
+        outByName: ConcurrentHashMap<String, MutableList<EpgProgram>>,
+        outById: ConcurrentHashMap<String, MutableList<EpgProgram>>? = null
+    ): Int {
         if (!cacheFile.exists()) return 0
         var count = 0
         try {
             val now = System.currentTimeMillis()
-            val minTime = now - 2 * 3600_000L
+            val minTime = now - 72L * 3600_000L
             BufferedReader(FileReader(cacheFile)).use { reader ->
                 var line = reader.readLine()
                 while (line != null) {
                     if (line.isNotBlank()) {
                         val row = JSONObject(line)
+                        val kind = row.optString("g", "nm")
                         val key = row.optString("k", "")
                         val pArr = row.optJSONArray("p")
                         if (key.isNotEmpty() && pArr != null) {
@@ -810,7 +887,14 @@ object CoreEngines {
                                     count++
                                 }
                             }
-                            if (list.isNotEmpty()) outByName[key] = list
+                            if (list.isNotEmpty()) {
+                                if (kind == "id" && outById != null) {
+                                    outById[key] = list
+                                    outById[key.lowercase(Locale.ROOT)] = list
+                                } else {
+                                    outByName[key] = list
+                                }
+                            }
                         }
                     }
                     line = reader.readLine()

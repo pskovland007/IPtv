@@ -55,6 +55,9 @@
         <package android:name="dev.dworks.apps.anexplorer" />
         <package android:name="com.mi.android.globalFileexplorer" />
         <package android:name="com.sec.android.app.myfiles" />
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
     </queries>
 
     <application
@@ -62,7 +65,7 @@
         android:banner="@drawable/tv_banner"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="TiViLook"
+        android:label="TiViLook Beta"
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
@@ -84,7 +87,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.example.miboxiptv.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

@@ -64,19 +64,7 @@ class UpdateManager(private val context: Context) {
     fun checkLatestReleaseDetailed(): CheckResult {
         var lastErr: String? = null
 
-        // 1. Primary: GitHub API /releases/latest
-        val latestAttempt = fetchReleaseObject(LATEST_RELEASE_URL)
-        latestAttempt.first?.let { obj ->
-            parseReleaseJson(obj)?.let { rel ->
-                CoreEngines.appendDiagLog("UPDATE", "GitHub /latest: ${rel.versionLabel} (${rel.apkName}, tag=${rel.tagName})")
-                return CheckResult(rel, null)
-            }
-        }
-        if (latestAttempt.second != null) {
-            lastErr = latestAttempt.second
-        }
-
-        // 2. Fallback: GitHub API /releases?per_page=8 (covers pre-releases)
+        // Beta-ветка проверяет только beta-релизы, чтобы не пересекаться с основным пакетом TiViLook
         val listReq = Request.Builder()
             .url(ALL_RELEASES_URL)
             .header("Accept", "application/vnd.github+json")
@@ -95,8 +83,10 @@ class UpdateManager(private val context: Context) {
                 for (i in 0 until arr.length()) {
                     val obj = arr.optJSONObject(i) ?: continue
                     if (obj.optBoolean("draft", false)) continue
-                    val parsed = parseReleaseJson(obj)
-                    if (parsed != null) return@use parsed
+                    val parsed = parseReleaseJson(obj) ?: continue
+                    val isBetaRelease = parsed.tagName.contains("beta", ignoreCase = true) ||
+                        parsed.apkName.contains("beta", ignoreCase = true)
+                    if (isBetaRelease) return@use parsed
                 }
                 null
             }
@@ -105,19 +95,12 @@ class UpdateManager(private val context: Context) {
         }.getOrNull()
 
         if (listResult != null) {
-            CoreEngines.appendDiagLog("UPDATE", "GitHub /releases: ${listResult.versionLabel} (${listResult.apkName})")
+            CoreEngines.appendDiagLog("UPDATE", "GitHub Beta release: ${listResult.versionLabel} (${listResult.apkName})")
             return CheckResult(listResult, null)
         }
 
-        // 3. Fallback without GitHub API rate limits: follow /releases/latest web redirect & expanded_assets
-        val webFallback = fetchReleaseViaWebFallback()
-        if (webFallback != null) {
-            CoreEngines.appendDiagLog("UPDATE", "GitHub web fallback: ${webFallback.versionLabel} (${webFallback.apkName})")
-            return CheckResult(webFallback, null)
-        }
-
-        val errMsg = lastErr ?: "Нет ответа от GitHub"
-        CoreEngines.appendDiagLog("UPDATE_ERR", "Проверка обновлений не удалась: $errMsg")
+        val errMsg = lastErr ?: "Сборки Beta обновляются через GitHub Actions → Artifacts"
+        CoreEngines.appendDiagLog("UPDATE", "Проверка Beta-обновлений: $errMsg")
         return CheckResult(null, errMsg)
     }
 
@@ -295,7 +278,7 @@ class UpdateManager(private val context: Context) {
         thread(name = "TiViLook-UpdateDownload") {
             val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
             cleanOldApks(updatesDir)
-            val outFile = File(updatesDir, "TiViLook-latest.apk")
+            val outFile = File(updatesDir, "TiViLook-beta.apk")
 
             val req = Request.Builder()
                 .url(release.apkUrl)

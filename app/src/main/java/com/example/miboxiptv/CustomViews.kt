@@ -17,7 +17,15 @@ import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
 
-data class Channel(val name: String, val url: String, val category: String, val tvgId: String)
+data class Channel(
+    val name: String,
+    val url: String,
+    val category: String,
+    val tvgId: String,
+    val catchupType: String = "",
+    val catchupSource: String = "",
+    val catchupDays: Int = 0
+)
 data class PlaylistEntry(val title: String, val source: String, val isLocal: Boolean)
 data class EpgProgram(val title: String, val desc: String, val startMs: Long, val stopMs: Long)
 
@@ -721,6 +729,13 @@ class ThemedTileView(
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 5f; paint.color = Color.WHITE
                 canvas.drawCircle(cx, cy, r * 0.32f, paint)
             }
+            "SEARCH" -> {
+                paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#0284C7")
+                canvas.drawCircle(cx, cy, r * 0.78f, paint)
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 6f; paint.color = Color.WHITE
+                canvas.drawCircle(cx - r * 0.12f, cy - r * 0.12f, r * 0.32f, paint)
+                canvas.drawLine(cx + r * 0.12f, cy + r * 0.12f, cx + r * 0.42f, cy + r * 0.42f, paint)
+            }
             "SWAP_GROUPS" -> {
                 paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#EA580C")
                 canvas.drawCircle(cx, cy, r * 0.72f, paint)
@@ -880,6 +895,10 @@ class ThemedTileView(
                     canvas.drawLine(cx + (r * 0.48f * cos(rad)).toFloat(), cy + (r * 0.48f * sin(rad)).toFloat(), cx + (r * 0.72f * cos(rad)).toFloat(), cy + (r * 0.72f * sin(rad)).toFloat(), paint)
                 }
             }
+            "SEARCH" -> {
+                canvas.drawCircle(cx - r * 0.14f, cy - r * 0.14f, r * 0.42f, paint)
+                canvas.drawLine(cx + r * 0.16f, cy + r * 0.16f, cx + r * 0.56f, cy + r * 0.56f, paint)
+            }
             "SWAP_GROUPS" -> {
                 canvas.drawLine(cx - r * 0.55f, cy - r * 0.22f, cx + r * 0.55f, cy - r * 0.22f, paint)
                 canvas.drawLine(cx - r * 0.55f, cy + r * 0.22f, cx + r * 0.55f, cy + r * 0.22f, paint)
@@ -1016,6 +1035,10 @@ class ThemedTileView(
             "SETTINGS_GEAR" -> {
                 canvas.drawCircle(cx, cy, r * 0.46f, paint)
                 canvas.drawCircle(cx, cy, r * 0.20f, paint)
+            }
+            "SEARCH" -> {
+                canvas.drawCircle(cx - r * 0.14f, cy - r * 0.14f, r * 0.42f, paint)
+                canvas.drawLine(cx + r * 0.16f, cy + r * 0.16f, cx + r * 0.56f, cy + r * 0.56f, paint)
             }
             "SWAP_GROUPS" -> {
                 canvas.drawLine(cx - r * 0.52f, cy - r * 0.20f, cx + r * 0.52f, cy - r * 0.20f, paint)
@@ -1159,6 +1182,11 @@ class ThemedTileView(
                 paint.style = Paint.Style.FILL
                 canvas.drawCircle(cx, cy - r * 0.12f, r * 0.14f, paint)
             }
+            "SEARCH" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f
+                canvas.drawCircle(cx - r * 0.12f, cy - r * 0.12f, r * 0.36f, paint)
+                canvas.drawLine(cx + r * 0.14f, cy + r * 0.14f, cx + r * 0.50f, cy + r * 0.50f, paint)
+            }
             else -> {
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 3.5f
                 rect.set(cx - r * 0.64f, cy - r * 0.44f, cx + r * 0.64f, cy + r * 0.32f)
@@ -1298,6 +1326,11 @@ class ThemedTileView(
                 canvas.drawLine(cx, cy + r * 0.18f, cx + r * 0.24f, cy - r * 0.42f, paint)
                 paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#E63926")
                 canvas.drawCircle(cx + r * 0.24f, cy - r * 0.46f, r * 0.20f, paint)
+            }
+            "SEARCH" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 7f; paint.color = cream
+                canvas.drawCircle(cx - r * 0.12f, cy - r * 0.12f, r * 0.36f, paint)
+                canvas.drawLine(cx + r * 0.14f, cy + r * 0.14f, cx + r * 0.52f, cy + r * 0.52f, paint)
             }
             else -> {
                 paint.style = Paint.Style.FILL; paint.color = cream
@@ -1478,6 +1511,11 @@ class ThemedTileView(
                 canvas.drawRoundRect(rect, 12f, 12f, paint)
                 paint.style = Paint.Style.FILL; paint.color = Color.parseColor("#FDE047")
                 canvas.drawCircle(cx, topCy - r * 0.12f, r * 0.16f, paint)
+            }
+            "SEARCH" -> {
+                paint.style = Paint.Style.STROKE; paint.strokeWidth = 4.5f; paint.color = Color.WHITE
+                canvas.drawCircle(cx - r * 0.12f, topCy - r * 0.12f, r * 0.34f, paint)
+                canvas.drawLine(cx + r * 0.14f, topCy + r * 0.14f, cx + r * 0.48f, topCy + r * 0.48f, paint)
             }
             else -> {
                 paint.style = Paint.Style.STROKE; paint.strokeWidth = 4f; paint.color = Color.WHITE
