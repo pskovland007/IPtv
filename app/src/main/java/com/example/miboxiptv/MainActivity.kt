@@ -19,7 +19,9 @@ import android.graphics.*
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.media.AudioManager
 import android.media.audiofx.LoudnessEnhancer
+import android.view.ViewConfiguration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -50,6 +52,7 @@ import androidx.core.content.FileProvider
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
@@ -71,6 +74,13 @@ import javax.net.ssl.X509TrustManager
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer as VlcMediaPlayer
+import org.videolan.libvlc.interfaces.IMedia
+import org.videolan.libvlc.util.VLCVideoLayout
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.LoadEventInfo
@@ -140,6 +150,7 @@ class MainActivity : AppCompatActivity() {
     private var cachedShareFileUri: Uri? = null
     private var lastDiagExportTriggerMs: Long = 0L
     private val updateManager: UpdateManager by lazy { UpdateManager(this) }
+    private val backupManager: BackupManager by lazy { BackupManager(this) }
     private var autoCheckUpdatesEnabled: Boolean = true
     @Volatile private var availableUpdateInfo: UpdateManager.ReleaseInfo? = null
     @Volatile private var updateModalRelease: UpdateManager.ReleaseInfo? = null
@@ -174,22 +185,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var player: ExoPlayer? = null
+    private var libVlc: LibVLC? = null
+    private var vlcPlayer: VlcMediaPlayer? = null
+    private var vlcViewsAttached: Boolean = false
+    @Volatile private var vlcIsPlayingNow: Boolean = false
+    @Volatile private var vlcIsBufferingNow: Boolean = false
+    @Volatile private var vlcBufferPercent: Int = 0
+    @Volatile private var vlcAppliedSavedTracks: Boolean = false
+    private var media3AppliedSavedTracks: Boolean = false
     private var dualPipPlayer: ExoPlayer? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var lastAudioSessionId: Int = C.AUDIO_SESSION_ID_UNSET
     private var httpDataSourceFactory: OkHttpDataSource.Factory? = null
     private var wasStoppedInBackground: Boolean = false
-    private val streamOkHttpClient: OkHttpClient by lazy { buildStreamOkHttpClient() }
-    private val tokenStreamOkHttpClient: OkHttpClient by lazy {
-        val tokenDispatcher = Dispatcher().apply {
-            maxRequests = 4
-            maxRequestsPerHost = 1
+
+    @Volatile private var streamOkHttpClientBacking: OkHttpClient? = null
+    @Volatile private var tokenStreamOkHttpClientBacking: OkHttpClient? = null
+    @Volatile private var analyzerOkHttpClientBacking: OkHttpClient? = null
+
+    private val streamOkHttpClient: OkHttpClient
+        get() = streamOkHttpClientBacking ?: buildStreamOkHttpClient().also { streamOkHttpClientBacking = it }
+
+    private val tokenStreamOkHttpClient: OkHttpClient
+        get() = tokenStreamOkHttpClientBacking ?: run {
+            val tokenDispatcher = Dispatcher().apply {
+                maxRequests = 4
+                maxRequestsPerHost = 1
+            }
+            streamOkHttpClient.newBuilder()
+                .dispatcher(tokenDispatcher)
+                .connectionPool(ConnectionPool(2, 3, TimeUnit.MINUTES))
+                .build()
+                .also { tokenStreamOkHttpClientBacking = it }
         }
-        streamOkHttpClient.newBuilder()
-            .dispatcher(tokenDispatcher)
-            .connectionPool(ConnectionPool(2, 3, TimeUnit.MINUTES))
-            .build()
-    }
+
     private val streamCallFactory: Call.Factory by lazy {
         object : Call.Factory {
             override fun newCall(request: Request): Call {
@@ -202,13 +231,27 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    private val analyzerOkHttpClient: OkHttpClient by lazy {
-        streamOkHttpClient.newBuilder()
+
+    private val analyzerOkHttpClient: OkHttpClient
+        get() = analyzerOkHttpClientBacking ?: streamOkHttpClient.newBuilder()
             .connectTimeout(4000, TimeUnit.MILLISECONDS)
             .readTimeout(4500, TimeUnit.MILLISECONDS)
             .callTimeout(7500, TimeUnit.MILLISECONDS)
             .retryOnConnectionFailure(false)
             .build()
+            .also { analyzerOkHttpClientBacking = it }
+
+    private fun rebuildNetworkClients() {
+        NetworkHelper.updateActiveConfig(
+            useDoh = dohEnabled,
+            useDpiBypass = dpiBypassEnabled,
+            proxyUrl = networkProxyUrl
+        )
+        runCatching { streamOkHttpClientBacking?.connectionPool?.evictAll() }
+        runCatching { tokenStreamOkHttpClientBacking?.connectionPool?.evictAll() }
+        streamOkHttpClientBacking = null
+        tokenStreamOkHttpClientBacking = null
+        analyzerOkHttpClientBacking = null
     }
 
     private fun buildStreamOkHttpClient(): OkHttpClient {
@@ -226,23 +269,16 @@ class MainActivity : AppCompatActivity() {
             .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
-        try {
-            val trustAllCerts = object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-            }
-            val sc = SSLContext.getInstance("TLS")
-            sc.init(null, arrayOf<TrustManager>(trustAllCerts), SecureRandom())
-            builder.sslSocketFactory(sc.socketFactory, trustAllCerts)
-            builder.hostnameVerifier { _, _ -> true }
-        } catch (_: Exception) {}
+        NetworkHelper.applyToOkHttpBuilder(builder)
+        NetworkHelper.applyTrustAllSsl(builder)
         return builder.build()
     }
 
     private lateinit var rootFrame: FrameLayout
     private lateinit var playerContainerFrame: FrameLayout
     private lateinit var playerView: PlayerView
+    private lateinit var vlcVideoLayout: VLCVideoLayout
+    private lateinit var gestureHudView: TextView
     private lateinit var dualStreamContainer: FrameLayout
     private lateinit var dualPlayerView: PlayerView
     private lateinit var dualStreamLabel: TextView
@@ -333,6 +369,26 @@ class MainActivity : AppCompatActivity() {
     private var drcNightAudioEnabled = false
     private var audioBoostPercent = 100
     private var dohEnabled = true
+    private var dpiBypassEnabled = true
+    private var networkProxyUrl = ""
+    private var playerEngineMode = 0 // 0 = Media3, 1 = LibVLC
+    private var preferredAudioLang = "rus"
+    private var subtitlesEnabled = false
+    private var touchEdgeGesturesEnabled = false
+    private var edgeGestureActiveMode = 0 // 0 = none, 1 = brightness, 2 = volume
+    private var edgeGestureStartX = 0f
+    private var edgeGestureStartY = 0f
+    private var edgeGestureStartBrightness = 0.7f
+    private var edgeGestureStartVolume = 0
+    private var edgeGestureMaxVolume = 15
+    private val hideGestureHudRunnable = Runnable {
+        if (::gestureHudView.isInitialized) {
+            gestureHudView.animate().alpha(0f).setDuration(200L).withEndAction {
+                gestureHudView.visibility = View.GONE
+                gestureHudView.alpha = 1f
+            }.start()
+        }
+    }
     private var onDropBehavior = 0
     private var menuHideDelaySec = 8
     private var showChannelBannerOnSwitch = true
@@ -663,7 +719,7 @@ class MainActivity : AppCompatActivity() {
                 collapseAnalyzerToTopBar()
             } else if (currentMenu == "UPDATE_PROMPT" && (isUpdateDownloading || downloadedUpdateApkFile != null || updateModalManualCheck)) {
                 // Не закрываем окно обновления во время загрузки или ручной проверки
-            } else if (currentMenu !in listOf("EPG", "ADD_URL", "RENAME_PLAYLIST", "MANUAL_PATH")) {
+            } else if (currentMenu !in listOf("EPG", "ADD_URL", "RENAME_PLAYLIST", "PROXY_INPUT", "MANUAL_PATH")) {
                 closeAllMenus()
             }
         }
@@ -743,7 +799,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var isPixelCopyInFlight: Boolean = false
 
     private fun sampleVideoFrameColorIfPossible() {
-        if (ambilightMode != 3 || isAnalyzerRunning || menuHistory.isEmpty() || isPixelCopyInFlight || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        if (isVlcEngineActive() || ambilightMode != 3 || isAnalyzerRunning || menuHistory.isEmpty() || isPixelCopyInFlight || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
         try {
             val sv = playerView.videoSurfaceView as? SurfaceView ?: return
             if (!sv.holder.surface.isValid) return
@@ -904,7 +960,27 @@ class MainActivity : AppCompatActivity() {
         if (::btnOsdNightMode.isInitialized) btnOsdNightMode.text = "🌙 $pct%"
     }
 
+    private fun isVlcEngineActive(): Boolean = playerEngineMode == 1
+
+    private fun applyVlcAudioBoost() {
+        val vlc = vlcPlayer ?: return
+        val mutedSplash = ::splashOverlay.isInitialized && splashOverlay.visibility == View.VISIBLE
+        val volPct = when {
+            mutedSplash -> 0
+            audioBoostPercent == 130 -> 130
+            audioBoostPercent == 160 -> 160
+            audioBoostPercent == 200 -> 200
+            drcNightAudioEnabled -> 90
+            else -> 100
+        }
+        runCatching { vlc.setVolume(volPct) }
+    }
+
     private fun applyAudioEnhancements() {
+        if (isVlcEngineActive()) {
+            applyVlcAudioBoost()
+            return
+        }
         val p = player ?: return
         try {
             val sessionId = p.audioSessionId
@@ -932,6 +1008,7 @@ class MainActivity : AppCompatActivity() {
     private fun stepPixelOrbiter() {
         if (!pixelOrbiterEnabled) {
             playerView.translationX = 0f; playerView.translationY = 0f
+            if (::vlcVideoLayout.isInitialized) { vlcVideoLayout.translationX = 0f; vlcVideoLayout.translationY = 0f }
             clockTextView.translationX = 0f; clockTextView.translationY = 0f
             signalContainer.translationX = 0f; signalContainer.translationY = 0f
             return
@@ -946,10 +1023,13 @@ class MainActivity : AppCompatActivity() {
             Pair(0f, -6f), Pair(-6f, -4f), Pair(-10f, 3f), Pair(-5f, 6f)
         )
         if (menuHistory.isEmpty()) {
-            playerView.translationX = videoShifts[orbiterStep].first
-            playerView.translationY = videoShifts[orbiterStep].second
+            val vx = videoShifts[orbiterStep].first
+            val vy = videoShifts[orbiterStep].second
+            playerView.translationX = vx; playerView.translationY = vy
+            if (::vlcVideoLayout.isInitialized) { vlcVideoLayout.translationX = vx; vlcVideoLayout.translationY = vy }
         } else {
             playerView.translationX = 0f; playerView.translationY = 0f
+            if (::vlcVideoLayout.isInitialized) { vlcVideoLayout.translationX = 0f; vlcVideoLayout.translationY = 0f }
         }
         val hx = hudShifts[orbiterStep].first
         val hy = hudShifts[orbiterStep].second
@@ -962,9 +1042,11 @@ class MainActivity : AppCompatActivity() {
         saveState(syncCommit = true)
         closeAllMenus()
         try { player?.stop() } catch (_: Exception) {}
+        try { vlcPlayer?.stop() } catch (_: Exception) {}
         try { dualPipPlayer?.stop() } catch (_: Exception) {}
         crtTurnOffView.playCrtAnimation {
             try { player?.release(); player = null } catch (_: Exception) {}
+            releaseVlcPlayer()
             try { dualPipPlayer?.release(); dualPipPlayer = null } catch (_: Exception) {}
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 finishAndRemoveTask()
@@ -1071,7 +1153,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyCenteredModalDimensions(menuId: String) {
         val isWrapHeight = menuId in listOf(
-            "EPG", "ADD_URL", "RENAME_PLAYLIST"
+            "EPG", "ADD_URL", "RENAME_PLAYLIST", "PROXY_INPUT"
         )
         val isScrollCardModal = menuId in listOf("BUFFER", "DECODER", "AUDIO", "UPDATE_PROMPT")
         val modalWidthPx = when (menuId) {
@@ -2394,6 +2476,10 @@ class MainActivity : AppCompatActivity() {
                 SettingSpec("Отступ под камеру", if (cameraCutoutSafeOffset) "ВКЛ" else "ВЫКЛ", if (cameraCutoutSafeOffset) 1 else 2) {
                     cameraCutoutSafeOffset = !cameraCutoutSafeOffset; saveState(); applyCurrentThemeToAllPanels()
                     openMoreSettingsSubModal(inPlace = true, keepIndex = 5)
+                },
+                SettingSpec("Жесты яркости и громкости", if (touchEdgeGesturesEnabled) "ВКЛ" else "ВЫКЛ", if (touchEdgeGesturesEnabled) 1 else 2) {
+                    touchEdgeGesturesEnabled = !touchEdgeGesturesEnabled; saveState()
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 6)
                 }
             )
             1 -> listOf(
@@ -2405,13 +2491,26 @@ class MainActivity : AppCompatActivity() {
                     toggleDualStreamWithCurrentOrNeighbor()
                     openMoreSettingsSubModal(inPlace = true, keepIndex = 1)
                 },
-                SettingSpec("Обход блокировок DoH", if (dohEnabled) "ВКЛ" else "ВЫКЛ", if (dohEnabled) 1 else 2) {
-                    dohEnabled = !dohEnabled; saveState(); initPlayer()
+                SettingSpec("Мульти-DoH (5 серверов)", if (dohEnabled) "ВКЛ" else "ВЫКЛ", if (dohEnabled) 1 else 2) {
+                    dohEnabled = !dohEnabled; saveState(); rebuildNetworkClients(); initPlayer()
+                    currentChannel?.let { playChannelObj(it, immediate = true, silentSwap = true, updateSavedUrl = false) }
                     openMoreSettingsSubModal(inPlace = true, keepIndex = 2)
+                },
+                SettingSpec("DPI-обход (HTTP/HTTPS)", if (dpiBypassEnabled) "ВКЛ" else "ВЫКЛ", if (dpiBypassEnabled) 1 else 2) {
+                    dpiBypassEnabled = !dpiBypassEnabled; saveState(); rebuildNetworkClients(); initPlayer()
+                    currentChannel?.let { playChannelObj(it, immediate = true, silentSwap = true, updateSavedUrl = false) }
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 3)
+                },
+                SettingSpec(
+                    "Прокси (SOCKS5 / HTTP)",
+                    if (networkProxyUrl.isNotBlank()) networkProxyUrl.removePrefix("socks5://").removePrefix("http://").take(18) else "ВЫКЛ",
+                    if (networkProxyUrl.isNotBlank()) 1 else 2
+                ) {
+                    navigateToMenu("PROXY_INPUT")
                 },
                 SettingSpec("При обрыве потока", if (onDropBehavior == 0) "Перезапуск" else "След. канал", 0) {
                     onDropBehavior = (onDropBehavior + 1) % 2; saveState()
-                    openMoreSettingsSubModal(inPlace = true, keepIndex = 3)
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 5)
                 },
                 SettingSpec("Яркость экрана", "$brightnessPercent%", 0) {
                     navigateToMenu("BRIGHTNESS_MENU")
@@ -2435,6 +2534,12 @@ class MainActivity : AppCompatActivity() {
                 SettingSpec("Диагностический файл", formatDiagFileSize(), 0) {
                     openDiagLogInSystemFileManager()
                 },
+                SettingSpec("Бэкап настроек в файл", "Сохранить", 0) {
+                    exportFullBackupToFile()
+                },
+                SettingSpec("Восстановить из бэкапа", "Загрузить", 0) {
+                    importFullBackupFromFile()
+                },
                 SettingSpec(
                     "Автопроверка обновлений",
                     if (autoCheckUpdatesEnabled) "ВКЛ" else "ВЫКЛ",
@@ -2443,7 +2548,7 @@ class MainActivity : AppCompatActivity() {
                     autoCheckUpdatesEnabled = !autoCheckUpdatesEnabled
                     saveState()
                     if (autoCheckUpdatesEnabled) scheduleSilentStartupUpdateCheck(initialDelayMs = 1200L)
-                    openMoreSettingsSubModal(inPlace = true, keepIndex = 3)
+                    openMoreSettingsSubModal(inPlace = true, keepIndex = 5)
                 },
                 SettingSpec("Обновление TiViLook", updLabel, if (availableUpdateInfo != null) 3 else 0) {
                     checkAndInstallAppUpdateFromGithub()
@@ -2528,20 +2633,185 @@ class MainActivity : AppCompatActivity() {
         return best
     }
 
+    private fun buildCurrentDiagnosticHeader(): String {
+        val eng = if (isVlcEngineActive()) "LibVLC" else "Media3"
+        val dec = when (decoderMode) { 0 -> "HW"; 2 -> "SW"; else -> "HW+FFmpeg" }
+        val buf = when (bufferLevel) { 0 -> "Стандарт"; 1 -> "Оптимальный"; 2 -> "Анти-фриз"; else -> "Максимум" }
+        return backupManager.buildDiagnosticHeader(
+            engineLabel = eng,
+            decoderLabel = dec,
+            bufferLabel = buf,
+            themeLabel = currentTheme().name,
+            playlistsCount = playlists.size,
+            channelsCount = allChannels.size,
+            dohEnabled = dohEnabled,
+            dpiBypassEnabled = dpiBypassEnabled,
+            proxyUrl = networkProxyUrl,
+            preferredAudioLang = preferredAudioLang
+        )
+    }
+
     private fun readDiagLogBytesForExport(): ByteArray? {
-        CoreEngines.readDiagLogBytes(this)?.let { if (it.isNotEmpty()) return it }
-        val srcFile = findDiagLogSourceFile()
-        if (srcFile != null && srcFile.exists() && srcFile.length() > 0L) {
-            try {
-                val bytes = srcFile.readBytes()
-                if (bytes.isNotEmpty()) return bytes
-            } catch (_: Exception) {}
+        val rawBody: ByteArray? = CoreEngines.readDiagLogBytes(this)?.takeIf { it.isNotEmpty() }
+            ?: run {
+                val srcFile = findDiagLogSourceFile()
+                if (srcFile != null && srcFile.exists() && srcFile.length() > 0L) {
+                    runCatching { srcFile.readBytes() }.getOrNull()?.takeIf { it.isNotEmpty() }
+                } else null
+            }
+            ?: runCatching {
+                val lines = CoreEngines.readDiagLogTail(500)
+                if (lines.isNotEmpty()) lines.joinToString("\n").toByteArray(Charsets.UTF_8) else null
+            }.getOrNull()
+        val bodyText = rawBody?.toString(Charsets.UTF_8).orEmpty()
+        val full = buildCurrentDiagnosticHeader() + bodyText.ifBlank { "(Событий пока нет)\n" }
+        return full.toByteArray(Charsets.UTF_8)
+    }
+
+    private fun buildBackupStateJson(): JSONObject {
+        val plArr = JSONArray()
+        for (p in playlists) {
+            if (p.source == "BUILTIN_VIP_PROVIDER") continue
+            plArr.put(JSONObject().apply {
+                put("title", p.title)
+                put("source", p.source)
+                put("isLocal", p.isLocal)
+            })
         }
-        return try {
-            val lines = CoreEngines.readDiagLogTail(500)
-            if (lines.isNotEmpty()) lines.joinToString("\n").toByteArray(Charsets.UTF_8) else null
-        } catch (_: Exception) {
-            null
+        val customCatObj = JSONObject()
+        for ((u, c) in customCategoryMap) customCatObj.put(u, c)
+        return JSONObject().apply {
+            put("playlists", plArr)
+            put("activePlaylistIndex", activePlaylistIndex)
+            put("favorites", JSONArray(favoriteUrls.toList()))
+            put("topUrls", JSONArray(topUrls.toList()))
+            put("manualDisabledUrls", JSONArray(manualDisabledUrls.toList()))
+            put("autoDisabledUrls", JSONArray(autoDisabledUrls.toList()))
+            put("disabledCategories", JSONArray(disabledCategories.toList()))
+            put("customCategoryMap", customCatObj)
+            put("themeIndex", themeIndex)
+            put("uiScaleStep", uiScaleStep)
+            put("uiAlphaStep", uiAlphaStep)
+            put("ambilightMode", ambilightMode)
+            put("screenAspectMode", screenAspectMode)
+            put("brightnessPercent", brightnessPercent)
+            put("cameraCutoutSafeOffset", cameraCutoutSafeOffset)
+            put("bufferLevel", bufferLevel)
+            put("decoderMode", decoderMode)
+            put("playerEngineMode", playerEngineMode)
+            put("afrEnabled", afrEnabled)
+            put("pixelOrbiterEnabled", pixelOrbiterEnabled)
+            put("drcNightAudioEnabled", drcNightAudioEnabled)
+            put("audioBoostPercent", audioBoostPercent)
+            put("preferredAudioLang", preferredAudioLang)
+            put("subtitlesEnabled", subtitlesEnabled)
+            put("dohEnabled", dohEnabled)
+            put("dpiBypassEnabled", dpiBypassEnabled)
+            put("networkProxyUrl", networkProxyUrl)
+            put("touchEdgeGesturesEnabled", touchEdgeGesturesEnabled)
+            put("onDropBehavior", onDropBehavior)
+            put("menuHideDelaySec", menuHideDelaySec)
+            put("showChannelBannerOnSwitch", showChannelBannerOnSwitch)
+            put("autoCheckUpdatesEnabled", autoCheckUpdatesEnabled)
+            put("epgUrl", epgUrl)
+        }
+    }
+
+    private fun applyBackupStateJson(st: JSONObject) {
+        st.optJSONArray("playlists")?.let { arr ->
+            val loaded = mutableListOf<PlaylistEntry>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val src = o.optString("source", "").trim()
+                if (src.isBlank() || src == "BUILTIN_VIP_PROVIDER") continue
+                val title = o.optString("title", "Плейлист").trim().ifBlank { "Плейлист" }
+                val isLocal = o.optBoolean("isLocal", false)
+                if (isLocal && !File(src).exists()) continue
+                loaded.add(PlaylistEntry(if (src == "BUILTIN_OPEN_RU") "Основной" else title, src, isLocal))
+            }
+            if (loaded.isNotEmpty()) {
+                playlists.clear()
+                playlists.addAll(loaded)
+                ensureDefaultPlaylists()
+            }
+        }
+        activePlaylistIndex = st.optInt("activePlaylistIndex", 0).coerceIn(0, (playlists.size - 1).coerceAtLeast(0))
+        fun readSet(key: String, target: MutableSet<String>) {
+            st.optJSONArray(key)?.let { arr ->
+                target.clear()
+                for (i in 0 until arr.length()) {
+                    val s = arr.optString(i, "").trim()
+                    if (s.isNotEmpty()) target.add(s)
+                }
+            }
+        }
+        readSet("favorites", favoriteUrls)
+        readSet("topUrls", topUrls)
+        readSet("manualDisabledUrls", manualDisabledUrls)
+        readSet("autoDisabledUrls", autoDisabledUrls)
+        readSet("disabledCategories", disabledCategories)
+        st.optJSONObject("customCategoryMap")?.let { obj ->
+            customCategoryMap.clear()
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                val v = obj.optString(k, "")
+                if (k.isNotBlank() && v.isNotBlank()) customCategoryMap[k] = v
+            }
+        }
+        themeIndex = st.optInt("themeIndex", themeIndex).coerceIn(0, themes.lastIndex)
+        uiScaleStep = st.optInt("uiScaleStep", uiScaleStep).coerceIn(0, 2)
+        uiAlphaStep = st.optInt("uiAlphaStep", uiAlphaStep).coerceIn(0, 2)
+        ambilightMode = st.optInt("ambilightMode", ambilightMode).coerceIn(0, 3)
+        screenAspectMode = st.optInt("screenAspectMode", screenAspectMode).coerceIn(0, 2)
+        brightnessPercent = st.optInt("brightnessPercent", brightnessPercent).coerceIn(25, 100)
+        cameraCutoutSafeOffset = st.optBoolean("cameraCutoutSafeOffset", cameraCutoutSafeOffset)
+        bufferLevel = st.optInt("bufferLevel", bufferLevel).coerceIn(0, 3)
+        decoderMode = st.optInt("decoderMode", decoderMode).coerceIn(0, 2)
+        playerEngineMode = st.optInt("playerEngineMode", playerEngineMode).coerceIn(0, 1)
+        afrEnabled = st.optBoolean("afrEnabled", afrEnabled)
+        pixelOrbiterEnabled = st.optBoolean("pixelOrbiterEnabled", pixelOrbiterEnabled)
+        drcNightAudioEnabled = st.optBoolean("drcNightAudioEnabled", drcNightAudioEnabled)
+        audioBoostPercent = st.optInt("audioBoostPercent", audioBoostPercent)
+        preferredAudioLang = st.optString("preferredAudioLang", preferredAudioLang).ifBlank { "rus" }
+        subtitlesEnabled = st.optBoolean("subtitlesEnabled", subtitlesEnabled)
+        dohEnabled = st.optBoolean("dohEnabled", dohEnabled)
+        dpiBypassEnabled = st.optBoolean("dpiBypassEnabled", dpiBypassEnabled)
+        networkProxyUrl = st.optString("networkProxyUrl", networkProxyUrl).trim()
+        touchEdgeGesturesEnabled = st.optBoolean("touchEdgeGesturesEnabled", touchEdgeGesturesEnabled)
+        onDropBehavior = st.optInt("onDropBehavior", onDropBehavior).coerceIn(0, 1)
+        menuHideDelaySec = st.optInt("menuHideDelaySec", menuHideDelaySec).coerceIn(4, 12)
+        showChannelBannerOnSwitch = st.optBoolean("showChannelBannerOnSwitch", showChannelBannerOnSwitch)
+        autoCheckUpdatesEnabled = st.optBoolean("autoCheckUpdatesEnabled", autoCheckUpdatesEnabled)
+        val restoredEpg = st.optString("epgUrl", "").trim()
+        if (restoredEpg.isNotEmpty()) epgUrl = restoredEpg
+    }
+
+    private fun exportFullBackupToFile() {
+        ensurePublicStoragePermission {
+            val res = backupManager.exportBackup(buildBackupStateJson())
+            Toast.makeText(this, res.message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun importFullBackupFromFile() {
+        ensurePublicStoragePermission {
+            val (res, stateObj) = backupManager.importBackup()
+            if (!res.ok || stateObj == null) {
+                Toast.makeText(this, res.message, Toast.LENGTH_LONG).show()
+                return@ensurePublicStoragePermission
+            }
+            applyBackupStateJson(stateObj)
+            saveState(syncCommit = true)
+            rebuildNetworkClients()
+            currentAnimatedAlphaInt = targetPanelAlphaInt()
+            applyCurrentThemeToAllPanels()
+            applyScreenAspectMode()
+            applyBrightnessLevel()
+            initPlayer()
+            loadActivePlaylist(autoPlayLast = false)
+            Toast.makeText(this, "${res.message} (плейлистов: ${playlists.size}, избр: ${favoriteUrls.size})", Toast.LENGTH_LONG).show()
+            closeAllMenus()
         }
     }
 
@@ -4601,6 +4871,17 @@ class MainActivity : AppCompatActivity() {
         val t = currentTheme()
         val scale = uiScaleFactor()
         val dark = isThemeDarkSurface(t.panelBgColor)
+
+        val engineLabel = TextView(this).apply {
+            text = "Движок плеера"
+            setTextColor(t.textPrimaryColor); alpha = 0.74f
+            typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.8f * scale)
+            setPadding(dpPx(6f), 0, dpPx(4f), dpPx(4f))
+        }
+        val engines = listOf(
+            Triple("Media3", "Основной + DPI", "Быстрый системный движок с поддержкой DoH, DPI-обхода, прокси и DV → HEVC."),
+            Triple("LibVLC", "Резервный", "Альтернативный движок VLC для сложных потоков MPEG-TS и нестандартных кодеков.")
+        )
         val modes = listOf(
             Triple("HW", "Аппаратный", "Минимальная нагрузка на процессор при стандартных кодеках."),
             Triple("HW + FFmpeg", "Авто", "Рекомендуется для большинства устройств и аудиодорожек AC3 / MP2."),
@@ -4608,14 +4889,41 @@ class MainActivity : AppCompatActivity() {
         )
 
         val hintTv = TextView(this).apply {
-            text = modes[decoderMode.coerceIn(0, 2)].third
+            text = if (isVlcEngineActive()) engines[1].third else modes[decoderMode.coerceIn(0, 2)].third
             setTextColor(t.textPrimaryColor); alpha = 0.78f
-            typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.2f * scale)
+            typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.8f * scale)
             gravity = Gravity.CENTER
-            setPadding(8, (10 * scale).toInt(), 8, (10 * scale).toInt())
+            setPadding(dpPx(8f), dpPx(8f * scale), dpPx(8f), dpPx(8f * scale))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
 
+        val engineRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            clipChildren = false; clipToPadding = false
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val engineCards = mutableListOf<LinearLayout>()
+        engines.forEachIndexed { idx, (name, sub, desc) ->
+            val card = makeUnifiedPresetCard(name, sub, idx == playerEngineMode, onFocused = { hintTv.text = desc }) {
+                if (playerEngineMode != idx) {
+                    playerEngineMode = idx
+                    saveState()
+                    initPlayer()
+                    currentChannel?.let { playChannelObj(it, immediate = true, silentSwap = true, updateSavedUrl = false) }
+                }
+                openDecoderSubModal(inPlace = true, keepIndex = idx)
+            }.apply { id = 8320 + idx }
+            engineCards.add(card)
+            engineRow.addView(card)
+        }
+
+        val decLabel = TextView(this).apply {
+            text = "Режим декодирования"
+            setTextColor(t.textPrimaryColor); alpha = 0.74f
+            typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.8f * scale)
+            setPadding(dpPx(6f), dpPx(8f * scale), dpPx(4f), dpPx(4f))
+        }
         val cardsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -4626,7 +4934,8 @@ class MainActivity : AppCompatActivity() {
         modes.forEachIndexed { idx, (name, sub, desc) ->
             val card = makeUnifiedPresetCard(name, sub, idx == decoderMode, onFocused = { hintTv.text = desc }) {
                 decoderMode = idx; saveState(); initPlayer()
-                openDecoderSubModal(inPlace = true, keepIndex = idx)
+                currentChannel?.let { playChannelObj(it, immediate = true, silentSwap = true, updateSavedUrl = false) }
+                openDecoderSubModal(inPlace = true, keepIndex = 2 + idx)
             }.apply { id = 8330 + idx }
             cardViews.add(card)
             cardsRow.addView(card)
@@ -4635,7 +4944,7 @@ class MainActivity : AppCompatActivity() {
         val divider = View(this).apply {
             setBackgroundColor(if (dark) Color.argb(36, 255, 255, 255) else Color.argb(32, 0, 0, 0))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1).apply {
-                setMargins(4, (4 * scale).toInt(), 4, (8 * scale).toInt())
+                setMargins(4, dpPx(4f * scale), 4, dpPx(6f * scale))
             }
         }
 
@@ -4645,7 +4954,7 @@ class MainActivity : AppCompatActivity() {
             if (pixelOrbiterEnabled) 1 else 2
         ) {
             pixelOrbiterEnabled = !pixelOrbiterEnabled; saveState(); stepPixelOrbiter()
-            openDecoderSubModal(inPlace = true, keepIndex = 3)
+            openDecoderSubModal(inPlace = true, keepIndex = 5)
         }.apply { id = 8335 }
 
         val rowAfr = makeUnifiedSettingRow(
@@ -4654,18 +4963,27 @@ class MainActivity : AppCompatActivity() {
             if (afrEnabled) 1 else 2
         ) {
             afrEnabled = !afrEnabled; saveState()
-            openDecoderSubModal(inPlace = true, keepIndex = 4)
+            openDecoderSubModal(inPlace = true, keepIndex = 6)
         }.apply { id = 8336 }
 
+        val activeDecCardId = cardViews[decoderMode.coerceIn(0, 2)].id
+        val activeEngCardId = engineCards[playerEngineMode.coerceIn(0, 1)].id
+        engineCards[0].nextFocusRightId = engineCards[1].id; engineCards[0].nextFocusLeftId = engineCards[1].id
+        engineCards[1].nextFocusLeftId = engineCards[0].id; engineCards[1].nextFocusRightId = engineCards[0].id
+        engineCards.forEach { it.nextFocusDownId = activeDecCardId }
         for (i in cardViews.indices) {
             cardViews[i].nextFocusLeftId = cardViews[(i - 1 + cardViews.size) % cardViews.size].id
             cardViews[i].nextFocusRightId = cardViews[(i + 1) % cardViews.size].id
+            cardViews[i].nextFocusUpId = activeEngCardId
             cardViews[i].nextFocusDownId = rowOrbiter.id
         }
-        rowOrbiter.nextFocusUpId = cardViews[decoderMode.coerceIn(0, 2)].id
+        rowOrbiter.nextFocusUpId = activeDecCardId
         rowOrbiter.nextFocusDownId = rowAfr.id
         rowAfr.nextFocusUpId = rowOrbiter.id
 
+        decInner.addView(engineLabel)
+        decInner.addView(engineRow)
+        decInner.addView(decLabel)
         decInner.addView(cardsRow)
         decInner.addView(hintTv)
         decInner.addView(divider)
@@ -4674,16 +4992,16 @@ class MainActivity : AppCompatActivity() {
 
         if (!inPlace) animateMenuAppear(subModalOverlay)
         val focusTarget: View = when (keepIndex) {
-            in 0..2 -> cardViews[keepIndex]
-            3 -> rowOrbiter
-            4 -> rowAfr
-            else -> cardViews[decoderMode.coerceIn(0, 2)]
+            0, 1 -> engineCards[keepIndex]
+            in 2..4 -> cardViews[keepIndex - 2]
+            5 -> rowOrbiter
+            6 -> rowAfr
+            else -> engineCards[playerEngineMode.coerceIn(0, 1)]
         }
         focusTarget.requestFocus()
     }
 
     private fun openAudioSubModal(inPlace: Boolean = false, keepIndex: Int = -1) {
-        val p = player ?: return
         setSubModalHeaderTitle("Звук и DRC", "ЗВ")
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.GONE
@@ -4704,7 +5022,7 @@ class MainActivity : AppCompatActivity() {
         }
         val audInner = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.TOP
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
         }
         audScroll.addView(audInner)
@@ -4722,11 +5040,34 @@ class MainActivity : AppCompatActivity() {
         }.apply { id = 8350 }
         audInner.addView(rowDrc)
 
+        val langDisplay = when (preferredAudioLang.lowercase(Locale.US)) {
+            "rus", "ru" -> "Русский"
+            "eng", "en" -> "Оригинал (ENG)"
+            else -> "Авто"
+        }
+        val rowPrefLang = makeUnifiedSettingRow("Язык аудио по умолчанию", langDisplay, 0) {
+            preferredAudioLang = when (preferredAudioLang.lowercase(Locale.US)) {
+                "rus", "ru" -> "eng"
+                "eng", "en" -> "auto"
+                else -> "rus"
+            }
+            saveState()
+            if (isVlcEngineActive()) {
+                vlcAppliedSavedTracks = false
+                applyVlcRememberedTracks()
+            } else {
+                media3AppliedSavedTracks = false
+                player?.currentTracks?.let { applyMedia3RememberedTracks(it) }
+            }
+            openAudioSubModal(inPlace = true, keepIndex = 1)
+        }.apply { id = 8349 }
+        audInner.addView(rowPrefLang)
+
         val boostLabel = TextView(this).apply {
             text = "Усиление громкости"
             setTextColor(t.textPrimaryColor); alpha = 0.74f
-            typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
-            setPadding((8 * scale).toInt(), (10 * scale).toInt(), 4, (4 * scale).toInt())
+            typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.8f * scale)
+            setPadding(dpPx(6f), dpPx(8f * scale), dpPx(4f), dpPx(4f))
         }
         audInner.addView(boostLabel)
 
@@ -4741,7 +5082,7 @@ class MainActivity : AppCompatActivity() {
         boostSteps.forEachIndexed { idx, pct ->
             val card = makeUnifiedPresetCard("$pct%", "", audioBoostPercent == pct) {
                 audioBoostPercent = pct; saveState(); applyAudioEnhancements()
-                openAudioSubModal(inPlace = true, keepIndex = 1 + idx)
+                openAudioSubModal(inPlace = true, keepIndex = 2 + idx)
             }.apply { id = 8351 + idx }
             boostCards.add(card)
             boostRow.addView(card)
@@ -4751,65 +5092,174 @@ class MainActivity : AppCompatActivity() {
         val tracksLabel = TextView(this).apply {
             text = "Аудиодорожки"
             setTextColor(t.textPrimaryColor); alpha = 0.74f
-            typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
-            setPadding((8 * scale).toInt(), (10 * scale).toInt(), 4, (4 * scale).toInt())
+            typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.8f * scale)
+            setPadding(dpPx(6f), dpPx(8f * scale), dpPx(4f), dpPx(4f))
         }
         audInner.addView(tracksLabel)
 
-        val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-        val trackRows = mutableListOf<LinearLayout>()
-        var trackCounter = 0
-        for (g in groups) {
-            for (i in 0 until g.length) {
-                val fmt = g.getTrackFormat(i)
-                val codec = fmt.sampleMimeType?.substringAfter("/")?.uppercase() ?: "AUDIO"
-                val lang = fmt.language?.uppercase() ?: ("Дорожка " + (trackCounter + 1))
-                val isSel = g.isTrackSelected(i)
-                val ov = TrackSelectionOverride(g.mediaTrackGroup, i)
-                val myTrackIdx = trackCounter
-                val tRow = makeUnifiedSettingRow(
-                    "$lang  •  $codec",
+        val extraRows = mutableListOf<LinearLayout>()
+        if (isVlcEngineActive()) {
+            val vlc = vlcPlayer
+            val vlcTracks = vlc?.getAudioTracks()?.filter { it.id != -1 }.orEmpty()
+            val activeAudioId = vlc?.getAudioTrack() ?: -1
+            vlcTracks.forEach { td ->
+                val rowIdx = 6 + extraRows.size
+                val isSel = td.id == activeAudioId
+                val r = makeUnifiedSettingRow(
+                    td.name.ifBlank { "Дорожка ${td.id}" },
                     if (isSel) "АКТИВНА" else "ВЫБРАТЬ",
                     if (isSel) 1 else 0
                 ) {
-                    p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setOverrideForType(ov).build()
-                    openAudioSubModal(inPlace = true, keepIndex = 5 + myTrackIdx)
+                    runCatching { vlc?.setAudioTrack(td.id) }
+                    val inferred = inferLangCodeFromTrackName(td.name)
+                    if (inferred.isNotBlank()) { preferredAudioLang = inferred; saveState() }
+                    applyVlcAudioBoost()
+                    openAudioSubModal(inPlace = true, keepIndex = rowIdx)
                 }.apply { id = View.generateViewId() }
-                trackRows.add(tRow)
-                audInner.addView(tRow)
-                trackCounter++
+                extraRows.add(r)
+                audInner.addView(r)
             }
-        }
-        if (trackRows.isEmpty()) {
-            audInner.addView(TextView(this).apply {
-                text = "Используется основная аудиодорожка потока"
-                setTextColor(t.textPrimaryColor); alpha = 0.65f
-                typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.2f * scale)
-                setPadding((10 * scale).toInt(), (4 * scale).toInt(), 8, (4 * scale).toInt())
-            })
+            if (vlcTracks.isEmpty()) {
+                audInner.addView(TextView(this).apply {
+                    text = "Используется основная аудиодорожка потока (LibVLC)"
+                    setTextColor(t.textPrimaryColor); alpha = 0.65f
+                    typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
+                    setPadding(dpPx(8f), dpPx(4f), dpPx(8f), dpPx(4f))
+                })
+            }
+
+            // Subtitles section for LibVLC
+            val spuTracks = vlc?.getSpuTracks()?.filter { it.id != -1 }.orEmpty()
+            val activeSpuId = vlc?.getSpuTrack() ?: -1
+            val subLabel = TextView(this).apply {
+                text = "Субтитры"
+                setTextColor(t.textPrimaryColor); alpha = 0.74f
+                typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.8f * scale)
+                setPadding(dpPx(6f), dpPx(8f * scale), dpPx(4f), dpPx(4f))
+            }
+            audInner.addView(subLabel)
+            val offRowIdx = 6 + extraRows.size
+            val offRow = makeUnifiedSettingRow("Выключить субтитры", if (activeSpuId == -1) "АКТИВНО" else "ВЫКЛ", if (activeSpuId == -1) 1 else 2) {
+                subtitlesEnabled = false; saveState()
+                runCatching { vlc?.setSpuTrack(-1) }
+                openAudioSubModal(inPlace = true, keepIndex = offRowIdx)
+            }.apply { id = View.generateViewId() }
+            extraRows.add(offRow); audInner.addView(offRow)
+            spuTracks.forEach { td ->
+                val rIdx = 6 + extraRows.size
+                val isSel = td.id == activeSpuId
+                val r = makeUnifiedSettingRow(td.name.ifBlank { "Субтитры ${td.id}" }, if (isSel) "ВКЛ" else "ВЫБРАТЬ", if (isSel) 1 else 0) {
+                    subtitlesEnabled = true; saveState()
+                    runCatching { vlc?.setSpuTrack(td.id) }
+                    openAudioSubModal(inPlace = true, keepIndex = rIdx)
+                }.apply { id = View.generateViewId() }
+                extraRows.add(r); audInner.addView(r)
+            }
+        } else {
+            val p = player
+            val groups = p?.currentTracks?.groups?.filter { it.type == C.TRACK_TYPE_AUDIO }.orEmpty()
+            var audioCount = 0
+            for (g in groups) {
+                for (i in 0 until g.length) {
+                    val fmt = g.getTrackFormat(i)
+                    val codec = formatAudioCodecLabel(fmt.sampleMimeType, fmt.codecs)
+                    val chLabel = formatAudioChannelsLabel(fmt.channelCount)
+                    val langRaw = fmt.language?.trim().orEmpty()
+                    val lang = fmt.label?.takeIf { it.isNotBlank() } ?: langRaw.uppercase(Locale.US).ifBlank { "Дорожка ${audioCount + 1}" }
+                    val meta = listOf(codec, chLabel).filter { it.isNotBlank() }.joinToString(" ")
+                    val isSel = g.isTrackSelected(i)
+                    val ov = TrackSelectionOverride(g.mediaTrackGroup, i)
+                    val rowIdx = 6 + extraRows.size
+                    val r = makeUnifiedSettingRow(
+                        if (meta.isNotBlank()) "$lang  •  $meta" else lang,
+                        if (isSel) "АКТИВНА" else "ВЫБРАТЬ",
+                        if (isSel) 1 else 0
+                    ) {
+                        p?.trackSelectionParameters = p?.trackSelectionParameters?.buildUpon()
+                            ?.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                            ?.setOverrideForType(ov)
+                            ?.build() ?: return@makeUnifiedSettingRow
+                        val normLang = normalizeAudioLangCode(langRaw.ifBlank { inferLangCodeFromTrackName(lang) })
+                        if (normLang.isNotBlank()) { preferredAudioLang = normLang; saveState() }
+                        openAudioSubModal(inPlace = true, keepIndex = rowIdx)
+                    }.apply { id = View.generateViewId() }
+                    extraRows.add(r); audInner.addView(r)
+                    audioCount++
+                }
+            }
+            if (audioCount == 0) {
+                audInner.addView(TextView(this).apply {
+                    text = "Используется основная аудиодорожка потока"
+                    setTextColor(t.textPrimaryColor); alpha = 0.65f
+                    typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
+                    setPadding(dpPx(8f), dpPx(4f), dpPx(8f), dpPx(4f))
+                })
+            }
+
+            // Subtitles section for Media3
+            val subGroups = p?.currentTracks?.groups?.filter { it.type == C.TRACK_TYPE_TEXT }.orEmpty()
+            val subLabel = TextView(this).apply {
+                text = "Субтитры"
+                setTextColor(t.textPrimaryColor); alpha = 0.74f
+                typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.8f * scale)
+                setPadding(dpPx(6f), dpPx(8f * scale), dpPx(4f), dpPx(4f))
+            }
+            audInner.addView(subLabel)
+            val subDisabled = p?.trackSelectionParameters?.disabledTrackTypes?.contains(C.TRACK_TYPE_TEXT) == true || !subtitlesEnabled
+            val offRowIdx = 6 + extraRows.size
+            val offRow = makeUnifiedSettingRow("Выключить субтитры", if (subDisabled) "АКТИВНО" else "ВЫКЛ", if (subDisabled) 1 else 2) {
+                subtitlesEnabled = false; saveState()
+                p?.trackSelectionParameters = p?.trackSelectionParameters?.buildUpon()
+                    ?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    ?.clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    ?.build() ?: return@makeUnifiedSettingRow
+                openAudioSubModal(inPlace = true, keepIndex = offRowIdx)
+            }.apply { id = View.generateViewId() }
+            extraRows.add(offRow); audInner.addView(offRow)
+            for (sg in subGroups) {
+                for (i in 0 until sg.length) {
+                    val fmt = sg.getTrackFormat(i)
+                    val sName = fmt.label?.takeIf { it.isNotBlank() } ?: fmt.language?.uppercase(Locale.US) ?: "Субтитры"
+                    val isSel = !subDisabled && sg.isTrackSelected(i)
+                    val ov = TrackSelectionOverride(sg.mediaTrackGroup, i)
+                    val rIdx = 6 + extraRows.size
+                    val r = makeUnifiedSettingRow(sName, if (isSel) "ВКЛ" else "ВЫБРАТЬ", if (isSel) 1 else 0) {
+                        subtitlesEnabled = true; saveState()
+                        p?.trackSelectionParameters = p?.trackSelectionParameters?.buildUpon()
+                            ?.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            ?.setOverrideForType(ov)
+                            ?.build() ?: return@makeUnifiedSettingRow
+                        openAudioSubModal(inPlace = true, keepIndex = rIdx)
+                    }.apply { id = View.generateViewId() }
+                    extraRows.add(r); audInner.addView(r)
+                }
+            }
         }
 
         val activeBoostIdx = boostSteps.indexOf(audioBoostPercent).coerceAtLeast(0)
-        rowDrc.nextFocusDownId = boostCards[activeBoostIdx].id
+        rowDrc.nextFocusDownId = rowPrefLang.id
+        rowPrefLang.nextFocusUpId = rowDrc.id
+        rowPrefLang.nextFocusDownId = boostCards[activeBoostIdx].id
         for (i in boostCards.indices) {
             boostCards[i].nextFocusLeftId = boostCards[(i - 1 + boostCards.size) % boostCards.size].id
             boostCards[i].nextFocusRightId = boostCards[(i + 1) % boostCards.size].id
-            boostCards[i].nextFocusUpId = rowDrc.id
-            if (trackRows.isNotEmpty()) boostCards[i].nextFocusDownId = trackRows.first().id
+            boostCards[i].nextFocusUpId = rowPrefLang.id
+            if (extraRows.isNotEmpty()) boostCards[i].nextFocusDownId = extraRows.first().id
         }
-        if (trackRows.isNotEmpty()) {
-            trackRows.first().nextFocusUpId = boostCards[activeBoostIdx].id
-            for (i in trackRows.indices) {
-                if (i > 0) trackRows[i].nextFocusUpId = trackRows[i - 1].id
-                if (i + 1 < trackRows.size) trackRows[i].nextFocusDownId = trackRows[i + 1].id
+        if (extraRows.isNotEmpty()) {
+            extraRows.first().nextFocusUpId = boostCards[activeBoostIdx].id
+            for (i in extraRows.indices) {
+                if (i > 0) extraRows[i].nextFocusUpId = extraRows[i - 1].id
+                if (i + 1 < extraRows.size) extraRows[i].nextFocusDownId = extraRows[i + 1].id
             }
         }
 
         if (!inPlace) animateMenuAppear(subModalOverlay)
         val focusTarget: View = when {
             keepIndex == 0 -> rowDrc
-            keepIndex in 1..4 -> boostCards[(keepIndex - 1).coerceIn(0, boostCards.lastIndex)]
-            keepIndex >= 5 -> trackRows.getOrNull(keepIndex - 5) ?: rowDrc
+            keepIndex == 1 -> rowPrefLang
+            keepIndex in 2..5 -> boostCards[(keepIndex - 2).coerceIn(0, boostCards.lastIndex)]
+            keepIndex >= 6 -> extraRows.getOrNull(keepIndex - 6) ?: rowDrc
             else -> rowDrc
         }
         focusTarget.requestFocus()
@@ -4928,9 +5378,21 @@ class MainActivity : AppCompatActivity() {
 
     internal fun applyScreenAspectMode() {
         when (screenAspectMode) {
-            0 -> { playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT; player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT }
-            1 -> { playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL; player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT }
-            else -> { playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM; player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING }
+            0 -> {
+                playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                runCatching { vlcPlayer?.setVideoScale(VlcMediaPlayer.ScaleType.SURFACE_BEST_FIT) }
+            }
+            1 -> {
+                playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                runCatching { vlcPlayer?.setVideoScale(VlcMediaPlayer.ScaleType.SURFACE_FILL) }
+            }
+            else -> {
+                playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                runCatching { vlcPlayer?.setVideoScale(VlcMediaPlayer.ScaleType.SURFACE_FIT_SCREEN) }
+            }
         }
     }
 
@@ -4974,6 +5436,7 @@ class MainActivity : AppCompatActivity() {
         CoreEngines.installTrustAllSsl()
         CoreEngines.appendDiagLog("APP_START", "Запуск TiViLook v2.7 (SDK=${Build.VERSION.SDK_INT}, Device=${Build.MODEL})")
         loadSavedState()
+        rebuildNetworkClients()
         currentAnimatedAlphaInt = targetPanelAlphaInt()
         initTouchGestureDetector()
 
@@ -4991,6 +5454,12 @@ class MainActivity : AppCompatActivity() {
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
         }
         playerContainerFrame.addView(playerView)
+        vlcVideoLayout = VLCVideoLayout(this).apply {
+            visibility = View.GONE
+            isFocusable = false; isClickable = false
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
+        }
+        playerContainerFrame.addView(vlcVideoLayout)
         rootFrame.addView(playerContainerFrame)
 
         dualStreamContainer = FrameLayout(this).apply {
@@ -5145,7 +5614,7 @@ class MainActivity : AppCompatActivity() {
         }
         infoPanel.addView(infoTitleView)
         infoRowViews.clear()
-        for (rIdx in 0 until 5) {
+        for (rIdx in 0 until 7) {
             val rowTv = TextView(this).apply {
                 setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f); typeface = themeFont()
                 isSingleLine = true; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
@@ -5515,6 +5984,22 @@ class MainActivity : AppCompatActivity() {
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.START).apply { setMargins(26, 0, 26, 26) }
         }
         rootFrame.addView(currentChannelBanner)
+        gestureHudView = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16.5f)
+            typeface = themeBoldFont()
+            gravity = Gravity.CENTER
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(Color.argb(215, 16, 20, 30))
+                cornerRadius = 999f
+                setStroke(2, Color.argb(120, 255, 255, 255))
+            })
+            val ph = dpPx(20f); val pv = dpPx(10f)
+            setPadding(ph, pv, ph, pv)
+            visibility = View.GONE
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+        }
+        rootFrame.addView(gestureHudView)
 
         firstRunModeOverlay = FrameLayout(this).apply {
             setBackgroundColor(Color.parseColor("#E608070D")); visibility = View.GONE
@@ -6602,11 +7087,24 @@ class MainActivity : AppCompatActivity() {
             }
             "ADD_URL" -> openAddUrlSubModal()
             "RENAME_PLAYLIST" -> openRenamePlaylistSubModal()
+            "PROXY_INPUT" -> openInputSubModal("Прокси (socks5:// или http://, пусто = выкл)", networkProxyUrl) { newVal ->
+                networkProxyUrl = newVal.trim()
+                saveState()
+                rebuildNetworkClients()
+                initPlayer()
+                currentChannel?.let { playChannelObj(it, immediate = true, silentSwap = true, updateSavedUrl = false) }
+            }
             "UPDATE_PROMPT" -> openUpdateAvailablePromptModal()
         }
     }
 
     internal fun rewindLiveBufferSeconds(sec: Int) {
+        if (isVlcEngineActive()) {
+            val vlc = vlcPlayer ?: return
+            val cur = runCatching { vlc.time }.getOrDefault(0L)
+            if (cur > 0L) runCatching { vlc.setTime((cur - sec * 1000L).coerceAtLeast(0L)) }
+            return
+        }
         val p = player ?: return
         val cur = p.currentPosition
         val target = (cur - sec * 1000L).coerceAtLeast(0L)
@@ -6767,6 +7265,25 @@ class MainActivity : AppCompatActivity() {
                             streamRetriesExhausted = false
                         }
                     }
+                } else if (isVlcEngineActive() && vlcPlayer != null && currentChannel != null && !streamRetriesExhausted) {
+                    val sinceSwitchMs = System.currentTimeMillis() - lastChannelSwitchMs
+                    if (sinceSwitchMs >= 10_000L && (!vlcIsPlayingNow || vlcIsBufferingNow)) {
+                        lowSignalStuckSeconds += 2
+                        if (lowSignalStuckSeconds >= 14) {
+                            lowSignalStuckSeconds = 0
+                            consecutiveDropFailures++
+                            if (consecutiveDropFailures > 4) {
+                                streamRetriesExhausted = true
+                                if (onDropBehavior == 1) { consecutiveDropFailures = 0; switchChannelByOffset(+1) }
+                            } else {
+                                reloadIconIndicator.visibility = View.VISIBLE
+                                uiHandler.postDelayed({ reloadIconIndicator.visibility = View.GONE }, 2200L)
+                                reconnectCurrentStreamSilently(forceMirror = (consecutiveDropFailures >= 2))
+                            }
+                        }
+                    } else {
+                        lowSignalStuckSeconds = 0
+                    }
                 }
 
                 if (infoPanel.visibility == View.VISIBLE) updateStreamInfoText()
@@ -6839,6 +7356,14 @@ class MainActivity : AppCompatActivity() {
 
     internal fun reconnectCurrentStreamSilently(forceMirror: Boolean = false, preferHttpFallback: Boolean = false) {
         val ch = currentChannel ?: return
+        if (isVlcEngineActive()) {
+            val mirrors = collectMirrorsForChannel(ch)
+            val nextUrl = if ((forceMirror || consecutiveDropFailures >= 2) && mirrors.isNotEmpty()) {
+                val picked = mirrors[mirrorCycleIndex % mirrors.size]; mirrorCycleIndex++; picked
+            } else ch.url
+            playChannelInVlc(nextUrl)
+            return
+        }
         val p = player ?: return
         try {
             uiHandler.removeCallbacks(pendingErrorReconnectRunnable)
@@ -6910,17 +7435,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun updateSignalIndicator(): Int {
-        val p = player
-        val state = p?.playbackState ?: Player.STATE_IDLE
-        val bufMs = p?.totalBufferedDuration ?: 0L
-        val (activeBars, activeColor) = when {
-            state == Player.STATE_IDLE -> Pair(1, Color.parseColor("#FF5252"))
-            state == Player.STATE_BUFFERING && bufMs < 150L -> Pair(1, Color.parseColor("#FF5252"))
-            state == Player.STATE_BUFFERING -> Pair(2, Color.parseColor("#FFD740"))
-            state == Player.STATE_READY && bufMs >= 2000L -> Pair(4, Color.parseColor("#00E676"))
-            state == Player.STATE_READY && bufMs >= 600L -> Pair(3, Color.parseColor("#69F0AE"))
-            state == Player.STATE_READY -> Pair(2, Color.parseColor("#FFD740"))
-            else -> Pair(1, Color.parseColor("#FF5252"))
+        val (activeBars, activeColor) = if (isVlcEngineActive()) {
+            when {
+                vlcIsPlayingNow && !vlcIsBufferingNow -> Pair(4, Color.parseColor("#00E676"))
+                vlcIsBufferingNow && vlcBufferPercent >= 40 -> Pair(2, Color.parseColor("#FFD740"))
+                vlcIsBufferingNow -> Pair(1, Color.parseColor("#FF5252"))
+                else -> Pair(1, Color.parseColor("#FF5252"))
+            }
+        } else {
+            val p = player
+            val state = p?.playbackState ?: Player.STATE_IDLE
+            val bufMs = p?.totalBufferedDuration ?: 0L
+            when {
+                state == Player.STATE_IDLE -> Pair(1, Color.parseColor("#FF5252"))
+                state == Player.STATE_BUFFERING && bufMs < 150L -> Pair(1, Color.parseColor("#FF5252"))
+                state == Player.STATE_BUFFERING -> Pair(2, Color.parseColor("#FFD740"))
+                state == Player.STATE_READY && bufMs >= 2000L -> Pair(4, Color.parseColor("#00E676"))
+                state == Player.STATE_READY && bufMs >= 600L -> Pair(3, Color.parseColor("#69F0AE"))
+                state == Player.STATE_READY -> Pair(2, Color.parseColor("#FFD740"))
+                else -> Pair(1, Color.parseColor("#FF5252"))
+            }
         }
         val inactiveColor = Color.parseColor("#35FFFFFF")
         for (i in signalBars.indices) {
@@ -6932,11 +7466,290 @@ class MainActivity : AppCompatActivity() {
         return activeBars
     }
 
+    private fun buildSmartCodecSelector(preferHevcForDv: Boolean): MediaCodecSelector {
+        return object : MediaCodecSelector {
+            override fun getDecoderInfos(
+                mimeType: String,
+                requiresSecureDecoder: Boolean,
+                requiresTunnelingDecoder: Boolean
+            ): MutableList<MediaCodecInfo> {
+                if (mimeType == MimeTypes.VIDEO_DOLBY_VISION) {
+                    val hevcDecoders = MediaCodecSelector.DEFAULT.getDecoderInfos(
+                        MimeTypes.VIDEO_H265,
+                        requiresSecureDecoder,
+                        requiresTunnelingDecoder
+                    )
+                    if (preferHevcForDv && hevcDecoders.isNotEmpty()) {
+                        return hevcDecoders.toMutableList()
+                    }
+                    val dvDecoders = MediaCodecSelector.DEFAULT.getDecoderInfos(
+                        mimeType,
+                        requiresSecureDecoder,
+                        requiresTunnelingDecoder
+                    )
+                    val combined = ArrayList<MediaCodecInfo>(dvDecoders.size + hevcDecoders.size)
+                    combined.addAll(dvDecoders)
+                    for (hevc in hevcDecoders) {
+                        if (combined.none { it.name == hevc.name }) combined.add(hevc)
+                    }
+                    return combined
+                }
+                return MediaCodecSelector.DEFAULT.getDecoderInfos(
+                    mimeType,
+                    requiresSecureDecoder,
+                    requiresTunnelingDecoder
+                ).toMutableList()
+            }
+        }
+    }
+
+    private fun normalizeAudioLangCode(raw: String): String {
+        val c = raw.trim().lowercase(Locale.US)
+        return when {
+            c.startsWith("ru") -> "rus"
+            c.startsWith("en") -> "eng"
+            c.startsWith("uk") || c.startsWith("ua") -> "ukr"
+            c == "auto" -> "auto"
+            else -> c
+        }
+    }
+
+    private fun langAliases(code: String): List<String> {
+        return when (normalizeAudioLangCode(code)) {
+            "rus" -> listOf("rus", "ru", "рус", "russian")
+            "eng" -> listOf("eng", "en", "english", "ориг", "orig")
+            "ukr" -> listOf("ukr", "uk", "укр", "ukrainian")
+            else -> listOf(code.lowercase(Locale.US)).filter { it.isNotBlank() }
+        }
+    }
+
+    private fun inferLangCodeFromTrackName(name: String?): String {
+        val low = name?.lowercase(Locale.US).orEmpty()
+        return when {
+            low.contains("рус") || low.contains("rus") || low.contains("[ru]") -> "rus"
+            low.contains("eng") || low.contains("англ") || low.contains("ориг") -> "eng"
+            low.contains("укр") || low.contains("ukr") -> "ukr"
+            else -> ""
+        }
+    }
+
+    private fun applyMedia3RememberedTracks(tracks: Tracks) {
+        val p = player ?: return
+        var builder = p.trackSelectionParameters.buildUpon()
+        var changed = false
+
+        val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        if (audioGroups.isNotEmpty()) {
+            val pref = normalizeAudioLangCode(preferredAudioLang)
+            if (pref.isNotBlank() && pref != "auto" && !media3AppliedSavedTracks) {
+                val aliases = langAliases(pref)
+                var matchedGroup: Tracks.Group? = null
+                var matchedIdx = -1
+                outer@ for (g in audioGroups) {
+                    for (i in 0 until g.length) {
+                        val fmt = g.getTrackFormat(i)
+                        val hay = "${fmt.language.orEmpty()} ${fmt.label.orEmpty()}".lowercase(Locale.US)
+                        if (aliases.any { hay.contains(it) }) {
+                            matchedGroup = g; matchedIdx = i; break@outer
+                        }
+                    }
+                }
+                if (matchedGroup != null && matchedIdx >= 0) {
+                    builder = builder
+                        .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                        .setOverrideForType(TrackSelectionOverride(matchedGroup.mediaTrackGroup, matchedIdx))
+                    changed = true
+                    media3AppliedSavedTracks = true
+                }
+            }
+            if (!changed && audioGroups.none { it.isSelected }) {
+                val firstGroup = audioGroups.first()
+                if (firstGroup.length > 0) {
+                    builder = builder.setOverrideForType(TrackSelectionOverride(firstGroup.mediaTrackGroup, 0))
+                    changed = true
+                }
+            }
+        }
+
+        val curSubDisabled = p.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
+        if (!subtitlesEnabled && !curSubDisabled) {
+            builder = builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            changed = true
+        } else if (subtitlesEnabled && curSubDisabled) {
+            builder = builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            changed = true
+        }
+
+        if (changed) p.trackSelectionParameters = builder.build()
+    }
+
+    private fun vlcNetworkCachingMs(): Int {
+        return when (bufferLevel) {
+            0 -> 2500
+            1 -> 4500
+            2 -> 7000
+            else -> 10000
+        }
+    }
+
+    private fun releaseVlcPlayer() {
+        val vlc = vlcPlayer
+        vlcPlayer = null
+        vlcIsPlayingNow = false
+        vlcIsBufferingNow = false
+        vlcBufferPercent = 0
+        if (vlc != null) {
+            runCatching { vlc.setEventListener(null) }
+            runCatching { vlc.stop() }
+            if (vlcViewsAttached) {
+                runCatching { vlc.detachViews() }
+                vlcViewsAttached = false
+            }
+            runCatching { vlc.release() }
+        }
+        val lib = libVlc
+        libVlc = null
+        if (lib != null) {
+            runCatching { lib.release() }
+        }
+    }
+
+    private fun initVlcPlayer() {
+        releaseVlcPlayer()
+        val cacheMs = vlcNetworkCachingMs()
+        val options = ArrayList<String>().apply {
+            add("--network-caching=$cacheMs")
+            add("--file-caching=$cacheMs")
+            add("--live-caching=$cacheMs")
+            add("--http-reconnect")
+            add("--audio-time-stretch")
+            add("--drop-late-frames")
+            add("--skip-frames")
+        }
+        val vlcInstance = runCatching { LibVLC(this, options) }.getOrElse { err ->
+            CoreEngines.appendDiagLog("VLC_ERR", "Ошибка инициализации LibVLC: ${err.message}")
+            Toast.makeText(this, "LibVLC недоступен, возврат на Media3", Toast.LENGTH_SHORT).show()
+            playerEngineMode = 0
+            saveState()
+            initPlayer()
+            return
+        }
+        val mp = VlcMediaPlayer(vlcInstance)
+        libVlc = vlcInstance
+        vlcPlayer = mp
+
+        playerView.visibility = View.GONE
+        vlcVideoLayout.visibility = View.VISIBLE
+        runCatching {
+            mp.attachViews(vlcVideoLayout, null, true, false)
+            vlcViewsAttached = true
+        }.onFailure { err ->
+            CoreEngines.appendDiagLog("VLC_ERR", "VLC attachViews fail: ${err.message}")
+        }
+        applyScreenAspectMode()
+        applyVlcAudioBoost()
+
+        mp.setEventListener { event ->
+            if (!isVlcEngineActive() || vlcPlayer !== mp) return@setEventListener
+            when (event.type) {
+                VlcMediaPlayer.Event.Opening -> {
+                    vlcIsBufferingNow = true
+                    vlcBufferPercent = 0
+                    uiHandler.post { updateSignalIndicator() }
+                }
+                VlcMediaPlayer.Event.Buffering -> {
+                    val pct = event.buffering.toInt().coerceIn(0, 100)
+                    vlcBufferPercent = pct
+                    vlcIsBufferingNow = (pct < 99)
+                    uiHandler.post { updateSignalIndicator() }
+                }
+                VlcMediaPlayer.Event.Playing -> {
+                    vlcIsPlayingNow = true
+                    vlcIsBufferingNow = false
+                    vlcBufferPercent = 100
+                    lowSignalStuckSeconds = 0
+                    consecutiveDropFailures = 0
+                    uiHandler.post {
+                        applyVlcAudioBoost()
+                        applyScreenAspectMode()
+                        if (!vlcAppliedSavedTracks) applyVlcRememberedTracks()
+                        updateSignalIndicator()
+                        if (infoPanel.visibility == View.VISIBLE) updateStreamInfoText()
+                    }
+                }
+                VlcMediaPlayer.Event.EncounteredError, VlcMediaPlayer.Event.EndReached -> {
+                    vlcIsPlayingNow = false
+                    vlcIsBufferingNow = false
+                    uiHandler.post {
+                        updateSignalIndicator()
+                        reconnectCurrentStreamSilently()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun playChannelInVlc(rawUrl: String) {
+        if (libVlc == null || vlcPlayer == null) initVlcPlayer()
+        val lib = libVlc ?: return
+        val mp = vlcPlayer ?: return
+        val cleanUrl = rawUrl.substringBefore("#").trim()
+        vlcAppliedSavedTracks = false
+        vlcIsPlayingNow = false
+        vlcIsBufferingNow = true
+        vlcBufferPercent = 0
+        runCatching { mp.stop() }
+        val cacheMs = vlcNetworkCachingMs()
+        val media = Media(lib, Uri.parse(cleanUrl))
+        val hwEnabled = (decoderMode != 2)
+        media.setHWDecoderEnabled(hwEnabled, false)
+        media.addOption(":network-caching=$cacheMs")
+        media.addOption(":live-caching=$cacheMs")
+        media.addOption(":http-reconnect")
+        media.addOption(":drop-late-frames")
+        media.addOption(":skip-frames")
+        val agent = CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
+        media.addOption(":http-user-agent=$agent")
+        val hdrs = CoreEngines.headersForStreamUrl(cleanUrl)
+        hdrs["Referer"]?.takeIf { it.isNotBlank() }?.let { media.addOption(":http-referrer=$it") }
+        if (!subtitlesEnabled) media.addOption(":no-spu")
+        mp.setMedia(media)
+        media.release()
+        mp.play()
+        applyVlcAudioBoost()
+    }
+
+    private fun applyVlcRememberedTracks() {
+        val vlc = vlcPlayer ?: return
+        val pref = normalizeAudioLangCode(preferredAudioLang)
+        if (pref.isNotBlank() && pref != "auto") {
+            val aliases = langAliases(pref)
+            val tracks = vlc.getAudioTracks()?.filter { it.id != -1 }.orEmpty()
+            val match = tracks.firstOrNull { td ->
+                val low = td.name.lowercase(Locale.US)
+                aliases.any { low.contains(it) }
+            }
+            if (match != null) {
+                runCatching { vlc.setAudioTrack(match.id) }
+            }
+        }
+        if (!subtitlesEnabled) {
+            runCatching { vlc.setSpuTrack(-1) }
+        }
+        vlcAppliedSavedTracks = true
+    }
+
     internal fun initPlayer() {
         val currentUrl = currentChannel?.url
         try { loudnessEnhancer?.release(); loudnessEnhancer = null; lastAudioSessionId = C.AUDIO_SESSION_ID_UNSET } catch (_: Exception) {}
-        try { player?.stop(); player?.release() } catch (_: Exception) {}
-
+        try { player?.stop(); player?.release(); player = null } catch (_: Exception) {}
+        if (isVlcEngineActive()) {
+            initVlcPlayer()
+            return
+        }
+        releaseVlcPlayer()
+        if (::vlcVideoLayout.isInitialized) vlcVideoLayout.visibility = View.GONE
+        playerView.visibility = View.VISIBLE
         // Сетка буферов под короткие окна HLS (12–15 сек) без ухода позиции в минус и перескоков
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
             0 -> listOf(3000, 8000, 1000, 1500)
@@ -6965,6 +7778,7 @@ class MainActivity : AppCompatActivity() {
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(extensionMode)
             .setEnableDecoderFallback(true)
+            .setMediaCodecSelector(buildSmartCodecSelector(preferHevcForDv = (decoderMode != 0)))
 
         val initUrl = currentUrl ?: "https://vgtrkregion-reg.cdnvideo.ru"
         val activeAgent = if (CoreEngines.isSingleSessionTokenUrl(initUrl)) {
@@ -7043,17 +7857,8 @@ class MainActivity : AppCompatActivity() {
                 updateSignalIndicator()
             }
             override fun onTracksChanged(tracks: Tracks) {
-                var builder = newPlayer.trackSelectionParameters.buildUpon()
-                var changed = false
-                val audioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-                if (audioGroups.isNotEmpty() && audioGroups.none { it.isSelected }) {
-                    val firstGroup = audioGroups.first()
-                    if (firstGroup.length > 0) {
-                        builder = builder.setOverrideForType(TrackSelectionOverride(firstGroup.mediaTrackGroup, 0))
-                        changed = true
-                    }
-                }
-                if (changed) newPlayer.trackSelectionParameters = builder.build()
+                applyMedia3RememberedTracks(tracks)
+                if (infoPanel.visibility == View.VISIBLE) updateStreamInfoText()
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 updateSignalIndicator()
@@ -7440,24 +8245,133 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    internal fun updateStreamInfoText() {
-        val p = player ?: return
-        val ch = currentChannel
-        val vFormat = p.videoFormat
+    private fun formatVideoCodecLabel(mime: String?, codecs: String?): String {
+        val m = mime?.lowercase(Locale.US).orEmpty()
+        val c = codecs?.lowercase(Locale.US).orEmpty()
+        return when {
+            m.contains("dolby-vision") || c.contains("dvhe") || c.contains("dvh1") -> "Dolby Vision"
+            m.contains("hevc") || m.contains("h265") || c.contains("hevc") || c.contains("hvc1") || c.contains("hev1") -> "HEVC"
+            m.contains("avc") || m.contains("h264") || c.contains("avc") || c.contains("h264") -> "H.264"
+            m.contains("av01") || c.contains("av01") || c.contains("av1") -> "AV1"
+            m.contains("vp9") || c.contains("vp9") -> "VP9"
+            m.contains("mpeg2") || c.contains("mpgv") -> "MPEG-2"
+            else -> codecs?.substringBefore('.')?.uppercase(Locale.US).orEmpty()
+        }
+    }
 
-        val width = vFormat?.width ?: p.videoSize.width
-        val height = vFormat?.height ?: p.videoSize.height
-        val fps = if (vFormat != null && vFormat.frameRate > 0) String.format(Locale.US, " %.0f fps", vFormat.frameRate) else ""
-        val resText = if (width > 0 && height > 0) "${width}x${height}$fps" else "Анализ..."
-        val vBitrate = if (vFormat != null && vFormat.bitrate > 0) String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f) else "Адаптивный HLS"
-        val bufSec = String.format(Locale.US, "%.1f", (p.totalBufferedDuration / 1000f))
+    private fun formatAudioCodecLabel(mime: String?, codecs: String?): String {
+        val m = mime?.lowercase(Locale.US).orEmpty()
+        val c = codecs?.lowercase(Locale.US).orEmpty()
+        return when {
+            m.contains("eac3-joc") -> "E-AC3 Atmos"
+            m.contains("eac3") || c.contains("eac3") || c.contains("ec-3") -> "E-AC3"
+            m.contains("ac3") || c.contains("a52") || c.contains("ac3") -> "AC3"
+            m.contains("dts") || c.contains("dts") -> "DTS"
+            m.contains("flac") || c.contains("flac") -> "FLAC"
+            m.contains("opus") || c.contains("opus") -> "Opus"
+            m.contains("mp4a") || m.contains("aac") || c.contains("mp4a") || c.contains("aac") -> "AAC"
+            m.contains("mpeg-l2") || m.contains("mp2") -> "MP2"
+            m.contains("mpeg") || c.contains("mpga") || c.contains("mp3") -> "MP3"
+            else -> codecs?.substringBefore('.')?.uppercase(Locale.US).orEmpty()
+        }
+    }
+
+    private fun formatAudioChannelsLabel(count: Int): String {
+        return when (count) {
+            1 -> "1.0"
+            2 -> "2.0"
+            6 -> "5.1"
+            8 -> "7.1"
+            in 3..16 -> "${count}ch"
+            else -> ""
+        }
+    }
+
+    internal fun updateStreamInfoText() {
+        val ch = currentChannel
+        var resText = "Анализ..."
+        var codecsText = "Определение..."
+        var vBitrate = "Адаптивный HLS"
+        var bufText = "-"
+        val decTag = when (decoderMode) { 0 -> "HW"; 2 -> "SW"; else -> "HW+FFmpeg" }
+        val netTag = NetworkHelper.formatNetworkSummary()
+        val engineText = if (isVlcEngineActive()) "LibVLC ($decTag)  •  $netTag" else "Media3 ($decTag)  •  $netTag"
+
+        if (isVlcEngineActive()) {
+            val vlc = vlcPlayer
+            val mediaRef = runCatching { vlc?.media }.getOrNull()
+            if (mediaRef != null) {
+                try {
+                    val count = mediaRef.trackCount
+                    var vCodec = ""
+                    var aCodec = ""
+                    var aCh = ""
+                    val activeAudioId = vlc?.getAudioTrack() ?: -1
+                    var firstAudio: IMedia.AudioTrack? = null
+                    var matchedAudio: IMedia.AudioTrack? = null
+                    for (i in 0 until count) {
+                        val tr = mediaRef.getTrack(i)
+                        if (tr is IMedia.VideoTrack && vCodec.isEmpty()) {
+                            val fpsVal = if (tr.frameRateDen > 0) tr.frameRateNum.toFloat() / tr.frameRateDen.toFloat() else 0f
+                            val fpsStr = if (fpsVal > 1f) String.format(Locale.US, " %.0f fps", fpsVal) else ""
+                            if (tr.width > 0 && tr.height > 0) resText = "${tr.width}x${tr.height}$fpsStr"
+                            vCodec = formatVideoCodecLabel(null, tr.codec ?: tr.originalCodec)
+                            if (tr.bitrate > 0) vBitrate = String.format(Locale.US, "%.2f Мбит/с", tr.bitrate / 1_000_000f)
+                        } else if (tr is IMedia.AudioTrack) {
+                            if (firstAudio == null) firstAudio = tr
+                            if (tr.id == activeAudioId) matchedAudio = tr
+                        }
+                    }
+                    val at = matchedAudio ?: firstAudio
+                    if (at != null) {
+                        aCodec = formatAudioCodecLabel(null, at.codec ?: at.originalCodec)
+                        aCh = formatAudioChannelsLabel(at.channels)
+                    }
+                    val aFull = listOf(aCodec, if (aCh.isNotEmpty()) "($aCh)" else "").filter { it.isNotEmpty() }.joinToString(" ")
+                    val combined = listOf(vCodec, aFull).filter { it.isNotEmpty() }.joinToString("  •  ")
+                    if (combined.isNotEmpty()) codecsText = combined
+                } finally {
+                    runCatching { mediaRef.release() }
+                }
+            }
+            bufText = "${vlcBufferPercent}% (${vlcNetworkCachingMs() / 1000}с)"
+        } else {
+            val p = player ?: return
+            val vFormat = p.videoFormat
+            val aFormat = p.audioFormat
+
+            val width = vFormat?.width ?: p.videoSize.width
+            val height = vFormat?.height ?: p.videoSize.height
+            val fps = if (vFormat != null && vFormat.frameRate > 0) String.format(Locale.US, " %.0f fps", vFormat.frameRate) else ""
+            if (width > 0 && height > 0) resText = "${width}x${height}$fps"
+
+            val vCodec = formatVideoCodecLabel(vFormat?.sampleMimeType, vFormat?.codecs)
+            val hdr = when (vFormat?.colorInfo?.colorTransfer) {
+                C.COLOR_TRANSFER_ST2084 -> "HDR10"
+                C.COLOR_TRANSFER_HLG -> "HLG"
+                else -> ""
+            }
+            val vFull = listOf(vCodec, hdr).filter { it.isNotEmpty() }.joinToString(" ")
+            val aCodec = formatAudioCodecLabel(aFormat?.sampleMimeType, aFormat?.codecs)
+            val aCh = formatAudioChannelsLabel(aFormat?.channelCount ?: 0)
+            val aFull = listOf(aCodec, if (aCh.isNotEmpty()) "($aCh)" else "").filter { it.isNotEmpty() }.joinToString(" ")
+            val combined = listOf(vFull, aFull).filter { it.isNotEmpty() }.joinToString("  •  ")
+            if (combined.isNotEmpty()) codecsText = combined
+
+            if (vFormat != null && vFormat.bitrate > 0) {
+                vBitrate = String.format(Locale.US, "%.2f Мбит/с", vFormat.bitrate / 1_000_000f)
+            }
+            bufText = String.format(Locale.US, "%.1f сек", (p.totalBufferedDuration / 1000f))
+        }
 
         val lines = listOf(
             "Канал: " + (ch?.name ?: "-"),
             "Группа: " + (if (ch != null) effectiveCategory(ch) else "-"),
             "Разрешение: $resText",
+            "Кодеки: $codecsText",
             "Поток: $vBitrate",
-            "Буфер: $bufSec сек"
+            "Буфер: $bufText",
+            "Движок: $engineText"
         )
         for (i in infoRowViews.indices) {
             val txt = lines.getOrElse(i) { "" }
@@ -8139,20 +9053,25 @@ class MainActivity : AppCompatActivity() {
                 "PLAY_CHANNEL",
                 "name='${target.name}' group='${effectiveCategory(target)}' bufLvl=$bufferLevel dec=$decoderMode url='${target.url.substringBefore("#")}'"
             )
-            val p = player
-            if (p != null) {
-                if (p.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_AUDIO)) {
-                    p.trackSelectionParameters = p.trackSelectionParameters
-                        .buildUpon()
-                        .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-                        .build()
+            media3AppliedSavedTracks = false
+            if (isVlcEngineActive()) {
+                playChannelInVlc(target.url)
+            } else {
+                val p = player
+                if (p != null) {
+                    if (p.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_AUDIO)) {
+                        p.trackSelectionParameters = p.trackSelectionParameters
+                            .buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                            .build()
+                    }
+                    p.stop()
+                    p.clearMediaItems()
+                    applyHeadersToDataSourceForUrl(target.url)
+                    p.setMediaItem(createLiveMediaItem(target.url), true)
+                    p.prepare()
+                    p.play()
                 }
-                p.stop()
-                p.clearMediaItems()
-                applyHeadersToDataSourceForUrl(target.url)
-                p.setMediaItem(createLiveMediaItem(target.url), true)
-                p.prepare()
-                p.play()
             }
         } catch (_: Exception) {}
         uiHandler.removeCallbacks(preloadNeighborsRunnable)
@@ -8281,6 +9200,12 @@ class MainActivity : AppCompatActivity() {
             .putBoolean("drc_night_v23", drcNightAudioEnabled)
             .putInt("audio_boost_v23", audioBoostPercent)
             .putBoolean("doh_enabled_v23", dohEnabled)
+            .putBoolean("dpi_bypass_v38", dpiBypassEnabled)
+            .putString("net_proxy_url_v38", networkProxyUrl)
+            .putInt("player_engine_v38", playerEngineMode)
+            .putString("pref_audio_lang_v38", preferredAudioLang)
+            .putBoolean("subtitles_enabled_v38", subtitlesEnabled)
+            .putBoolean("edge_gestures_v38", touchEdgeGesturesEnabled)
             .putInt("on_drop_v23", onDropBehavior)
             .putInt("menu_hide_sec_v23", menuHideDelaySec)
             .putBoolean("show_banner_v32", showChannelBannerOnSwitch)
@@ -8317,6 +9242,12 @@ class MainActivity : AppCompatActivity() {
         drcNightAudioEnabled = prefs.getBoolean("drc_night_v23", false)
         audioBoostPercent = prefs.getInt("audio_boost_v23", 100)
         dohEnabled = prefs.getBoolean("doh_enabled_v23", true)
+        dpiBypassEnabled = prefs.getBoolean("dpi_bypass_v38", true)
+        networkProxyUrl = prefs.getString("net_proxy_url_v38", "")?.trim().orEmpty()
+        playerEngineMode = prefs.getInt("player_engine_v38", 0).coerceIn(0, 1)
+        preferredAudioLang = prefs.getString("pref_audio_lang_v38", "rus")?.trim().orEmpty().ifBlank { "rus" }
+        subtitlesEnabled = prefs.getBoolean("subtitles_enabled_v38", false)
+        touchEdgeGesturesEnabled = prefs.getBoolean("edge_gestures_v38", false)
         onDropBehavior = prefs.getInt("on_drop_v23", 0)
         menuHideDelaySec = prefs.getInt("menu_hide_sec_v23", 8)
         showChannelBannerOnSwitch = prefs.getBoolean("show_banner_v32", true)
@@ -8371,8 +9302,82 @@ class MainActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    private fun showEdgeGestureHud(message: String) {
+        if (!::gestureHudView.isInitialized) return
+        uiHandler.removeCallbacks(hideGestureHudRunnable)
+        gestureHudView.animate().cancel()
+        gestureHudView.text = message
+        gestureHudView.alpha = 1f
+        gestureHudView.visibility = View.VISIBLE
+        uiHandler.postDelayed(hideGestureHudRunnable, 1100L)
+    }
+
+    private fun handleOptionalEdgeTouchGesture(ev: MotionEvent): Boolean {
+        if (!touchEdgeGesturesEnabled || menuHistory.isNotEmpty() ||
+            (::firstRunModeOverlay.isInitialized && firstRunModeOverlay.visibility == View.VISIBLE) ||
+            (::splashOverlay.isInitialized && splashOverlay.visibility == View.VISIBLE)
+        ) {
+            edgeGestureActiveMode = 0
+            return false
+        }
+        val screenW = resources.displayMetrics.widthPixels.coerceAtLeast(1).toFloat()
+        val screenH = resources.displayMetrics.heightPixels.coerceAtLeast(1).toFloat()
+        val slop = ViewConfiguration.get(this).scaledTouchSlop.toFloat()
+        val edgeGuard = dpPx(28f).toFloat()
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                edgeGestureActiveMode = 0
+                edgeGestureStartX = ev.rawX
+                edgeGestureStartY = ev.rawY
+                val curB = window.attributes.screenBrightness
+                edgeGestureStartBrightness = if (curB > 0f) curB.coerceIn(0.05f, 1f) else (brightnessPercent / 100f).coerceIn(0.2f, 1f)
+                val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                edgeGestureMaxVolume = am?.getStreamMaxVolume(AudioManager.STREAM_MUSIC)?.coerceAtLeast(1) ?: 15
+                edgeGestureStartVolume = am?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
+                return false
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = ev.rawX - edgeGestureStartX
+                val dy = ev.rawY - edgeGestureStartY
+                if (edgeGestureActiveMode == 0) {
+                    val inSafeY = edgeGestureStartY > edgeGuard && edgeGestureStartY < (screenH - edgeGuard)
+                    val inLeftZone = edgeGestureStartX < screenW * 0.25f
+                    val inRightZone = edgeGestureStartX > screenW * 0.75f
+                    if (inSafeY && (inLeftZone || inRightZone) && abs(dy) > slop * 1.4f && abs(dy) > abs(dx) * 1.4f) {
+                        edgeGestureActiveMode = if (inLeftZone) 1 else 2
+                    }
+                }
+                if (edgeGestureActiveMode == 1) {
+                    val newB = (edgeGestureStartBrightness - dy / (screenH * 0.65f)).coerceIn(0.05f, 1.0f)
+                    val lp = window.attributes
+                    lp.screenBrightness = newB
+                    window.attributes = lp
+                    val pct = (newB * 100f).toInt().coerceIn(5, 100)
+                    showEdgeGestureHud("☀ Яркость: $pct%")
+                    return true
+                } else if (edgeGestureActiveMode == 2) {
+                    val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                    val deltaSteps = (-dy / (screenH * 0.65f)) * edgeGestureMaxVolume
+                    val targetVol = (edgeGestureStartVolume + deltaSteps).toInt().coerceIn(0, edgeGestureMaxVolume)
+                    runCatching { am?.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0) }
+                    val pct = (targetVol * 100) / edgeGestureMaxVolume.coerceAtLeast(1)
+                    showEdgeGestureHud("🔊 Громкость: $pct%")
+                    return true
+                }
+                return false
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val wasActive = edgeGestureActiveMode != 0
+                edgeGestureActiveMode = 0
+                return wasActive
+            }
+        }
+        return false
+    }
+
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (ev.action == MotionEvent.ACTION_DOWN && menuHistory.isNotEmpty()) resetMenuInactivityTimer()
+        if (handleOptionalEdgeTouchGesture(ev)) return true
         if (::gestureDetector.isInitialized && gestureDetector.onTouchEvent(ev)) {
             return true
         }
@@ -8509,8 +9514,12 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         enableTrueFullScreenImmersion()
         startClockAndWatchdogUpdater()
-        if (player == null) {
+        if ((!isVlcEngineActive() && player == null) || (isVlcEngineActive() && vlcPlayer == null)) {
             initPlayer()
+            if (wasStoppedInBackground) {
+                wasStoppedInBackground = false
+                currentChannel?.let { playChannelObj(it, immediate = true, silentSwap = true, updateSavedUrl = false) }
+            }
         } else if (wasStoppedInBackground) {
             wasStoppedInBackground = false
             val ch = currentChannel
@@ -8521,7 +9530,7 @@ class MainActivity : AppCompatActivity() {
                 dualStreamChannel?.let { startDualStreamChannel(it) }
             }
         } else {
-            player?.play()
+            if (isVlcEngineActive()) runCatching { vlcPlayer?.play() } else player?.play()
         }
         if (allChannels.isEmpty()) loadActivePlaylist(autoPlayLast = true)
         onUpdatePermissionResume?.invoke()
@@ -8540,6 +9549,7 @@ class MainActivity : AppCompatActivity() {
             player?.stop()
             player?.clearMediaItems()
         } catch (_: Exception) {}
+        try { vlcPlayer?.stop() } catch (_: Exception) {}
         try {
             dualPipPlayer?.stop()
             dualPipPlayer?.clearMediaItems()
@@ -8563,6 +9573,7 @@ class MainActivity : AppCompatActivity() {
         try { loudnessEnhancer?.release() } catch (_: Exception) {}
         try { dualPipPlayer?.stop(); dualPipPlayer?.release() } catch (_: Exception) {}
         try { player?.stop(); player?.release() } catch (_: Exception) {}
+        releaseVlcPlayer()
     }
 }
 

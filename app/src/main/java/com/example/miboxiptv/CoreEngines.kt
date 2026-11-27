@@ -320,6 +320,14 @@ object CoreEngines {
 
     fun openStreamWithBypass(urlStr: String, userAgentIndex: Int, dohEnabled: Boolean, timeoutMs: Int = 8000): InputStream {
         var currentUrl = urlStr.substringBefore("#")
+        val netCfg = NetworkHelper.activeConfig.copy(useDoh = dohEnabled)
+        if (netCfg.useDoh || netCfg.useDpiBypass || netCfg.proxyUrl.isNotBlank()) {
+            try {
+                val activeAgent = if (isSingleSessionTokenUrl(currentUrl)) russianSmartTvAgents[0] else russianSmartTvAgents[userAgentIndex % russianSmartTvAgents.size]
+                val hdrs = headersForStreamUrl(currentUrl)
+                return NetworkHelper.openInputStream(currentUrl, activeAgent, hdrs, timeoutMs, netCfg)
+            } catch (_: Exception) {}
+        }
         var redirects = 0
         while (redirects < 6) {
             val parsed = URL(currentUrl)

@@ -53,19 +53,11 @@ class UpdateManager(private val context: Context) {
         fun isCancelled(): Boolean = cancelled.get()
     }
 
-    private val apiClient = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+    private val apiClient: OkHttpClient
+        get() = NetworkHelper.getExternalClient(connectSec = 8L, readSec = 15L, trustAll = false)
 
-    private val downloadClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(90, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+    private val downloadClient: OkHttpClient
+        get() = NetworkHelper.getExternalClient(connectSec = 15L, readSec = 90L, trustAll = false)
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
