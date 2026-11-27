@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: tivilook-beta-build
@@ -73,3 +73,12 @@ jobs:
           name: TiViLook-Beta-APK
           path: TiViLook-beta.apk
           retention-days: 30
+
+      - name: Publish Beta Pre-release for Beta Auto-Update
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.8.${{ github.run_number }}-beta
+          name: TiViLook Beta v2.8.${{ github.run_number }}
+          prerelease: true
+          make_latest: 'false'
+          files: TiViLook-beta.apk
