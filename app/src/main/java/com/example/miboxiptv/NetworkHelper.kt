@@ -650,22 +650,8 @@ object NetworkHelper {
                     }
                     return
                 }
-                // Case 2: Plain HTTP request (GET / HEAD / POST) -> split inside the Host: header value
-                if ((b0 == 'G'.code && b1 == 'E'.code) ||
-                    (b0 == 'H'.code && b1 == 'E'.code) ||
-                    (b0 == 'P'.code && b1 == 'O'.code)
-                ) {
-                    val splitPos = findHttpHostSplitOffset(b, off, len)
-                    if (splitPos in 4 until (len - 4)) {
-                        fragmentedFirstWrite = true
-                        runCatching { socket.tcpNoDelay = true }
-                        out.write(b, off, splitPos)
-                        out.flush()
-                        out.write(b, off + splitPos, len - splitPos)
-                        out.flush()
-                        return
-                    }
-                }
+                // Plain HTTP streaming chunks (.ts/.m3u8) are sent intact so edge CDNs (Flussonic/Nginx) never stall
+                fragmentedFirstWrite = true
             }
             out.write(b, off, len)
         }

@@ -236,8 +236,8 @@ class MainActivity : AppCompatActivity() {
     private val tokenStreamOkHttpClient: OkHttpClient
         get() = tokenStreamOkHttpClientBacking ?: run {
             val tokenDispatcher = Dispatcher().apply {
-                maxRequests = 4
-                maxRequestsPerHost = 1
+                maxRequests = 8
+                maxRequestsPerHost = 3
             }
             streamOkHttpClient.newBuilder()
                 .dispatcher(tokenDispatcher)
@@ -6006,6 +6006,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            runCatching {
+                splashScreen.setOnExitAnimationListener { splashView ->
+                    splashView.remove()
+                }
+            }
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableTrueFullScreenImmersion()
         CoreEngines.diagAppContext = applicationContext
@@ -7487,11 +7494,13 @@ class MainActivity : AppCompatActivity() {
         val animRunnable = object : Runnable {
             override fun run() {
                 val elapsed = System.currentTimeMillis() - startMs
-                if (elapsed <= 700L) {
-                    val p = (elapsed / 700f).coerceIn(0f, 1f)
-                    splashEyeView.alpha = p; splashEyeView.eyeOpenFraction = 0.05f + 0.15f * p
+                if (elapsed <= 900L) {
+                    val rawP = (elapsed / 900f).coerceIn(0f, 1f)
+                    val smoothP = 1f - (1f - rawP) * (1f - rawP) * (1f - rawP)
+                    splashEyeView.alpha = smoothP
+                    splashEyeView.eyeOpenFraction = 0.04f + 0.18f * smoothP
                     uiHandler.postDelayed(this, 16L)
-                } else if (elapsed <= 1500L) {
+                } else if (elapsed <= 1550L) {
                     splashEyeView.alpha = 1f
                     val p = ((elapsed - 700L) / 800f).coerceIn(0f, 1f)
                     splashEyeView.eyeOpenFraction = 0.20f + 0.80f * (1f - (1f - p) * (1f - p))
@@ -8120,14 +8129,8 @@ class MainActivity : AppCompatActivity() {
         val isExplicitHls = cleanUrl.substringBefore("?").lowercase(Locale.US).endsWith(".m3u8") ||
             cleanUrl.lowercase(Locale.US).contains(".m3u8?")
         if (isExplicitHls && dsFactory != null) {
-            val hlsExtractorFactory = DefaultHlsExtractorFactory(
-                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
-                    DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS,
-                true
-            )
             val hlsFactory = HlsMediaSource.Factory(dsFactory)
-                .setExtractorFactory(hlsExtractorFactory)
-                .setAllowChunklessPreparation(true)
+                .setAllowChunklessPreparation(false)
             activeLoadErrorPolicy?.let { hlsFactory.setLoadErrorHandlingPolicy(it) }
             p.setMediaSource(hlsFactory.createMediaSource(item), true)
         } else {
@@ -8328,7 +8331,6 @@ class MainActivity : AppCompatActivity() {
             add("--skip-frames")
             add("--clock-jitter=0")
             add("--clock-synchro=0")
-            add("--http-continuous")
         }
         val vlcInstance = runCatching { LibVLC(this, options) }.getOrElse { err ->
             CoreEngines.appendDiagLog("VLC_ERR", "Ошибка инициализации LibVLC: ${err.message}")
@@ -8435,7 +8437,6 @@ class MainActivity : AppCompatActivity() {
         media.addOption(":skip-frames")
         media.addOption(":clock-jitter=0")
         media.addOption(":clock-synchro=0")
-        media.addOption(":http-continuous")
         val agent = CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
         media.addOption(":http-user-agent=$agent")
         val hdrs = CoreEngines.headersForStreamUrl(cleanUrl)
@@ -8480,10 +8481,10 @@ class MainActivity : AppCompatActivity() {
         playerView.visibility = View.VISIBLE
         // Сетка буферов под короткие окна HLS (12–15 сек) без ухода позиции в минус и перескоков
         val (minBuf, maxBuf, startBuf, rebuf) = when (bufferLevel) {
-            0 -> listOf(3000, 8000, 1000, 1500)
-            1 -> listOf(5000, 12000, 1200, 1800)
-            2 -> listOf(8000, 18000, 1500, 2200)
-            else -> listOf(12000, 25000, 1800, 2500)
+            0 -> listOf(3000, 8000, 650, 900)
+            1 -> listOf(5000, 12000, 750, 1050)
+            2 -> listOf(8000, 18000, 900, 1250)
+            else -> listOf(12000, 25000, 1100, 1500)
         }
         val targetBytes = when (bufferLevel) {
             0 -> 16 * 1024 * 1024
