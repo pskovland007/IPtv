@@ -1,15 +1,15 @@
-name: Build TiViLook APK
+name: Build TiViLook Beta APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ beta ]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: tivilook-build
+  group: tivilook-beta-build
   cancel-in-progress: true
 
 jobs:
@@ -30,48 +30,46 @@ jobs:
         with:
           gradle-version: '8.5'
 
-      - name: Bump Version Number
+      - name: Bump Beta Version Number
         run: |
           python3 -c '
           import os, re
           with open("app/build.gradle", "r") as f: g = f.read()
-          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "130"))
-          g = re.sub(r"versionCode\s+\d+", f"versionCode {17200 + run_num}", g)
-          g = re.sub(r"versionName\s+\"[^\"]+\"", f"versionName \"2.7.{run_num}\"", g)
+          run_num = int(os.environ.get("GITHUB_RUN_NUMBER", "1"))
+          g = re.sub(r"versionCode\s+\d+", f"versionCode {18000 + run_num}", g)
+          g = re.sub(r"versionName\s+\"[^\"]+\"", f"versionName \"2.8.{run_num}-beta\"", g)
           with open("app/build.gradle", "w") as f: f.write(g)
           '
 
-      - name: Lock Permanent Signing Keystore in Cache
+      - name: Restore Beta Signing Keystore from Cache
         uses: actions/cache@v4
         with:
           path: app/permanent_key.jks
-          key: mibox-iptv-immutable-signing-jks-v1
+          key: mibox-iptv-beta-signing-jks-v1
 
-      - name: Compile TiViLook APK
+      - name: Compile TiViLook Beta APK
+        env:
+          BETA_KEYSTORE_BASE64: ${{ secrets.BETA_KEYSTORE_BASE64 }}
         run: |
           mkdir -p ~/.android
-          if [ ! -f app/permanent_key.jks ]; then
+          if [ -n "$BETA_KEYSTORE_BASE64" ]; then
+            echo "$BETA_KEYSTORE_BASE64" | base64 -d > app/permanent_key.jks
+          elif [ ! -f app/permanent_key.jks ]; then
             keytool -genkeypair -v \
               -keystore app/permanent_key.jks \
               -storetype JKS \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -alias androiddebugkey \
               -storepass android -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US"
+              -dname "CN=TiViLook Beta,O=TiViLook,C=RU"
           fi
           cp app/permanent_key.jks ~/.android/debug.keystore || true
           gradle assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk TiViLook-latest.apk
+          cp app/build/outputs/apk/release/app-release.apk TiViLook-beta.apk
 
-      - name: Upload APK Artifact
+      - name: Upload Beta APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TiViLook-APK
-          path: TiViLook-latest.apk
-
-      - name: Publish APK to GitHub Releases for Auto-Update
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v2.7.${{ github.run_number }}
-          name: TiViLook v2.7.${{ github.run_number }}
-          files: TiViLook-latest.apk
+          name: TiViLook-Beta-APK
+          path: TiViLook-beta.apk
+          retention-days: 30
