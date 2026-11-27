@@ -53,11 +53,14 @@ class UpdateManager(private val context: Context) {
         fun isCancelled(): Boolean = cancelled.get()
     }
 
+    private val needLegacySslCompat: Boolean
+        get() = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
+
     private val apiClient: OkHttpClient
-        get() = NetworkHelper.getExternalClient(connectSec = 8L, readSec = 15L, trustAll = false)
+        get() = NetworkHelper.getExternalClient(connectSec = 8L, readSec = 15L, trustAll = needLegacySslCompat)
 
     private val downloadClient: OkHttpClient
-        get() = NetworkHelper.getExternalClient(connectSec = 15L, readSec = 90L, trustAll = false)
+        get() = NetworkHelper.getExternalClient(connectSec = 15L, readSec = 90L, trustAll = needLegacySslCompat)
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -424,7 +427,7 @@ class UpdateManager(private val context: Context) {
         private const val LATEST_RELEASE_URL =
             "https://api.github.com/repos/pskovland007/IPtv/releases/latest"
         private const val ALL_RELEASES_URL =
-            "https://api.github.com/repos/pskovland007/IPtv/releases?per_page=8"
+            "https://api.github.com/repos/pskovland007/IPtv/releases?per_page=15"
         private const val WEB_LATEST_RELEASE_URL =
             "https://github.com/pskovland007/IPtv/releases/latest"
         private const val WEB_EXPANDED_ASSETS_PREFIX =

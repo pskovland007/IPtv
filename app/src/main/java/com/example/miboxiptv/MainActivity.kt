@@ -81,7 +81,11 @@ import org.videolan.libvlc.MediaPlayer as VlcMediaPlayer
 import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCVideoLayout
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.hls.DefaultHlsExtractorFactory
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
@@ -554,6 +558,10 @@ class MainActivity : AppCompatActivity() {
     private var lastRenderedFramePositionMs = -1L
 
     private var currentBrowseDir: File = Environment.getExternalStorageDirectory()
+    private var fileBrowserForEpg: Boolean = false
+    private var lastVlcTimeMs: Long = -1L
+    private var vlcTimeStuckMs: Long = 0L
+    private var activeLoadErrorPolicy: LoadErrorHandlingPolicy? = null
 
     private val ruCollator: Collator = Collator.getInstance(Locale("ru", "RU")).apply {
         strength = Collator.PRIMARY
@@ -3732,33 +3740,39 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun launchSystemPlaylistPicker() {
-        val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+    private fun hasWorkingSystemDocumentPicker(): Boolean {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) return false
+        if (packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)) return false
+        val probe = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
         }
-        try {
-            systemPlaylistPickerLauncher.launch(openDoc)
-            return
-        } catch (_: Exception) {}
-        val getContent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-        }
-        try {
-            systemPlaylistPickerLauncher.launch(getContent)
-        } catch (_: Exception) {
-            Toast.makeText(this, "Системный выбор файла недоступен на этом устройстве", Toast.LENGTH_LONG).show()
+        val ri = runCatching {
+            @Suppress("DEPRECATION")
+            packageManager.resolveActivity(probe, PackageManager.MATCH_DEFAULT_ONLY)
+        }.getOrNull() ?: return false
+        val pkg = ri.activityInfo?.packageName?.lowercase(Locale.US).orEmpty()
+        if (pkg.isBlank() || pkg.contains("stub") || pkg.contains("tv.framework")) return false
+        return true
+    }
+
+    private fun openBuiltInFileExplorer(forEpg: Boolean) {
+        fileBrowserForEpg = forEpg
+        val dl = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        currentBrowseDir = if (dl != null && dl.exists()) dl else Environment.getExternalStorageDirectory()
+        ensurePublicStoragePermission {
+            navigateToMenu("FILE_BROWSER")
         }
     }
 
-    private fun launchSystemEpgPicker() {
+    private fun launchRawSystemPicker(forEpg: Boolean) {
+        val launcher = if (forEpg) systemEpgPickerLauncher else systemPlaylistPickerLauncher
         val openDoc = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
         }
         try {
-            systemEpgPickerLauncher.launch(openDoc)
+            launcher.launch(openDoc)
             return
         } catch (_: Exception) {}
         val getContent = Intent(Intent.ACTION_GET_CONTENT).apply {
@@ -3766,10 +3780,164 @@ class MainActivity : AppCompatActivity() {
             type = "*/*"
         }
         try {
-            systemEpgPickerLauncher.launch(getContent)
+            launcher.launch(getContent)
         } catch (_: Exception) {
-            Toast.makeText(this, "Системный выбор файла недоступен на этом устройстве", Toast.LENGTH_LONG).show()
+            openBuiltInFileExplorer(forEpg)
         }
+    }
+
+    private fun launchSystemPlaylistPicker() {
+        if (!hasWorkingSystemDocumentPicker()) {
+            openBuiltInFileExplorer(forEpg = false)
+            return
+        }
+        launchRawSystemPicker(forEpg = false)
+    }
+
+    private fun launchSystemEpgPicker() {
+        if (!hasWorkingSystemDocumentPicker()) {
+            openBuiltInFileExplorer(forEpg = true)
+            return
+        }
+        launchRawSystemPicker(forEpg = true)
+    }
+
+    private fun addLocalPlaylistFile(file: File) {
+        if (!file.exists() || !file.isFile || !file.canRead()) {
+            Toast.makeText(this, "Не удалось прочитать файл: ${file.name}", Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            val displayName = file.name
+            val safeName = displayName.replace(Regex("[^a-zA-Zа-яА-Я0-9._ -]"), "_").ifBlank { "playlist.m3u8" }
+            val destDir = File(filesDir, "user_playlists").apply { mkdirs() }
+            val destFile = File(destDir, "${System.currentTimeMillis()}_$safeName")
+            file.inputStream().use { src ->
+                FileOutputStream(destFile).use { dst -> src.copyTo(dst) }
+            }
+            if (!destFile.exists() || destFile.length() == 0L) {
+                runCatching { destFile.delete() }
+                Toast.makeText(this, "Выбранный файл пуст", Toast.LENGTH_LONG).show()
+                return
+            }
+            playlists.add(PlaylistEntry(displayName, destFile.absolutePath, true))
+            activePlaylistIndex = playlists.size - 1
+            saveState()
+            closeAllMenus()
+            Toast.makeText(this, "Плейлист добавлен: $displayName", Toast.LENGTH_SHORT).show()
+            loadActivePlaylist(autoPlayLast = false)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка импорта файла: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun addLocalEpgFile(file: File) {
+        if (!file.exists() || !file.isFile || !file.canRead()) {
+            Toast.makeText(this, "Не удалось прочитать файл EPG: ${file.name}", Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            val displayName = file.name
+            val safeName = displayName.replace(Regex("[^a-zA-Zа-яА-Я0-9._ -]"), "_").ifBlank { "epg.xml" }
+            val destDir = File(filesDir, "user_epg").apply { mkdirs() }
+            destDir.listFiles()?.forEach { runCatching { it.delete() } }
+            val destFile = File(destDir, safeName)
+            file.inputStream().use { src ->
+                FileOutputStream(destFile).use { dst -> src.copyTo(dst) }
+            }
+            if (!destFile.exists() || destFile.length() == 0L) {
+                runCatching { destFile.delete() }
+                Toast.makeText(this, "Выбранный файл EPG пуст", Toast.LENGTH_LONG).show()
+                return
+            }
+            localEpgFilePath = destFile.absolutePath
+            saveState()
+            closeAllMenus()
+            Toast.makeText(this, "Загрузка ТВ программы: $displayName", Toast.LENGTH_SHORT).show()
+            loadEpgOncePerDayInBackground(forceRefresh = true)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка импорта EPG: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openFolderExplorerModal(dir: File) {
+        currentBrowseDir = dir
+        val titlePrefix = if (fileBrowserForEpg) "EPG: " else "Проводник: "
+        setSubModalHeaderTitle(titlePrefix + dir.name.ifBlank { dir.absolutePath }, "ПЛ")
+        subModalInputContainer.visibility = View.GONE
+        subModalCustomBody.visibility = View.GONE
+        subModalThemesGrid.visibility = View.GONE
+        subModalBottomButtons.visibility = View.GONE
+        subModalBottomButtons.removeAllViews()
+        subModalList.visibility = View.VISIBLE
+        subModalTopButtons.visibility = View.VISIBLE
+        subModalTopButtons.removeAllViews()
+
+        val btnDl = makeUnifiedActionButton("📥 Download") {
+            val dl = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            openFolderExplorerModal(if (dl != null && dl.exists()) dl else Environment.getExternalStorageDirectory())
+        }
+        val btnMem = makeUnifiedActionButton("🏠 Память") {
+            openFolderExplorerModal(Environment.getExternalStorageDirectory())
+        }
+        val btnUsb = makeUnifiedActionButton("🔌 USB") {
+            openFolderExplorerModal(File("/storage"))
+        }
+        val btnManual = makeUnifiedActionButton("⌨ Путь") {
+            val defPath = if (fileBrowserForEpg) "/sdcard/Download/epg.xml.gz" else "/sdcard/Download/playlist.m3u8"
+            openInputSubModal(if (fileBrowserForEpg) "Путь к файлу EPG" else "Путь к файлу .m3u / .m3u8", defPath) { path ->
+                val f = File(path)
+                if (fileBrowserForEpg) addLocalEpgFile(f) else addLocalPlaylistFile(f)
+            }
+        }
+        subModalTopButtons.addView(btnDl)
+        subModalTopButtons.addView(btnMem)
+        subModalTopButtons.addView(btnUsb)
+        subModalTopButtons.addView(btnManual)
+        if (hasWorkingSystemDocumentPicker()) {
+            subModalTopButtons.addView(makeUnifiedActionButton("📂 Системный") {
+                launchRawSystemPicker(fileBrowserForEpg)
+            })
+        }
+
+        val entries = mutableListOf<Pair<String, File?>>()
+        val parent = dir.parentFile
+        if (parent != null && parent.canRead()) {
+            entries.add(Pair("[>]   .. (На уровень вверх)", parent))
+        }
+        val rawChildren = runCatching { dir.listFiles()?.toList() ?: emptyList() }.getOrDefault(emptyList())
+        for (d in rawChildren.filter { it.isDirectory && !it.name.startsWith(".") }.sortedBy { it.name.lowercase(Locale.getDefault()) }) {
+            entries.add(Pair("[>]   📁 ${d.name}", d))
+        }
+        val matchedFiles = rawChildren.filter { f ->
+            if (!f.isFile) return@filter false
+            val low = f.name.lowercase(Locale.US)
+            if (fileBrowserForEpg) {
+                low.endsWith(".xml") || low.endsWith(".gz") || low.endsWith(".xmltv")
+            } else {
+                low.endsWith(".m3u") || low.endsWith(".m3u8") || low.endsWith(".txt")
+            }
+        }.sortedBy { it.name.lowercase(Locale.getDefault()) }
+
+        for (f in matchedFiles) {
+            val kb = (f.length() / 1024L).coerceAtLeast(1L)
+            entries.add(Pair("[+]   ${f.name}   •   $kb КБ", f))
+        }
+        if (entries.isEmpty()) {
+            entries.add(Pair("[-]   Папка пуста или нет доступа — выдайте разрешение «Память»", null))
+        }
+
+        updateSubModalListItems(entries.map { it.first }, preservePositionIndex = 0)
+        subModalList.setOnItemClickListener { _, _, idx, _ ->
+            val target = entries.getOrNull(idx)?.second ?: return@setOnItemClickListener
+            if (target.isDirectory) {
+                openFolderExplorerModal(target)
+            } else if (target.isFile) {
+                if (fileBrowserForEpg) addLocalEpgFile(target) else addLocalPlaylistFile(target)
+            }
+        }
+        animateMenuAppear(subModalOverlay)
+        subModalList.requestFocus()
     }
 
     private fun resolveUriDisplayName(uri: Uri): String {
@@ -5505,8 +5673,7 @@ class MainActivity : AppCompatActivity() {
                 player?.let { p ->
                     p.stop()
                     p.clearMediaItems()
-                    applyHeadersToDataSourceForUrl(archiveUrl)
-                    p.setMediaItem(MediaItem.fromUri(archiveUrl), true)
+                    setMediaUrlOnExoPlayer(p, archiveUrl, isLive = false)
                     p.prepare()
                     p.play()
                 }
@@ -5843,6 +6010,9 @@ class MainActivity : AppCompatActivity() {
         enableTrueFullScreenImmersion()
         CoreEngines.diagAppContext = applicationContext
         CrashGuard.install(applicationContext)
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            CoreEngines.installTrustAllSsl()
+        }
         CoreEngines.appendDiagLog("APP_START", "Запуск TiViLook Beta v2.8 (SDK=${Build.VERSION.SDK_INT}, Device=${Build.MODEL})")
         loadSavedState()
         rebuildNetworkClients()
@@ -7505,6 +7675,7 @@ class MainActivity : AppCompatActivity() {
             "TOP_MANAGER" -> openTopManagerSubModal(inPlace = false)
             "MORE_SETTINGS" -> openMoreSettingsSubModal(inPlace = false)
             "PLAYLISTS" -> openPlaylistsSubModal()
+            "FILE_BROWSER" -> openFolderExplorerModal(currentBrowseDir)
             "EXPORT_PLAYLIST" -> openExportPlaylistSubModal()
             "DELETE_PLAYLIST" -> openDeletePlaylistSubModal()
             "CHANNEL_EDITOR_GROUPS" -> openChannelEditorGroupsModal(inPlace = false)
@@ -7570,8 +7741,7 @@ class MainActivity : AppCompatActivity() {
                 runCatching {
                     p.stop()
                     p.clearMediaItems()
-                    applyHeadersToDataSourceForUrl(archUrl)
-                    p.setMediaItem(MediaItem.fromUri(archUrl), true)
+                    setMediaUrlOnExoPlayer(p, archUrl, isLive = false)
                     p.prepare()
                     p.play()
                 }
@@ -7765,10 +7935,18 @@ class MainActivity : AppCompatActivity() {
                     }
                 } else if (isVlcEngineActive() && vlcPlayer != null && currentChannel != null && !streamRetriesExhausted) {
                     val sinceSwitchMs = System.currentTimeMillis() - lastChannelSwitchMs
-                    if (sinceSwitchMs >= 10_000L && (!vlcIsPlayingNow || vlcIsBufferingNow)) {
-                        lowSignalStuckMs += 1500L
-                        if (lowSignalStuckMs >= 13500L) {
-                            lowSignalStuckSeconds = 0
+                    val curVlcTime = runCatching { vlcPlayer?.time ?: -1L }.getOrDefault(-1L)
+                    val prevVlcTime = lastVlcTimeMs
+                    lastVlcTimeMs = curVlcTime
+                    val isVlcTimeFrozen = (curVlcTime >= 0L && prevVlcTime >= 0L && curVlcTime == prevVlcTime)
+                    if (sinceSwitchMs >= 9_000L && (!vlcIsPlayingNow || vlcIsBufferingNow || isVlcTimeFrozen)) {
+                        vlcTimeStuckMs += 1500L
+                        if (vlcTimeStuckMs >= 9_000L) {
+                            CoreEngines.appendDiagLog(
+                                "VLC_WATCHDOG_STALL",
+                                "ch='${currentChannel?.name}' playing=$vlcIsPlayingNow buf=$vlcIsBufferingNow time=$curVlcTime drops=$consecutiveDropFailures"
+                            )
+                            vlcTimeStuckMs = 0L
                             consecutiveDropFailures++
                             if (consecutiveDropFailures > 4) {
                                 streamRetriesExhausted = true
@@ -7780,7 +7958,11 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     } else {
-                        lowSignalStuckSeconds = 0
+                        vlcTimeStuckMs = 0L
+                        if (vlcIsPlayingNow && !vlcIsBufferingNow && curVlcTime > 0L && curVlcTime != prevVlcTime) {
+                            consecutiveDropFailures = 0
+                            streamRetriesExhausted = false
+                        }
                     }
                 }
 
@@ -7909,8 +8091,7 @@ class MainActivity : AppCompatActivity() {
             }
             p.stop()
             p.clearMediaItems()
-            applyHeadersToDataSourceForUrl(targetUrl)
-            p.setMediaItem(createLiveMediaItem(targetUrl), true)
+            setMediaUrlOnExoPlayer(p, targetUrl, isLive = true)
             p.prepare()
             p.play()
         } catch (_: Exception) {}
@@ -7918,18 +8099,40 @@ class MainActivity : AppCompatActivity() {
 
     internal fun createLiveMediaItem(url: String): MediaItem {
         val cleanUrl = url.substringBefore("#")
-        // Не навязываем жёсткий сдвиг live-окна: ExoPlayer сам берёт безопасную точку
-        // из HLS-манифеста (актуально для коротких 12–15 сек окон музыкальных каналов)
-        // и плавно держит синхронизацию в диапазоне 0.98–1.02x без скачков.
+        // Фиксируем ровную скорость 1.0x без плавающей подстройки, чтобы музыкальные каналы
+        // с коротким окном HLS и вставками клипов не перескакивали и не дёргали звук.
         return MediaItem.Builder()
             .setUri(cleanUrl)
             .setLiveConfiguration(
                 MediaItem.LiveConfiguration.Builder()
-                    .setMinPlaybackSpeed(0.98f)
-                    .setMaxPlaybackSpeed(1.02f)
+                    .setMinPlaybackSpeed(1.0f)
+                    .setMaxPlaybackSpeed(1.0f)
                     .build()
             )
             .build()
+    }
+
+    internal fun setMediaUrlOnExoPlayer(p: ExoPlayer, rawUrl: String, isLive: Boolean = true) {
+        val cleanUrl = rawUrl.substringBefore("#").trim()
+        applyHeadersToDataSourceForUrl(cleanUrl)
+        val item = if (isLive) createLiveMediaItem(cleanUrl) else MediaItem.fromUri(cleanUrl)
+        val dsFactory = httpDataSourceFactory
+        val isExplicitHls = cleanUrl.substringBefore("?").lowercase(Locale.US).endsWith(".m3u8") ||
+            cleanUrl.lowercase(Locale.US).contains(".m3u8?")
+        if (isExplicitHls && dsFactory != null) {
+            val hlsExtractorFactory = DefaultHlsExtractorFactory(
+                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
+                    DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS,
+                true
+            )
+            val hlsFactory = HlsMediaSource.Factory(dsFactory)
+                .setExtractorFactory(hlsExtractorFactory)
+                .setAllowChunklessPreparation(true)
+            activeLoadErrorPolicy?.let { hlsFactory.setLoadErrorHandlingPolicy(it) }
+            p.setMediaSource(hlsFactory.createMediaSource(item), true)
+        } else {
+            p.setMediaItem(item, true)
+        }
     }
 
     internal fun updateSignalIndicator(): Int {
@@ -8083,10 +8286,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun vlcNetworkCachingMs(): Int {
         return when (bufferLevel) {
-            0 -> 2500
-            1 -> 4500
-            2 -> 7000
-            else -> 10000
+            0 -> 3500
+            1 -> 5500
+            2 -> 8000
+            else -> 12000
         }
     }
 
@@ -8123,6 +8326,9 @@ class MainActivity : AppCompatActivity() {
             add("--audio-time-stretch")
             add("--drop-late-frames")
             add("--skip-frames")
+            add("--clock-jitter=0")
+            add("--clock-synchro=0")
+            add("--http-continuous")
         }
         val vlcInstance = runCatching { LibVLC(this, options) }.getOrElse { err ->
             CoreEngines.appendDiagLog("VLC_ERR", "Ошибка инициализации LibVLC: ${err.message}")
@@ -8215,6 +8421,8 @@ class MainActivity : AppCompatActivity() {
         vlcIsPlayingNow = false
         vlcIsBufferingNow = true
         vlcBufferPercent = 0
+        lastVlcTimeMs = -1L
+        vlcTimeStuckMs = 0L
         runCatching { mp.stop() }
         val cacheMs = vlcNetworkCachingMs()
         val media = Media(lib, Uri.parse(cleanUrl))
@@ -8225,6 +8433,9 @@ class MainActivity : AppCompatActivity() {
         media.addOption(":http-reconnect")
         media.addOption(":drop-late-frames")
         media.addOption(":skip-frames")
+        media.addOption(":clock-jitter=0")
+        media.addOption(":clock-synchro=0")
+        media.addOption(":http-continuous")
         val agent = CoreEngines.russianSmartTvAgents[userAgentIndex % CoreEngines.russianSmartTvAgents.size]
         media.addOption(":http-user-agent=$agent")
         val hdrs = CoreEngines.headersForStreamUrl(cleanUrl)
@@ -8280,11 +8491,11 @@ class MainActivity : AppCompatActivity() {
             2 -> 32 * 1024 * 1024
             else -> 44 * 1024 * 1024
         }
-        val backBufferMs = if (bufferLevel == 0) 45_000 else 60_000
+        val backBufferMs = 15_000
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(minBuf, maxBuf, startBuf, rebuf)
             .setTargetBufferBytes(targetBytes)
-            .setPrioritizeTimeOverSizeThresholds(false)
+            .setPrioritizeTimeOverSizeThresholds(true)
             .setBackBuffer(backBufferMs, false)
             .build()
 
@@ -8334,7 +8545,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+        activeLoadErrorPolicy = smartRetryPolicy
+        val extractorsFactory = DefaultExtractorsFactory()
+            .setTsExtractorFlags(
+                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
+                    DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+            )
+        val mediaSourceFactory = DefaultMediaSourceFactory(this, extractorsFactory)
             .setDataSourceFactory(dsFactory)
             .setLoadErrorHandlingPolicy(smartRetryPolicy)
 
@@ -8537,8 +8754,7 @@ class MainActivity : AppCompatActivity() {
         applyScreenAspectMode()
 
         if (currentUrl != null) {
-            applyHeadersToDataSourceForUrl(currentUrl)
-            newPlayer.setMediaItem(createLiveMediaItem(currentUrl))
+            setMediaUrlOnExoPlayer(newPlayer, currentUrl, isLive = true)
             newPlayer.prepare()
             newPlayer.play()
         }
@@ -9601,8 +9817,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     p.stop()
                     p.clearMediaItems()
-                    applyHeadersToDataSourceForUrl(target.url)
-                    p.setMediaItem(createLiveMediaItem(target.url), true)
+                    setMediaUrlOnExoPlayer(p, target.url, isLive = true)
                     p.prepare()
                     p.play()
                 }

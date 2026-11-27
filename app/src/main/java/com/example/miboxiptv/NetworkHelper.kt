@@ -61,14 +61,17 @@ object NetworkHelper {
     }
 
     private val dohHttpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
+        val builder = OkHttpClient.Builder()
             .proxy(Proxy.NO_PROXY)
             .dns(Dns.SYSTEM)
             .connectTimeout(3000, TimeUnit.MILLISECONDS)
             .readTimeout(3000, TimeUnit.MILLISECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
-            .build()
+        if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.P) {
+            applyTrustAllSsl(builder)
+        }
+        builder.build()
     }
 
     fun updateActiveConfig(useDoh: Boolean, useDpiBypass: Boolean, proxyUrl: String) {
