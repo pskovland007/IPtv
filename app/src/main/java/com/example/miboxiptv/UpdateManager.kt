@@ -94,9 +94,12 @@ class UpdateManager(private val context: Context) {
                 val arr = JSONArray(raw)
                 for (i in 0 until arr.length()) {
                     val obj = arr.optJSONObject(i) ?: continue
-                    if (obj.optBoolean("draft", false)) continue
-                    val parsed = parseReleaseJson(obj)
-                    if (parsed != null) return@use parsed
+                    if (obj.optBoolean("draft", false) || obj.optBoolean("prerelease", false)) continue
+                    val parsed = parseReleaseJson(obj) ?: continue
+                    if (parsed.tagName.contains("beta", ignoreCase = true) ||
+                        parsed.apkName.contains("beta", ignoreCase = true)
+                    ) continue
+                    return@use parsed
                 }
                 null
             }
