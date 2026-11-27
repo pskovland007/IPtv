@@ -520,7 +520,26 @@ class MainActivity : AppCompatActivity() {
         else -> 1.28f
     }
 
-    private fun exactModalRowHeightPx(): Int = (56f * uiScaleFactor()).toInt()
+    private fun dpPx(dp: Float): Int = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics
+    ).toInt().coerceAtLeast(1)
+
+    private fun exactModalRowHeightPx(): Int = dpPx(34f * uiScaleFactor()).coerceAtLeast((54f * uiScaleFactor()).toInt())
+
+    private fun sidePanelPadPx(): Int = dpPx(10f).coerceAtLeast(18)
+
+    private fun applySidePanelBackgroundAndPadding() {
+        sidePanel.setBackgroundDrawable(makeThemedPanelBg())
+        val p = sidePanelPadPx()
+        sidePanel.setPadding(p, p, p, p)
+    }
+
+    private fun applySubModalBackgroundAndPadding() {
+        subModalOverlay.setBackgroundDrawable(makeThemedPanelBg())
+        val ph = dpPx(18f).coerceAtLeast(24)
+        val pv = dpPx(14f).coerceAtLeast(20)
+        subModalOverlay.setPadding(ph, pv, ph, pv)
+    }
 
     private fun targetPanelAlphaInt(): Int = when (uiAlphaStep) {
         0 -> 244
@@ -546,16 +565,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshPanelBackgroundsOnly() {
         if (sidePanel.visibility == View.VISIBLE) {
-            sidePanel.setBackgroundDrawable(makeThemedPanelBg())
-            leftIconRail.setBackgroundDrawable(makeThemedSubBg())
-            categoryListView.setBackgroundDrawable(makeThemedSubBg())
-            channelListView.setBackgroundDrawable(makeThemedSubBg())
+            applySidePanelBackgroundAndPadding()
+            leftIconRail.setBackgroundDrawable(makeThemedSideCardBg())
+            categoryListView.setBackgroundDrawable(makeThemedSideCardBg())
+            channelListView.setBackgroundDrawable(makeThemedSideCardBg())
         }
         if (infoPanel.visibility == View.VISIBLE) infoPanel.setBackgroundDrawable(makeThemedPanelBg())
         if (centerOsdPanel.visibility == View.VISIBLE) centerOsdPanel.setBackgroundDrawable(makeThemedPanelBg())
         if (settingsTileOverlay.visibility == View.VISIBLE) settingsTileOverlay.setBackgroundDrawable(makeThemedPanelBg())
         if (subModalOverlay.visibility == View.VISIBLE) {
-            subModalOverlay.setBackgroundDrawable(makeThemedPanelBg())
+            applySubModalBackgroundAndPadding()
             subModalList.setBackgroundDrawable(makeThemedSubBg())
             if (::subModalCustomBody.isInitialized && subModalCustomBody.visibility == View.VISIBLE) {
                 subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
@@ -574,7 +593,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun sidePanelWidthPx(): Int {
         val dm = resources.displayMetrics
-        return 720.coerceAtMost((dm.widthPixels * 0.48f).toInt()).coerceAtLeast(420)
+        val fraction = when (uiScaleStep) {
+            0 -> 0.50f
+            1 -> 0.56f
+            else -> 0.62f
+        }
+        val minW = dpPx(350f).coerceAtMost((dm.widthPixels * 0.66f).toInt())
+        val maxW = (dm.widthPixels * 0.66f).toInt().coerceAtLeast(minW)
+        return (dm.widthPixels * fraction).toInt().coerceIn(minW, maxW)
     }
 
     private val defaultTenCategories = listOf(
@@ -803,6 +829,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun makeThemedSideCardBg(): GradientDrawable {
+        val t = currentTheme()
+        val a = (uiPanelAlphaInt() - 8).coerceIn(145, 248)
+        val subColorWithAlpha = Color.argb(a, Color.red(t.cardBgColor), Color.green(t.cardBgColor), Color.blue(t.cardBgColor))
+        return GradientDrawable().apply {
+            setColor(subColorWithAlpha)
+            cornerRadius = (t.cornerRadiusDp - 6f).coerceAtLeast(12f)
+            setStroke(dpPx(1f), themeCardBorderColor())
+        }
+    }
+
     private fun animateMenuAppear(view: View, fromX: Float = 0f, fromY: Float = 24f) {
         view.animate().cancel()
         view.visibility = View.VISIBLE
@@ -940,32 +977,138 @@ class MainActivity : AppCompatActivity() {
         return lum < 145
     }
 
-    private fun computeCenteredModalWidth(fraction: Float, minPx: Int, maxPx: Int): Int {
-        val w = resources.displayMetrics.widthPixels
-        val hardMax = (w * 0.92f).toInt().coerceAtLeast(320)
-        return (w * fraction).toInt().coerceIn(minPx.coerceAtMost(hardMax), maxPx.coerceAtMost(hardMax))
+    private fun themeInnerCornerRadiusPx(scale: Float = uiScaleFactor()): Float {
+        val baseDp = when (currentTheme().id) {
+            3 -> 7f   // Монохром — строгие углы
+            2 -> 9f   // Амолед Блэк — чёткие углы
+            1 -> 11f  // Неон
+            4 -> 12f  // Ретро
+            else -> 14f // Материал Дизайн / Карусель
+        }
+        return dpPx(baseDp * scale).toFloat()
     }
 
-    private fun computeCenteredModalHeight(fraction: Float, minPx: Int, maxPx: Int): Int {
+    private fun themeFocusStrokeColor(): Int {
+        return when (currentTheme().id) {
+            2 -> Color.parseColor("#94A3B8") // Амолед Блэк (акцент белый -> контрастная серебристая рамка)
+            3 -> Color.parseColor("#18181B") // Монохром (светлый фон -> графитовая рамка)
+            1 -> Color.parseColor("#FF7597") // Неон (фирменный розовый контур)
+            4 -> Color.parseColor("#FFF5E6CC") // Ретро (тёплый кремовый)
+            else -> Color.WHITE
+        }
+    }
+
+    private fun themeCardBorderColor(): Int {
+        val t = currentTheme()
+        val dark = isThemeDarkSurface(t.panelBgColor)
+        return when (t.id) {
+            1 -> Color.argb(132, 255, 117, 151) // Неон — розовый вторичный контур
+            4 -> Color.argb(138, 39, 122, 104)  // Ретро — винтажный изумрудный контур
+            2 -> Color.argb(95, 255, 255, 255)  // Амолед — чёткая тонкая линия
+            3 -> Color.argb(95, 82, 82, 91)     // Монохром — графитовый контур
+            else -> Color.argb(if (dark) 62 else 52, Color.red(t.strokeColor), Color.green(t.strokeColor), Color.blue(t.strokeColor))
+        }
+    }
+
+    private fun themeOnPillBgColor(): Int {
+        return when (currentTheme().id) {
+            1 -> Color.parseColor("#00F5A0") // Неон — яркий неоновый мятный
+            2 -> Color.WHITE                 // Амолед — чистый монохромный белый
+            3 -> Color.parseColor("#27272A") // Монохром — строгий графит
+            4 -> Color.parseColor("#2E8B6E") // Ретро — винтажный изумруд
+            else -> Color.parseColor("#22C55E")
+        }
+    }
+
+    private fun themeOnPillTextColor(): Int {
+        return when (currentTheme().id) {
+            1 -> Color.parseColor("#041F17")
+            2 -> Color.BLACK
+            3 -> Color.WHITE
+            4 -> Color.parseColor("#FFF8EB")
+            else -> Color.parseColor("#052E16")
+        }
+    }
+
+    private fun computeCenteredModalWidth(baseFraction: Float): Int {
+        val w = resources.displayMetrics.widthPixels
+        val scaleBoost = when (uiScaleStep) {
+            0 -> 0.0f
+            1 -> 0.08f
+            else -> 0.15f
+        }
+        val targetFraction = (baseFraction + scaleBoost).coerceIn(0.68f, 0.94f)
+        val minW = dpPx(500f * uiScaleFactor()).coerceAtMost((w * 0.94f).toInt())
+        val maxW = (w * 0.94f).toInt().coerceAtLeast(minW)
+        return (w * targetFraction).toInt().coerceIn(minW, maxW)
+    }
+
+    private fun computeCenteredModalHeight(baseFraction: Float): Int {
         val h = resources.displayMetrics.heightPixels
-        val hardMax = (h * 0.84f).toInt().coerceAtLeast(300)
-        return (h * fraction).toInt().coerceIn(minPx.coerceAtMost(hardMax), maxPx.coerceAtMost(hardMax))
+        val scaleBoost = when (uiScaleStep) {
+            0 -> 0.0f
+            1 -> 0.08f
+            else -> 0.14f
+        }
+        val targetFraction = (baseFraction + scaleBoost).coerceIn(0.56f, 0.92f)
+        val minH = dpPx(280f * uiScaleFactor()).coerceAtMost((h * 0.92f).toInt())
+        val maxH = (h * 0.92f).toInt().coerceAtLeast(minH)
+        return (h * targetFraction).toInt().coerceIn(minH, maxH)
+    }
+
+    private fun applyCenteredModalDimensions(menuId: String) {
+        val isWrapHeight = menuId in listOf(
+            "EPG", "ADD_URL", "RENAME_PLAYLIST", "UPDATE_PROMPT"
+        )
+        val isScrollCardModal = menuId in listOf("BUFFER", "DECODER", "AUDIO")
+        val modalWidthPx = when (menuId) {
+            "PLAYLISTS", "FULL_EPG", "MORE_SETTINGS", "THEMES" -> computeCenteredModalWidth(0.79f)
+            "DIAG_LOG_VIEW", "ANALYZER_GROUPS", "ANALYZER_GROUP_VIEW", "CHANNEL_EDITOR_GROUPS", "CHANNEL_EDITOR_ITEMS" -> computeCenteredModalWidth(0.78f)
+            "BRIGHTNESS_MENU", "CHANNEL_ACTIONS", "MOVE_CHANNEL_CATEGORY" -> computeCenteredModalWidth(0.68f)
+            else -> computeCenteredModalWidth(0.74f)
+        }
+        val modalHeightPx = when {
+            isWrapHeight -> FrameLayout.LayoutParams.WRAP_CONTENT
+            isScrollCardModal -> computeCenteredModalHeight(if (menuId == "AUDIO") 0.74f else 0.68f)
+            menuId == "BRIGHTNESS_MENU" || menuId == "CHANNEL_ACTIONS" -> computeCenteredModalHeight(0.58f)
+            menuId == "POWER_AND_SLEEP_MENU" || menuId == "TOP_MANAGER" -> computeCenteredModalHeight(0.70f)
+            else -> computeCenteredModalHeight(0.78f)
+        }
+        val mH = dpPx(12f)
+        val mV = dpPx(12f)
+        subModalOverlay.layoutParams = FrameLayout.LayoutParams(
+            modalWidthPx,
+            modalHeightPx,
+            Gravity.CENTER
+        ).apply {
+            setMargins(mH, mV, mH, mV)
+        }
     }
 
     private fun styleModalMonogramBadge(badge: TextView) {
         val t = currentTheme()
         val scale = uiScaleFactor()
-        val boxPx = (36 * scale).toInt().coerceIn(30, 48)
+        val minW = dpPx(38f * scale)
+        val hPx = dpPx(30f * scale)
+        val padH = dpPx(8f * scale)
         badge.setTextColor(t.textOnAccent)
         badge.typeface = t.boldFont
-        badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f * scale)
+        badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.8f * scale)
         badge.gravity = Gravity.CENTER
+        badge.isSingleLine = true
+        badge.maxLines = 1
+        badge.includeFontPadding = false
+        badge.minWidth = minW
+        badge.setPadding(padH, 0, padH, 0)
         badge.setBackgroundDrawable(GradientDrawable().apply {
             setColor(t.accentColor)
-            cornerRadius = 10f * scale
+            cornerRadius = (themeInnerCornerRadiusPx(scale) * 0.65f).coerceAtLeast(dpPx(5f).toFloat())
+            if (t.id == 1 || t.id == 4) {
+                setStroke(dpPx(1f), themeCardBorderColor())
+            }
         })
-        badge.layoutParams = LinearLayout.LayoutParams(boxPx, boxPx).apply {
-            rightMargin = (12 * scale).toInt().coerceAtLeast(8)
+        badge.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, hPx).apply {
+            rightMargin = dpPx(10f * scale)
         }
     }
 
@@ -1012,9 +1155,9 @@ class MainActivity : AppCompatActivity() {
                 else -> if (dark) Color.argb(82, 255, 255, 255) else Color.argb(36, 0, 0, 0)
             }
             val strokeCol = when {
-                focused -> Color.WHITE
+                focused -> themeFocusStrokeColor()
                 isDanger && isEnabledState -> Color.argb(130, 248, 113, 113)
-                else -> Color.argb(if (dark) 56 else 48, Color.red(curT.strokeColor), Color.green(curT.strokeColor), Color.blue(curT.strokeColor))
+                else -> themeCardBorderColor()
             }
             val txtCol = when {
                 !isEnabledState -> Color.argb(105, Color.red(curT.textPrimaryColor), Color.green(curT.textPrimaryColor), Color.blue(curT.textPrimaryColor))
@@ -1025,8 +1168,8 @@ class MainActivity : AppCompatActivity() {
             }
             tv.setBackgroundDrawable(GradientDrawable().apply {
                 setColor(bg)
-                cornerRadius = 14f * scale
-                setStroke(if (focused) 2 else 1, strokeCol)
+                cornerRadius = themeInnerCornerRadiusPx(scale)
+                setStroke(if (focused) dpPx(2f) else dpPx(1f), strokeCol)
             })
             tv.setTextColor(txtCol)
         }
@@ -1040,16 +1183,19 @@ class MainActivity : AppCompatActivity() {
             isFocusableInTouchMode = false
             isClickable = isEnabledState
             isEnabled = isEnabledState
-            val padH = (16 * scale).toInt().coerceAtLeast(12)
-            val padV = (10 * scale).toInt().coerceAtLeast(8)
+            val padH = dpPx(12f * scale)
+            val padV = dpPx(7f * scale)
             setPadding(padH, padV, padH, padV)
             layoutParams = if (fillWidth) {
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(0, (4 * scale).toInt(), 0, (4 * scale).toInt())
+                    val mv = dpPx(3f * scale)
+                    setMargins(0, mv, 0, mv)
                 }
             } else {
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins((5 * scale).toInt(), (2 * scale).toInt(), (5 * scale).toInt(), (2 * scale).toInt())
+                    val mh = dpPx(4f * scale)
+                    val mv = dpPx(2f * scale)
+                    setMargins(mh, mv, mh, mv)
                 }
             }
             applyBtnStyle(this, false)
@@ -1072,13 +1218,13 @@ class MainActivity : AppCompatActivity() {
         val scale = uiScaleFactor()
         val dark = isThemeDarkSurface(t.panelBgColor)
         val bgCol = when (pillKind) {
-            1 -> Color.parseColor("#22C55E")
+            1 -> themeOnPillBgColor()
             2 -> if (dark) Color.argb(72, 148, 163, 184) else Color.argb(65, 100, 116, 139)
             3 -> t.accentColor
             else -> if (dark) Color.argb(76, 255, 255, 255) else Color.argb(38, 0, 0, 0)
         }
         val txtCol = when (pillKind) {
-            1 -> Color.parseColor("#052E16")
+            1 -> themeOnPillTextColor()
             2 -> if (dark) Color.parseColor("#E2E8F0") else Color.parseColor("#334155")
             3 -> t.textOnAccent
             else -> t.textPrimaryColor
@@ -1087,15 +1233,16 @@ class MainActivity : AppCompatActivity() {
             text = textLabel
             isSingleLine = true; maxLines = 1
             gravity = Gravity.CENTER
+            includeFontPadding = false
             typeface = t.boldFont
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.2f * scale)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f * scale)
             setTextColor(txtCol)
-            val ph = (12 * scale).toInt().coerceAtLeast(9)
-            val pv = (4 * scale).toInt().coerceAtLeast(3)
+            val ph = dpPx(10f * scale)
+            val pv = dpPx(4f * scale)
             setPadding(ph, pv, ph, pv)
             setBackgroundDrawable(GradientDrawable().apply {
                 setColor(bgCol)
-                cornerRadius = 999f
+                cornerRadius = if (t.id == 3) dpPx(6f).toFloat() else 999f
             })
         }
     }
@@ -1131,13 +1278,14 @@ class MainActivity : AppCompatActivity() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f * scale)
             gravity = Gravity.CENTER
             visibility = if (isSelected) View.VISIBLE else View.INVISIBLE
-            val sz = (20 * scale).toInt().coerceIn(18, 26)
-            layoutParams = LinearLayout.LayoutParams(sz, sz).apply { bottomMargin = (4 * scale).toInt() }
+            includeFontPadding = false
+            val sz = dpPx(23f * scale)
+            layoutParams = LinearLayout.LayoutParams(sz, sz).apply { bottomMargin = dpPx(4f * scale) }
             setBackgroundDrawable(GradientDrawable().apply {
-                setColor(Color.parseColor("#22C55E"))
-                cornerRadius = 999f
+                setColor(themeOnPillBgColor())
+                cornerRadius = if (t.id == 3) dpPx(5f).toFloat() else 999f
             })
-            setTextColor(Color.WHITE)
+            setTextColor(themeOnPillTextColor())
         }
 
         fun applyStyle(box: LinearLayout, focused: Boolean) {
@@ -1148,14 +1296,14 @@ class MainActivity : AppCompatActivity() {
                 else -> if (dark) Color.argb(68, 0, 0, 0) else Color.argb(26, 0, 0, 0)
             }
             val strokeCol = when {
-                focused -> Color.WHITE
+                focused -> themeFocusStrokeColor()
                 isSelected -> curT.accentColor
-                else -> Color.argb(if (dark) 44 else 48, 255, 255, 255)
+                else -> themeCardBorderColor()
             }
             box.setBackgroundDrawable(GradientDrawable().apply {
                 setColor(bgCol)
-                cornerRadius = 16f * scale
-                setStroke(if (focused) 3 else if (isSelected) 2 else 1, strokeCol)
+                cornerRadius = themeInnerCornerRadiusPx(scale)
+                setStroke(if (focused) dpPx(2f) else dpPx(1f), strokeCol)
             })
             val mainTxt = if (focused) curT.textOnAccent else curT.textPrimaryColor
             titleTv.setTextColor(mainTxt)
@@ -1168,11 +1316,11 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-            val pv = (12 * scale).toInt().coerceAtLeast(10)
-            val ph = (8 * scale).toInt().coerceAtLeast(6)
+            val pv = dpPx(10f * scale)
+            val ph = dpPx(8f * scale)
             setPadding(ph, pv, ph, pv)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                val m = (5 * scale).toInt().coerceAtLeast(4)
+                val m = dpPx(4f * scale)
                 setMargins(m, m, m, m)
             }
             addView(checkBadge)
@@ -1220,31 +1368,33 @@ class MainActivity : AppCompatActivity() {
             if (focused) {
                 row.setBackgroundDrawable(GradientDrawable().apply {
                     setColor(curT.accentColor)
-                    cornerRadius = 14f * scale
-                    setStroke(2, Color.WHITE)
+                    cornerRadius = themeInnerCornerRadiusPx(scale)
+                    setStroke(dpPx(2f), themeFocusStrokeColor())
                 })
                 titleTv.setTextColor(curT.textOnAccent)
                 titleTv.typeface = curT.boldFont
             } else {
                 row.setBackgroundDrawable(GradientDrawable().apply {
                     setColor(if (dark) Color.argb(62, 0, 0, 0) else Color.argb(24, 0, 0, 0))
-                    cornerRadius = 14f * scale
-                    setStroke(1, if (dark) Color.argb(34, 255, 255, 255) else Color.argb(36, 0, 0, 0))
+                    cornerRadius = themeInnerCornerRadiusPx(scale)
+                    setStroke(dpPx(1f), themeCardBorderColor())
                 })
                 titleTv.setTextColor(curT.textPrimaryColor)
                 titleTv.typeface = curT.normalFont
             }
         }
 
-        val rowH = (48 * scale).toInt().coerceIn(42, 64)
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-            val ph = (16 * scale).toInt().coerceAtLeast(12)
-            setPadding(ph, 0, ph, 0)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, rowH).apply {
-                setMargins(2, (4 * scale).toInt(), 2, (4 * scale).toInt())
+            val ph = dpPx(12f * scale)
+            val pv = dpPx(8f * scale)
+            minimumHeight = dpPx(40f * scale)
+            setPadding(ph, pv, ph, pv)
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                val mv = dpPx(3f * scale)
+                setMargins(2, mv, 2, mv)
             }
             addView(titleTv)
             addView(pillTv)
@@ -1281,15 +1431,15 @@ class MainActivity : AppCompatActivity() {
             Gravity.TOP or Gravity.START
         ).apply { setMargins(leftMargin + 10, 20, 0, 0) }
 
-        sidePanel.setBackgroundDrawable(makeThemedPanelBg())
-        leftIconRail.setBackgroundDrawable(makeThemedSubBg())
+        applySidePanelBackgroundAndPadding()
+        leftIconRail.setBackgroundDrawable(makeThemedSideCardBg())
         infoPanel.setBackgroundDrawable(makeThemedPanelBg())
         centerOsdPanel.setBackgroundDrawable(makeThemedPanelBg())
         settingsTileOverlay.setBackgroundDrawable(makeThemedPanelBg())
-        subModalOverlay.setBackgroundDrawable(makeThemedPanelBg())
+        applySubModalBackgroundAndPadding()
         fullEpgOverlay.setBackgroundDrawable(makeThemedPanelBg())
-        categoryListView.setBackgroundDrawable(makeThemedSubBg())
-        channelListView.setBackgroundDrawable(makeThemedSubBg())
+        categoryListView.setBackgroundDrawable(makeThemedSideCardBg())
+        channelListView.setBackgroundDrawable(makeThemedSideCardBg())
         subModalList.setBackgroundDrawable(makeThemedSubBg())
         fullEpgListView.setBackgroundDrawable(makeThemedSubBg())
 
@@ -1305,6 +1455,9 @@ class MainActivity : AppCompatActivity() {
         subModalTitle.setTextColor(t.textPrimaryColor); subModalTitle.typeface = t.boldFont
         subModalTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f * scale)
         if (::subModalBadgeView.isInitialized) styleModalMonogramBadge(subModalBadgeView)
+        if (subModalOverlay.visibility == View.VISIBLE) {
+            menuHistory.lastOrNull()?.let { applyCenteredModalDimensions(it) }
+        }
         fullEpgTitle.setTextColor(t.accentColor); fullEpgTitle.typeface = t.boldFont
         fullEpgTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f * scale)
         clockTextView.typeface = t.boldFont
@@ -1481,7 +1634,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openThemesSubModal() {
-        setSubModalHeaderTitle("Темы")
+        setSubModalHeaderTitle("Темы", "ТМ")
         subModalInputContainer.visibility = View.GONE
         subModalList.visibility = View.GONE
         subModalTopButtons.visibility = View.GONE
@@ -1526,7 +1679,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(12, 8, 12, 8)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.56f)
         }
-        val maxPrevH = (dm.heightPixels * 0.36f).toInt().coerceIn(170, 320)
+        val maxPrevH = (dm.heightPixels * 0.42f).toInt().coerceIn(dpPx(140f), dpPx(300f))
         val livePreview = ThemeLivePreviewView(this, themes[previewedIdx]).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, maxPrevH)
             setOnClickListener {
@@ -1553,8 +1706,8 @@ class MainActivity : AppCompatActivity() {
         val rowViews = mutableListOf<LinearLayout>()
         val rowTexts = mutableListOf<TextView>()
         val rowDots = mutableListOf<ThemeColorDotView>()
-        val rowH = exactModalRowHeightPx().coerceAtLeast(48)
-        val dotSize = (24 * scale).toInt().coerceIn(20, 34)
+        val rowH = LinearLayout.LayoutParams.WRAP_CONTENT
+        val dotSize = dpPx(18f * scale)
 
         fun refreshThemeRows(activeIdx: Int) {
             val ct = currentTheme()
@@ -1569,8 +1722,8 @@ class MainActivity : AppCompatActivity() {
                 if (isHighlight) {
                     row.setBackgroundDrawable(GradientDrawable().apply {
                         setColor(ct.accentColor)
-                        cornerRadius = 16f * scale
-                        setStroke(2, Color.WHITE)
+                        cornerRadius = themeInnerCornerRadiusPx(scale)
+                        setStroke(dpPx(2f), themeFocusStrokeColor())
                     })
                     tv.setTextColor(ct.textOnAccent)
                     tv.typeface = ct.boldFont
@@ -1602,9 +1755,11 @@ class MainActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-                setPadding((16 * scale).toInt(), 0, (16 * scale).toInt(), 0)
+                minimumHeight = dpPx(38f * scale)
+                setPadding(dpPx(12f * scale), dpPx(7f * scale), dpPx(12f * scale), dpPx(7f * scale))
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, rowH).apply {
-                    setMargins(2, 4, 2, 4)
+                    val mv = dpPx(3f * scale)
+                    setMargins(2, mv, 2, mv)
                 }
                 addView(dotView)
                 addView(nameTv)
@@ -1695,7 +1850,7 @@ class MainActivity : AppCompatActivity() {
             }
             listCol.addView(emptyTv)
         } else {
-            val rowH = (50 * scale).toInt().coerceIn(44, 66)
+            val rowH = LinearLayout.LayoutParams.WRAP_CONTENT
             topChans.forEachIndexed { idx, ch ->
                 val badge = TextView(this).apply {
                     text = "▲"
@@ -1727,8 +1882,8 @@ class MainActivity : AppCompatActivity() {
                     if (focused) {
                         row.setBackgroundDrawable(GradientDrawable().apply {
                             setColor(curT.accentColor)
-                            cornerRadius = 14f * scale
-                            setStroke(2, Color.WHITE)
+                            cornerRadius = themeInnerCornerRadiusPx(scale)
+                            setStroke(dpPx(2f), themeFocusStrokeColor())
                         })
                         titleTv.setTextColor(curT.textOnAccent)
                         titleTv.typeface = curT.boldFont
@@ -1737,8 +1892,8 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         row.setBackgroundDrawable(GradientDrawable().apply {
                             setColor(if (dark) Color.argb(62, 0, 0, 0) else Color.argb(24, 0, 0, 0))
-                            cornerRadius = 14f * scale
-                            setStroke(1, if (dark) Color.argb(34, 255, 255, 255) else Color.argb(36, 0, 0, 0))
+                            cornerRadius = themeInnerCornerRadiusPx(scale)
+                            setStroke(dpPx(1f), themeCardBorderColor())
                         })
                         titleTv.setTextColor(curT.textPrimaryColor)
                         titleTv.typeface = curT.normalFont
@@ -1751,9 +1906,11 @@ class MainActivity : AppCompatActivity() {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-                    setPadding((16 * scale).toInt(), 0, (16 * scale).toInt(), 0)
+                    minimumHeight = dpPx(40f * scale)
+                    setPadding(dpPx(12f * scale), dpPx(8f * scale), dpPx(12f * scale), dpPx(8f * scale))
                     layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, rowH).apply {
-                        setMargins(2, (4 * scale).toInt(), 2, (4 * scale).toInt())
+                        val mv = dpPx(3f * scale)
+                        setMargins(2, mv, 2, mv)
                     }
                     addView(badge); addView(titleTv); addView(removeX)
                     applyRowStyle(this, false)
@@ -1981,13 +2138,15 @@ class MainActivity : AppCompatActivity() {
 
                 val progressTrack: FrameLayout? = if (isNow) {
                     val pct = ((now - p.startMs).toFloat() / (p.stopMs - p.startMs).coerceAtLeast(1L).toFloat()).coerceIn(0.03f, 1f)
+                    val trackCol = if (dark) Color.argb(72, 255, 255, 255) else Color.argb(56, 0, 0, 0)
+                    val fillCol = if (t.id == 3) Color.parseColor("#27272A") else if (t.id == 2) Color.WHITE else t.accentColor
                     FrameLayout(this).apply {
                         setBackgroundDrawable(GradientDrawable().apply {
-                            setColor(Color.argb(65, 255, 255, 255))
+                            setColor(trackCol)
                             cornerRadius = 999f
                         })
-                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (5 * scale).toInt().coerceAtLeast(4)).apply {
-                            topMargin = (7 * scale).toInt()
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dpPx(4f * scale)).apply {
+                            topMargin = dpPx(5f * scale)
                         }
                         val fillRow = LinearLayout(this@MainActivity).apply {
                             orientation = LinearLayout.HORIZONTAL
@@ -1995,7 +2154,7 @@ class MainActivity : AppCompatActivity() {
                             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
                             addView(View(this@MainActivity).apply {
                                 setBackgroundDrawable(GradientDrawable().apply {
-                                    setColor(Color.WHITE)
+                                    setColor(fillCol)
                                     cornerRadius = 999f
                                 })
                                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, pct)
@@ -2013,8 +2172,8 @@ class MainActivity : AppCompatActivity() {
                     if (focused) {
                         row.setBackgroundDrawable(GradientDrawable().apply {
                             setColor(curT.accentColor)
-                            cornerRadius = 14f * scale
-                            setStroke(2, Color.WHITE)
+                            cornerRadius = themeInnerCornerRadiusPx(scale)
+                            setStroke(dpPx(2f), themeFocusStrokeColor())
                         })
                         timeTv.setTextColor(curT.textOnAccent)
                         titleTv.setTextColor(curT.textOnAccent)
@@ -2107,12 +2266,12 @@ class MainActivity : AppCompatActivity() {
         val leftCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP
-            setPadding(2, 4, (12 * scale).toInt(), 4)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.34f)
+            setPadding(2, dpPx(2f), dpPx(8f * scale), dpPx(2f))
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.28f)
         }
         val rightScroll = ScrollView(this).apply {
             overScrollMode = View.OVER_SCROLL_NEVER
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.66f)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.72f)
         }
         val rightList = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2133,14 +2292,14 @@ class MainActivity : AppCompatActivity() {
                 else -> Color.TRANSPARENT
             }
             val strokeCol = when {
-                focused -> Color.WHITE
+                focused -> themeFocusStrokeColor()
                 isActive -> curT.accentColor
                 else -> Color.TRANSPARENT
             }
             tv.setBackgroundDrawable(GradientDrawable().apply {
                 setColor(bg)
-                cornerRadius = 14f * scale
-                setStroke(if (focused) 2 else if (isActive) 1 else 0, strokeCol)
+                cornerRadius = themeInnerCornerRadiusPx(scale)
+                setStroke(if (focused) dpPx(2f) else if (isActive) dpPx(1f) else 0, strokeCol)
             })
             tv.setTextColor(if (focused) curT.textOnAccent else curT.textPrimaryColor)
             tv.typeface = if (focused || isActive) curT.boldFont else curT.normalFont
@@ -2153,11 +2312,11 @@ class MainActivity : AppCompatActivity() {
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.2f * scale)
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-                val ph = (14 * scale).toInt()
-                val pv = (12 * scale).toInt()
+                val ph = dpPx(10f * scale)
+                val pv = dpPx(9f * scale)
                 setPadding(ph, pv, ph, pv)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    bottomMargin = (6 * scale).toInt()
+                    bottomMargin = dpPx(5f * scale)
                 }
                 styleTab(this, idx, false)
                 setOnFocusChangeListener { _, hasFocus ->
@@ -2219,7 +2378,7 @@ class MainActivity : AppCompatActivity() {
                     menuHideDelaySec = when (menuHideDelaySec) { 4 -> 8; 8 -> 12; else -> 4 }
                     saveState(); openMoreSettingsSubModal(inPlace = true, keepIndex = 4)
                 },
-                SettingSpec("Отступ под камеру (Смартфон)", if (cameraCutoutSafeOffset) "ВКЛ" else "ВЫКЛ", if (cameraCutoutSafeOffset) 1 else 2) {
+                SettingSpec("Отступ под камеру", if (cameraCutoutSafeOffset) "ВКЛ" else "ВЫКЛ", if (cameraCutoutSafeOffset) 1 else 2) {
                     cameraCutoutSafeOffset = !cameraCutoutSafeOffset; saveState(); applyCurrentThemeToAllPanels()
                     openMoreSettingsSubModal(inPlace = true, keepIndex = 5)
                 }
@@ -2229,7 +2388,7 @@ class MainActivity : AppCompatActivity() {
                     screenAspectMode = (screenAspectMode + 1) % 3; applyScreenAspectMode(); saveState()
                     openMoreSettingsSubModal(inPlace = true, keepIndex = 0)
                 },
-                SettingSpec("Двойной эфир (2-й экран PiP)", if (isDualStreamActive) "ВКЛ" else "ВЫКЛ", if (isDualStreamActive) 1 else 2) {
+                SettingSpec("Двойной эфир (PiP)", if (isDualStreamActive) "ВКЛ" else "ВЫКЛ", if (isDualStreamActive) 1 else 2) {
                     toggleDualStreamWithCurrentOrNeighbor()
                     openMoreSettingsSubModal(inPlace = true, keepIndex = 1)
                 },
@@ -3723,19 +3882,29 @@ class MainActivity : AppCompatActivity() {
             typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
             setPadding((6 * scale).toInt(), 2, 4, (8 * scale).toInt())
         }
+        val rightScroll = ScrollView(this).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+        val rightScrollInner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
         val actionsBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
         val selectedHintTv = TextView(this).apply {
-            setTextColor(t.textPrimaryColor); alpha = 0.62f
+            setTextColor(t.textPrimaryColor); alpha = 0.68f
             typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f * scale)
-            setPadding((6 * scale).toInt(), (8 * scale).toInt(), 4, 0)
+            setPadding(dpPx(6f * scale), dpPx(6f * scale), dpPx(4f), 0)
             maxLines = 2; ellipsize = TextUtils.TruncateAt.END
         }
+        rightScrollInner.addView(actionsBox)
+        rightScrollInner.addView(selectedHintTv)
+        rightScroll.addView(rightScrollInner)
         rightCol.addView(rightHeader)
-        rightCol.addView(actionsBox)
-        rightCol.addView(selectedHintTv)
+        rightCol.addView(rightScroll)
 
         val rowViews = mutableListOf<LinearLayout>()
         val rowTexts = mutableListOf<TextView>()
@@ -3811,8 +3980,8 @@ class MainActivity : AppCompatActivity() {
                     isFocused -> {
                         row.setBackgroundDrawable(GradientDrawable().apply {
                             setColor(curT.accentColor)
-                            cornerRadius = 14f * scale
-                            setStroke(2, Color.WHITE)
+                            cornerRadius = themeInnerCornerRadiusPx(scale)
+                            setStroke(dpPx(2f), themeFocusStrokeColor())
                         })
                         tv.setTextColor(curT.textOnAccent); tv.typeface = curT.boldFont
                         chk.setTextColor(curT.textOnAccent)
@@ -3820,25 +3989,25 @@ class MainActivity : AppCompatActivity() {
                     isSelected -> {
                         row.setBackgroundDrawable(GradientDrawable().apply {
                             setColor(Color.argb(66, Color.red(curT.accentColor), Color.green(curT.accentColor), Color.blue(curT.accentColor)))
-                            cornerRadius = 14f * scale
-                            setStroke(1, curT.accentColor)
+                            cornerRadius = themeInnerCornerRadiusPx(scale)
+                            setStroke(dpPx(1f), curT.accentColor)
                         })
                         tv.setTextColor(curT.textPrimaryColor); tv.typeface = curT.boldFont
-                        chk.setTextColor(Color.parseColor("#22C55E"))
+                        chk.setTextColor(themeOnPillBgColor())
                     }
                     else -> {
                         row.setBackgroundDrawable(GradientDrawable().apply {
                             setColor(if (dark) Color.argb(56, 0, 0, 0) else Color.argb(20, 0, 0, 0))
-                            cornerRadius = 14f * scale
+                            cornerRadius = themeInnerCornerRadiusPx(scale)
                         })
                         tv.setTextColor(curT.textPrimaryColor); tv.typeface = if (isActive) curT.boldFont else curT.normalFont
-                        chk.setTextColor(Color.parseColor("#22C55E"))
+                        chk.setTextColor(themeOnPillBgColor())
                     }
                 }
             }
         }
 
-        val rowH = (48 * scale).toInt().coerceIn(42, 64)
+        val rowH = LinearLayout.LayoutParams.WRAP_CONTENT
         snapshot.forEachIndexed { idx, entry ->
             val tv = TextView(this).apply {
                 text = entry.title
@@ -3856,9 +4025,11 @@ class MainActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-                setPadding((14 * scale).toInt(), 0, (14 * scale).toInt(), 0)
+                minimumHeight = dpPx(40f * scale)
+                setPadding(dpPx(12f * scale), dpPx(8f * scale), dpPx(12f * scale), dpPx(8f * scale))
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, rowH).apply {
-                    setMargins(2, (3 * scale).toInt(), 2, (3 * scale).toInt())
+                    val mv = dpPx(3f * scale)
+                    setMargins(2, mv, 2, mv)
                 }
                 addView(tv); addView(chk)
                 setOnFocusChangeListener { _, hasFocus ->
@@ -4374,11 +4545,21 @@ class MainActivity : AppCompatActivity() {
         subModalCustomBody.visibility = View.VISIBLE
         subModalCustomBody.orientation = LinearLayout.VERTICAL
         subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
-        subModalCustomBody.setPadding(16, 16, 16, 14)
-        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
+        val pBox = dpPx(12f)
+        subModalCustomBody.setPadding(pBox, pBox, pBox, pBox)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        val bufScroll = ScrollView(this).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isFillViewport = true
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+        val bufInner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
+        bufScroll.addView(bufInner)
+        subModalCustomBody.addView(bufScroll)
 
         val t = currentTheme()
         val scale = uiScaleFactor()
@@ -4424,8 +4605,8 @@ class MainActivity : AppCompatActivity() {
             cardsRow.addView(card)
         }
 
-        subModalCustomBody.addView(cardsRow)
-        subModalCustomBody.addView(hintTv)
+        bufInner.addView(cardsRow)
+        bufInner.addView(hintTv)
 
         subModalBottomButtons.removeAllViews()
         subModalBottomButtons.visibility = View.VISIBLE
@@ -4463,11 +4644,21 @@ class MainActivity : AppCompatActivity() {
         subModalCustomBody.visibility = View.VISIBLE
         subModalCustomBody.orientation = LinearLayout.VERTICAL
         subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
-        subModalCustomBody.setPadding(16, 16, 16, 14)
-        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
+        val pBox = dpPx(12f)
+        subModalCustomBody.setPadding(pBox, pBox, pBox, pBox)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        val decScroll = ScrollView(this).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isFillViewport = true
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+        val decInner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
+        decScroll.addView(decInner)
+        subModalCustomBody.addView(decScroll)
 
         val t = currentTheme()
         val scale = uiScaleFactor()
@@ -4537,11 +4728,11 @@ class MainActivity : AppCompatActivity() {
         rowOrbiter.nextFocusDownId = rowAfr.id
         rowAfr.nextFocusUpId = rowOrbiter.id
 
-        subModalCustomBody.addView(cardsRow)
-        subModalCustomBody.addView(hintTv)
-        subModalCustomBody.addView(divider)
-        subModalCustomBody.addView(rowOrbiter)
-        subModalCustomBody.addView(rowAfr)
+        decInner.addView(cardsRow)
+        decInner.addView(hintTv)
+        decInner.addView(divider)
+        decInner.addView(rowOrbiter)
+        decInner.addView(rowAfr)
 
         if (!inPlace) animateMenuAppear(subModalOverlay)
         val focusTarget: View = when (keepIndex) {
@@ -4565,11 +4756,21 @@ class MainActivity : AppCompatActivity() {
         subModalCustomBody.visibility = View.VISIBLE
         subModalCustomBody.orientation = LinearLayout.VERTICAL
         subModalCustomBody.setBackgroundDrawable(makeThemedSubBg())
-        subModalCustomBody.setPadding(16, 14, 16, 14)
-        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
+        val pBox = dpPx(12f)
+        subModalCustomBody.setPadding(pBox, pBox, pBox, pBox)
+        subModalCustomBody.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        val audScroll = ScrollView(this).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isFillViewport = true
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+        val audInner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
+        audScroll.addView(audInner)
+        subModalCustomBody.addView(audScroll)
 
         val t = currentTheme()
         val scale = uiScaleFactor()
@@ -4581,7 +4782,7 @@ class MainActivity : AppCompatActivity() {
             drcNightAudioEnabled = !drcNightAudioEnabled; saveState(); applyAudioEnhancements()
             openAudioSubModal(inPlace = true, keepIndex = 0)
         }.apply { id = 8350 }
-        subModalCustomBody.addView(rowDrc)
+        audInner.addView(rowDrc)
 
         val boostLabel = TextView(this).apply {
             text = "Усиление громкости"
@@ -4589,7 +4790,7 @@ class MainActivity : AppCompatActivity() {
             typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
             setPadding((8 * scale).toInt(), (10 * scale).toInt(), 4, (4 * scale).toInt())
         }
-        subModalCustomBody.addView(boostLabel)
+        audInner.addView(boostLabel)
 
         val boostSteps = listOf(100, 130, 160, 200)
         val boostRow = LinearLayout(this).apply {
@@ -4607,7 +4808,7 @@ class MainActivity : AppCompatActivity() {
             boostCards.add(card)
             boostRow.addView(card)
         }
-        subModalCustomBody.addView(boostRow)
+        audInner.addView(boostRow)
 
         val tracksLabel = TextView(this).apply {
             text = "Аудиодорожки"
@@ -4615,7 +4816,7 @@ class MainActivity : AppCompatActivity() {
             typeface = t.boldFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f * scale)
             setPadding((8 * scale).toInt(), (10 * scale).toInt(), 4, (4 * scale).toInt())
         }
-        subModalCustomBody.addView(tracksLabel)
+        audInner.addView(tracksLabel)
 
         val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
         val trackRows = mutableListOf<LinearLayout>()
@@ -4637,12 +4838,12 @@ class MainActivity : AppCompatActivity() {
                     openAudioSubModal(inPlace = true, keepIndex = 5 + myTrackIdx)
                 }.apply { id = View.generateViewId() }
                 trackRows.add(tRow)
-                subModalCustomBody.addView(tRow)
+                audInner.addView(tRow)
                 trackCounter++
             }
         }
         if (trackRows.isEmpty()) {
-            subModalCustomBody.addView(TextView(this).apply {
+            audInner.addView(TextView(this).apply {
                 text = "Используется основная аудиодорожка потока"
                 setTextColor(t.textPrimaryColor); alpha = 0.65f
                 typeface = t.normalFont; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.2f * scale)
@@ -4930,10 +5131,10 @@ class MainActivity : AppCompatActivity() {
         sidePanel = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             clipChildren = true; clipToPadding = true
-            setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
+            visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(sidePanelWidthPx(), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.START).apply { setMargins(leftSafeMarginPx(), 16, 0, 16) }
-            setPadding(18, 16, 18, 16)
         }
+        applySidePanelBackgroundAndPadding()
 
         allGridTiles.clear(); allGridCaptions.clear()
 
@@ -5274,12 +5475,12 @@ class MainActivity : AppCompatActivity() {
         rootFrame.addView(settingsTileOverlay)
 
         subModalOverlay = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setBackgroundDrawable(makeThemedPanelBg()); visibility = View.GONE
-            setPadding(26, 20, 26, 20)
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE
             layoutParams = FrameLayout.LayoutParams(960, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER).apply {
-                setMargins(28, 20, 28, 20)
+                setMargins(24, 16, 24, 16)
             }
         }
+        applySubModalBackgroundAndPadding()
         subModalHeaderRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -5784,28 +5985,28 @@ class MainActivity : AppCompatActivity() {
         val t = currentTheme()
         val scale = uiScaleFactor()
         val dark = isThemeDarkSurface(t.panelBgColor)
-        val iconSize = (64 * scale).toInt().coerceIn(52, 92)
-        val cardH = (210 * scale).toInt().coerceIn(176, 268)
+        val iconSize = dpPx(44f * scale)
 
         val checkBadge = TextView(this).apply {
             text = "✓"
-            setTextColor(Color.WHITE)
+            setTextColor(themeOnPillTextColor())
             typeface = t.boldFont
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f * scale)
             gravity = Gravity.CENTER
+            includeFontPadding = false
             visibility = if (isActiveMode) View.VISIBLE else View.INVISIBLE
-            val sz = (22 * scale).toInt().coerceIn(20, 28)
+            val sz = dpPx(24f * scale)
             layoutParams = LinearLayout.LayoutParams(sz, sz).apply {
                 gravity = Gravity.END
-                bottomMargin = (4 * scale).toInt()
+                bottomMargin = dpPx(4f * scale)
             }
             setBackgroundDrawable(GradientDrawable().apply {
-                setColor(Color.parseColor("#22C55E"))
-                cornerRadius = 999f
+                setColor(themeOnPillBgColor())
+                cornerRadius = if (t.id == 3) dpPx(5f).toFloat() else 999f
             })
         }
         val iconView = DeviceGlyphIconView(this, isTv).apply {
-            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply { bottomMargin = (10 * scale).toInt() }
+            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply { bottomMargin = dpPx(8f * scale) }
         }
         val labelView = TextView(this).apply {
             text = labelText
@@ -5833,14 +6034,14 @@ class MainActivity : AppCompatActivity() {
                 else -> if (dark) Color.argb(68, 0, 0, 0) else Color.argb(24, 0, 0, 0)
             }
             val strokeCol = when {
-                focused -> Color.WHITE
+                focused -> themeFocusStrokeColor()
                 isActiveMode -> curT.accentColor
-                else -> curT.strokeColor
+                else -> themeCardBorderColor()
             }
             container.setBackgroundDrawable(GradientDrawable().apply {
                 setColor(bgCol)
-                cornerRadius = 20f * scale
-                setStroke(if (focused) 3 else if (isActiveMode) 2 else 1, strokeCol)
+                cornerRadius = themeInnerCornerRadiusPx(scale)
+                setStroke(if (focused) dpPx(2f) else dpPx(1f), strokeCol)
             })
             val fg = if (focused) curT.textOnAccent else curT.textPrimaryColor
             iconView.glyphColor = fg
@@ -5853,11 +6054,12 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             isFocusable = true; isFocusableInTouchMode = false; isClickable = true
-            val p = (18 * scale).toInt().coerceAtLeast(14)
-            setPadding(p, (12 * scale).toInt(), p, p)
-            layoutParams = LinearLayout.LayoutParams(0, cardH, 1f).apply {
-                val m = (10 * scale).toInt()
-                setMargins(m, 6, m, 6)
+            val p = dpPx(14f * scale)
+            minimumHeight = dpPx(140f * scale)
+            setPadding(p, dpPx(10f * scale), p, p)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                val m = dpPx(8f * scale)
+                setMargins(m, dpPx(4f), m, dpPx(4f))
             }
             addView(checkBadge)
             addView(iconView)
@@ -5873,10 +6075,13 @@ class MainActivity : AppCompatActivity() {
         firstRunModeOverlay.removeAllViews()
         val scale = uiScaleFactor()
         val t = currentTheme()
-        val cardW = computeCenteredModalWidth(0.58f, 620, 1020)
+        val cardW = computeCenteredModalWidth(0.74f)
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setBackgroundDrawable(makeThemedPanelBg()); setPadding(28, 22, 28, 24)
+            setBackgroundDrawable(makeThemedPanelBg())
+            val cph = dpPx(18f).coerceAtLeast(24)
+            val cpv = dpPx(14f).coerceAtLeast(20)
+            setPadding(cph, cpv, cph, cpv)
             layoutParams = FrameLayout.LayoutParams(cardW, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
         }
         val headerRow = LinearLayout(this).apply {
@@ -6087,18 +6292,19 @@ class MainActivity : AppCompatActivity() {
 
     internal fun fitSideListsExactRows(repositionTiles: Boolean = true) {
         val rowH = exactModalRowHeightPx().coerceAtLeast(42)
-        val divH = 4
+        val divH = dpPx(2f)
         val stepH = rowH + divH
-        val maxH = (resources.displayMetrics.heightPixels - 64).coerceAtLeast(300)
-        val exactRows = (maxH / stepH).coerceAtLeast(5)
-        val exactH = exactRows * rowH + (exactRows - 1).coerceAtLeast(0) * divH + 20
+        val pad = sidePanelPadPx()
+        val maxH = (resources.displayMetrics.heightPixels - pad * 2 - dpPx(24f)).coerceAtLeast(dpPx(220f))
+        val exactRows = (maxH / stepH).coerceAtLeast(4)
+        val exactH = (exactRows * rowH + (exactRows - 1).coerceAtLeast(0) * divH + dpPx(12f)).coerceAtMost(maxH)
 
-        val innerW = (sidePanelWidthPx() - 36).coerceAtLeast(380)
-        val gap = 12
-        val peekW = (innerW * 0.08f).toInt().coerceIn(34, 52)
-        val railW = (108 * uiScaleFactor()).toInt().coerceIn(92, 132)
-        val groupsW = (innerW - 2 * peekW - 2 * gap).coerceAtLeast(240)
-        val channelsW = (innerW - peekW - gap).coerceAtLeast(260)
+        val innerW = (sidePanelWidthPx() - pad * 2).coerceAtLeast(dpPx(260f))
+        val gap = dpPx(8f)
+        val peekW = (innerW * 0.14f).toInt().coerceIn(dpPx(36f), dpPx(78f))
+        val railW = dpPx(64f * uiScaleFactor()).coerceIn(dpPx(54f), dpPx(92f))
+        val groupsW = (innerW - 2 * peekW - 2 * gap).coerceAtLeast(dpPx(170f))
+        val channelsW = (innerW - peekW - gap).coerceAtLeast(dpPx(190f))
 
         categoryListView.isVerticalScrollBarEnabled = (!isSideShowingChannels && !isLeftRailVisible && activeCategoryList().size > exactRows)
         channelListView.isVerticalScrollBarEnabled = (isSideShowingChannels && displayedChannels.size > exactRows)
@@ -6118,11 +6324,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun updateSideSlidingTiles(animate: Boolean) {
-        val innerW = (sidePanelWidthPx() - 36).coerceAtLeast(380)
-        val gap = 12
-        val peekW = (innerW * 0.08f).toInt().coerceIn(34, 52)
-        val railW = (108 * uiScaleFactor()).toInt().coerceIn(92, 132)
-        val groupsW = (innerW - 2 * peekW - 2 * gap).coerceAtLeast(240)
+        val pad = sidePanelPadPx()
+        val innerW = (sidePanelWidthPx() - pad * 2).coerceAtLeast(dpPx(260f))
+        val gap = dpPx(8f)
+        val peekW = (innerW * 0.14f).toInt().coerceIn(dpPx(36f), dpPx(78f))
+        val railW = dpPx(64f * uiScaleFactor()).coerceIn(dpPx(54f), dpPx(92f))
+        val groupsW = (innerW - 2 * peekW - 2 * gap).coerceAtLeast(dpPx(170f))
 
         leftIconRail.visibility = View.VISIBLE
         categoryListView.visibility = View.VISIBLE
@@ -6144,9 +6351,9 @@ class MainActivity : AppCompatActivity() {
                 channelListView.isFocusable = false
             }
             !isSideShowingChannels -> {
-                railX = -(railW - peekW).toFloat(); railAlpha = 0.60f; railScaleY = 0.96f
+                railX = -(railW - peekW).toFloat(); railAlpha = 0.76f; railScaleY = 0.96f
                 groupsX = (peekW + gap).toFloat(); groupsAlpha = 1f; groupsScaleY = 1f
-                channelsX = (innerW - peekW).toFloat(); channelsAlpha = 0.56f; channelsScaleY = 0.96f
+                channelsX = (innerW - peekW).toFloat(); channelsAlpha = 0.84f; channelsScaleY = 0.96f
                 leftIconRail.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 categoryListView.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
                 channelListView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -6155,7 +6362,7 @@ class MainActivity : AppCompatActivity() {
             }
             else -> {
                 railX = -(railW + groupsW).toFloat(); railAlpha = 0f; railScaleY = 0.94f
-                groupsX = -(groupsW - peekW).toFloat(); groupsAlpha = 0.56f; groupsScaleY = 0.96f
+                groupsX = -(groupsW - peekW).toFloat(); groupsAlpha = 0.78f; groupsScaleY = 0.96f
                 channelsX = (peekW + gap).toFloat(); channelsAlpha = 1f; channelsScaleY = 1f
                 leftIconRail.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                 categoryListView.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
@@ -6228,6 +6435,7 @@ class MainActivity : AppCompatActivity() {
         focusedCategoryPos = targetPos
 
         if (categoryDisplayItems.isEmpty()) updateCategoriesList()
+        if (channelDisplayItems.isEmpty() && allChannels.isNotEmpty()) refreshChannelAdapter()
         refreshSimpleListHighlightInPlace(channelListView, -1)
         refreshSimpleListHighlightInPlace(categoryListView, targetPos)
         updateSideSlidingTiles(animate = wasVisible)
@@ -6347,9 +6555,9 @@ class MainActivity : AppCompatActivity() {
 
     internal fun renderMenuById(menuId: String) {
         hideAllMenuViews()
-        sidePanel.setBackgroundDrawable(makeThemedPanelBg())
+        applySidePanelBackgroundAndPadding()
         centerOsdPanel.setBackgroundDrawable(makeThemedPanelBg())
-        subModalOverlay.setBackgroundDrawable(makeThemedPanelBg())
+        applySubModalBackgroundAndPadding()
         settingsTileOverlay.setBackgroundDrawable(makeThemedPanelBg())
         fullEpgOverlay.setBackgroundDrawable(makeThemedPanelBg())
 
@@ -6375,33 +6583,16 @@ class MainActivity : AppCompatActivity() {
             subModalList.onItemLongClickListener = null
         }
 
-        val isWrapHeight = menuId in listOf(
-            "BUFFER", "DECODER", "AUDIO", "EPG", "ADD_URL", "RENAME_PLAYLIST", "UPDATE_PROMPT"
-        )
-        val modalWidthPx = when (menuId) {
-            "PLAYLISTS", "FULL_EPG", "MORE_SETTINGS", "THEMES" -> computeCenteredModalWidth(0.65f, 700, 1180)
-            "DIAG_LOG_VIEW", "ANALYZER_GROUPS", "ANALYZER_GROUP_VIEW", "CHANNEL_EDITOR_GROUPS", "CHANNEL_EDITOR_ITEMS" -> computeCenteredModalWidth(0.64f, 680, 1160)
-            else -> computeCenteredModalWidth(0.58f, 620, 1060)
-        }
-        val modalHeightPx = if (isWrapHeight) {
-            FrameLayout.LayoutParams.WRAP_CONTENT
-        } else {
-            when (menuId) {
-                "BRIGHTNESS_MENU", "CHANNEL_ACTIONS" -> computeCenteredModalHeight(0.46f, 340, 520)
-                "POWER_AND_SLEEP_MENU", "TOP_MANAGER" -> computeCenteredModalHeight(0.58f, 400, 660)
-                else -> computeCenteredModalHeight(0.68f, 440, 760)
-            }
-        }
-        subModalOverlay.layoutParams = FrameLayout.LayoutParams(
-            modalWidthPx,
-            modalHeightPx,
-            Gravity.CENTER
-        ).apply {
-            setMargins(24, 36, 24, 24)
-        }
+        applyCenteredModalDimensions(menuId)
 
         when (menuId) {
             "SIDE" -> {
+                sidePanel.layoutParams = FrameLayout.LayoutParams(
+                    sidePanelWidthPx(),
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    Gravity.START
+                ).apply { setMargins(leftSafeMarginPx(), 16, 0, 16) }
+                applySidePanelBackgroundAndPadding()
                 setPlayerMiniPreviewMode(true)
                 clockTextView.visibility = View.GONE
                 animateMenuAppear(sidePanel, -55f, 0f)
@@ -9082,12 +9273,12 @@ class StructuredStatsRowView(context: Context) : LinearLayout(context) {
         statusIcon.isEnabledState = data.isEnabled
         titleTv.text = data.title
 
-        val iconPx = (24 * scale).toInt().coerceIn(20, 34)
+        val iconPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 18f * scale, resources.displayMetrics).toInt().coerceIn(24, 54)
         val iconLp = statusIcon.layoutParams as LayoutParams
         if (iconLp.width != iconPx) {
             iconLp.width = iconPx
             iconLp.height = iconPx
-            iconLp.rightMargin = (12 * scale).toInt().coerceAtLeast(10)
+            iconLp.rightMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 8f * scale, resources.displayMetrics).toInt().coerceAtLeast(10)
             statusIcon.layoutParams = iconLp
         }
 
@@ -9135,7 +9326,7 @@ class StructuredStatsRowView(context: Context) : LinearLayout(context) {
         statusIcon.iconTintOnAccent = theme.textOnAccent
         statusIcon.iconTintNormal = theme.textPrimaryColor
 
-        val padH = (18 * scale).toInt().coerceIn(14, 28)
+        val padH = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 12f * scale, resources.displayMetrics).toInt().coerceAtLeast(16)
         setPadding(padH, 0, padH, 0)
 
         if (highlighted) {
@@ -9160,11 +9351,25 @@ class StructuredStatsRowView(context: Context) : LinearLayout(context) {
                 val enabled = data?.isEnabled == true
                 rightSecondaryTv.gravity = Gravity.CENTER
                 rightSecondaryTv.setPadding((10 * scale).toInt(), (3 * scale).toInt(), (10 * scale).toInt(), (3 * scale).toInt())
+                val onBg = when (theme.id) {
+                    1 -> Color.parseColor("#00F5A0")
+                    2 -> Color.WHITE
+                    3 -> Color.parseColor("#27272A")
+                    4 -> Color.parseColor("#2E8B6E")
+                    else -> Color.parseColor("#22C55E")
+                }
+                val onTxt = when (theme.id) {
+                    1 -> Color.parseColor("#041F17")
+                    2 -> Color.BLACK
+                    3 -> Color.WHITE
+                    4 -> Color.parseColor("#FFF8EB")
+                    else -> Color.parseColor("#052E16")
+                }
                 rightSecondaryTv.setBackgroundDrawable(GradientDrawable().apply {
-                    setColor(if (enabled) Color.parseColor("#22C55E") else Color.argb(120, 15, 23, 42))
-                    cornerRadius = 999f
+                    setColor(if (enabled) onBg else Color.argb(120, 15, 23, 42))
+                    cornerRadius = if (theme.id == 3) 12f else 999f
                 })
-                rightSecondaryTv.setTextColor(if (enabled) Color.parseColor("#052E16") else Color.WHITE)
+                rightSecondaryTv.setTextColor(if (enabled) onTxt else Color.WHITE)
             }
         } else {
             val darkSurface = isDarkColor(theme.panelBgColor)
@@ -9188,11 +9393,25 @@ class StructuredStatsRowView(context: Context) : LinearLayout(context) {
                 val enabled = data?.isEnabled == true
                 rightSecondaryTv.gravity = Gravity.CENTER
                 rightSecondaryTv.setPadding((10 * scale).toInt(), (3 * scale).toInt(), (10 * scale).toInt(), (3 * scale).toInt())
+                val onBg = when (theme.id) {
+                    1 -> Color.parseColor("#00F5A0")
+                    2 -> Color.WHITE
+                    3 -> Color.parseColor("#27272A")
+                    4 -> Color.parseColor("#2E8B6E")
+                    else -> Color.parseColor("#22C55E")
+                }
+                val onTxt = when (theme.id) {
+                    1 -> Color.parseColor("#041F17")
+                    2 -> Color.BLACK
+                    3 -> Color.WHITE
+                    4 -> Color.parseColor("#FFF8EB")
+                    else -> Color.parseColor("#052E16")
+                }
                 rightSecondaryTv.setBackgroundDrawable(GradientDrawable().apply {
-                    setColor(if (enabled) Color.parseColor("#22C55E") else if (darkSurface) Color.argb(72, 148, 163, 184) else Color.argb(65, 100, 116, 139))
-                    cornerRadius = 999f
+                    setColor(if (enabled) onBg else if (darkSurface) Color.argb(72, 148, 163, 184) else Color.argb(65, 100, 116, 139))
+                    cornerRadius = if (theme.id == 3) 12f else 999f
                 })
-                rightSecondaryTv.setTextColor(if (enabled) Color.parseColor("#052E16") else if (darkSurface) Color.parseColor("#E2E8F0") else Color.parseColor("#334155"))
+                rightSecondaryTv.setTextColor(if (enabled) onTxt else if (darkSurface) Color.parseColor("#E2E8F0") else Color.parseColor("#334155"))
             }
         }
     }
